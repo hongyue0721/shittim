@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/stop_activate_response.json",
+  "title": "StopActivateResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "active",
+    "generation",
+    "activated_at",
+    "activated_by"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "active": {
+      "type": "boolean",
+      "const": true
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "activated_by": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    }
+  }
+}

@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/policy/policy_rule.json",
+  "title": "PolicyRule",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "revision",
+    "name",
+    "description",
+    "priority",
+    "enabled",
+    "actor_match",
+    "content_origin_match",
+    "resource_match",
+    "action_match",
+    "condition",
+    "effect",
+    "expires_at",
+    "created_by",
+    "updated_by",
+    "created_at",
+    "updated_at",
+    "source"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "integer"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "actor_match": {
+      "$ref": "#/$defs/actorMatch"
+    },
+    "content_origin_match": {
+      "$ref": "#/$defs/contentOriginMatch"
+    },
+    "resource_match": {
+      "$ref": "#/$defs/resourceMatch"
+    },
+    "action_match": {
+      "$ref": "#/$defs/actionMatch"
+    },
+    "condition": {
+      "$ref": "#/$defs/condition"
+    },
+    "effect": {
+      "type": "string",
+      "enum": ["allow", "confirm", "deny"]
+    },
+    "confirmation_mode": {
+      "type": "string",
+      "enum": [
+        "generic",
+        "local",
+        "system_authentication",
+        "plan_revision"
+      ]
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "created_by": {
+      "$ref": "#/$defs/actorEntryPoint"
+    },
+    "updated_by": {
+      "$ref": "#/$defs/actorEntryPoint"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["user_defined", "companion_generated", "system"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "effect": { "const": "confirm" }
+        },
+        "required": ["effect"]
+      },
+      "then": {
+        "required": ["confirmation_mode"]
+      },
+      "else": {
+        "properties": {
+          "confirmation_mode": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "actorMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "owner",
+            "known_user",
+            "guest",
+            "companion",
+            "system",
+            "extension"
+          ]
+        },
+        "source_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "entry_point": {
+          "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+        },
+        "auth_level_min": {
+          "type": "string",
+          "enum": [
+            "unauthenticated",
+            "asserted",
+            "platform_verified",
+            "system_authenticated"
+          ]
+        }
+      }
+    },
+    "contentOriginMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "user_input",
+              "companion_generated",
+              "system_generated",
+              "remote_message",
+              "web_content",
+              "document_content",
+              "model_output",
+              "extension_output",
+              "provider_output",
+              "imported_data"
+            ]
+          }
+        },
+        "source_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "resourceMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_patterns", "exclude_patterns"],
+      "properties": {
+        "scope_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclude_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "actionMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability_ids", "operation_patterns"],
+      "properties": {
+        "capability_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "operation_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "side_effect_max": {
+          "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+        }
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "time_window": {
+          "$ref": "#/$defs/timeWindow"
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/rateLimit"
+        },
+        "delegation_required": {
+          "type": "boolean"
+        },
+        "local_presence_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "timeWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timezone", "weekdays", "local_start", "local_end"],
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "minLength": 1
+        },
+        "weekdays": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday",
+              "sunday"
+            ]
+          }
+        },
+        "local_start": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+        },
+        "local_end": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$"
+        }
+      }
+    },
+    "rateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "window_seconds", "key_scope"],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "window_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "key_scope": {
+          "type": "string",
+          "enum": ["rule", "actor", "task", "action", "resource"]
+        }
+      }
+    },
+    "actorEntryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "entry_point"],
+      "properties": {
+        "actor": {
+          "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+        },
+        "entry_point": {
+          "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+        }
+      }
+    }
+  }
+}

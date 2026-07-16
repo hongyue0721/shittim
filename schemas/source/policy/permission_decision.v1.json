@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/policy/permission_decision.json",
+  "title": "PermissionDecision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "action_id",
+    "decision",
+    "reason_codes",
+    "matched_rule_ref",
+    "granted_scopes",
+    "binding",
+    "decision_revision",
+    "evaluated_at",
+    "evaluation_context_hash",
+    "policy_set_revision",
+    "expires_at",
+    "lease_ref"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny",
+        "require_confirmation",
+        "require_local_confirmation",
+        "require_system_authentication",
+        "require_plan_revision"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "matched_rule_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "approval_type": {
+      "type": "string",
+      "enum": [
+        "implicit",
+        "user_confirm",
+        "local_confirm",
+        "system_auth",
+        "delegation"
+      ]
+    },
+    "granted_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "binding": {
+      "$ref": "#/$defs/binding"
+    },
+    "decision_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "evaluated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evaluation_context_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy_set_revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lease_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "plan_version",
+        "resource_refs",
+        "key_params_hash"
+      ],
+      "properties": {
+        "action_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "plan_version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "resource_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "key_params_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

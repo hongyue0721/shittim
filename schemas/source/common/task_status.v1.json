@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/task_status.json",
+  "title": "TaskStatus",
+  "type": "string",
+  "enum": [
+    "candidate",
+    "awaiting_approval",
+    "planned",
+    "rejected",
+    "running",
+    "waiting_user",
+    "paused",
+    "partially_completed",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "rolling_back",
+    "rolled_back",
+    "archived"
+  ],
+  "additionalProperties": false
+}

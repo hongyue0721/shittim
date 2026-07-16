@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/task_list_request.json",
+  "title": "TaskListRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "statuses",
+    "parent_filter",
+    "proposer",
+    "created_after",
+    "cursor",
+    "limit"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "statuses": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.shittim.local/v1/common/task_status.json"
+      }
+    },
+    "parent_filter": {
+      "$ref": "#/$defs/parentFilter"
+    },
+    "proposer": {
+      "type": ["string", "null"],
+      "enum": ["user", "companion", "system", null]
+    },
+    "created_after": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "cursor": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    }
+  },
+  "$defs": {
+    "parentFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "task_id"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["any", "root", "exact"]
+        },
+        "task_id": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": { "const": "exact" }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "task_id": { "type": "null" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

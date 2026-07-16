@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/causation_ref.json",
+  "title": "CausationRef",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "id"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["command_request", "event"]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

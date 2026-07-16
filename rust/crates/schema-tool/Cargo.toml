@@ -1,0 +1,27 @@
+[package]
+name = "schema-tool"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Deterministic JSON Schema codegen and check CLI for Shittim contracts"
+
+[[bin]]
+name = "schema-tool"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+hex.workspace = true
+jsonschema.workspace = true
+kernel-contracts = { path = "../kernel-contracts" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+walkdir.workspace = true

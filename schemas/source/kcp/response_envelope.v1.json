@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/response_envelope.json",
+  "title": "KcpResponseEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "message_kind",
+    "request_id",
+    "status",
+    "payload",
+    "error"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "message_kind": {
+      "type": "string",
+      "const": "response"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"]
+    },
+    "payload": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://schemas.shittim.local/v1/kcp/error.json" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "ok" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object",
+            "required": ["schema_version"],
+            "properties": {
+              "schema_version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": true
+          },
+          "error": { "type": "null" }
+        }
+      },
+      "else": {
+        "properties": {
+          "payload": { "type": "null" },
+          "error": {
+            "$ref": "https://schemas.shittim.local/v1/kcp/error.json"
+          }
+        }
+      }
+    }
+  ]
+}

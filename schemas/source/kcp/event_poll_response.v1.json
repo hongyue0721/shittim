@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/event_poll_response.json",
+  "title": "EventPollResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "events",
+    "next_outbox_position"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.shittim.local/v1/event/event_envelope.json"
+      }
+    },
+    "next_outbox_position": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    }
+  }
+}

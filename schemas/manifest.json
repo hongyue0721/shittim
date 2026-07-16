@@ -1,0 +1,527 @@
+{
+  "schema_version": 1,
+  "draft": "https://json-schema.org/draft/2020-12/schema",
+  "id_base": "https://schemas.shittim.local/v1/",
+  "schemas": [
+    {
+      "id": "https://schemas.shittim.local/v1/common/action_status.json",
+      "title": "ActionStatus",
+      "version": 1,
+      "source": "schemas/source/common/action_status.v1.json",
+      "domain": "common",
+      "kind": "enum",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/actor.json",
+      "title": "Actor",
+      "version": 1,
+      "source": "schemas/source/common/actor.v1.json",
+      "domain": "common",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/causation_ref.json",
+      "title": "CausationRef",
+      "version": 1,
+      "source": "schemas/source/common/causation_ref.v1.json",
+      "domain": "common",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/content_origin.json",
+      "title": "ContentOrigin",
+      "version": 1,
+      "source": "schemas/source/common/content_origin.v1.json",
+      "domain": "common",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/entry_point.json",
+      "title": "EntryPoint",
+      "version": 1,
+      "source": "schemas/source/common/entry_point.v1.json",
+      "domain": "common",
+      "kind": "enum",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/side_effect_class.json",
+      "title": "SideEffectClass",
+      "version": 1,
+      "source": "schemas/source/common/side_effect_class.v1.json",
+      "domain": "common",
+      "kind": "enum",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/task_status.json",
+      "title": "TaskStatus",
+      "version": 1,
+      "source": "schemas/source/common/task_status.v1.json",
+      "domain": "common",
+      "kind": "enum",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/event_envelope.json",
+      "title": "EventEnvelope",
+      "version": 1,
+      "source": "schemas/source/event/event_envelope.v1.json",
+      "domain": "event",
+      "kind": "envelope",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json",
+      "title": "StopFenceActivatedPayload",
+      "version": 1,
+      "source": "schemas/source/event/stop_fence_activated_payload.v1.json",
+      "domain": "event",
+      "kind": "event_payload",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/task_created_payload.json",
+      "title": "TaskCreatedPayload",
+      "version": 1,
+      "source": "schemas/source/event/task_created_payload.v1.json",
+      "domain": "event",
+      "kind": "event_payload",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/task_state_changed_payload.json",
+      "title": "TaskStateChangedPayload",
+      "version": 1,
+      "source": "schemas/source/event/task_state_changed_payload.v1.json",
+      "domain": "event",
+      "kind": "event_payload",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/command_envelope.json",
+      "title": "KcpCommandEnvelope",
+      "version": 1,
+      "source": "schemas/source/kcp/command_envelope.v1.json",
+      "domain": "kcp",
+      "kind": "envelope",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/error.json",
+      "title": "KcpError",
+      "version": 1,
+      "source": "schemas/source/kcp/error.v1.json",
+      "domain": "kcp",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_poll_request.json",
+      "title": "EventPollRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/event_poll_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_poll_response.json",
+      "title": "EventPollResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/event_poll_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json",
+      "title": "EventSubscribeRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/event_subscribe_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_subscribe_response.json",
+      "title": "EventSubscribeResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/event_subscribe_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/query_envelope.json",
+      "title": "KcpQueryEnvelope",
+      "version": 1,
+      "source": "schemas/source/kcp/query_envelope.v1.json",
+      "domain": "kcp",
+      "kind": "envelope",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/response_envelope.json",
+      "title": "KcpResponseEnvelope",
+      "version": 1,
+      "source": "schemas/source/kcp/response_envelope.v1.json",
+      "domain": "kcp",
+      "kind": "envelope",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_activate_request.json",
+      "title": "StopActivateRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/stop_activate_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_activate_response.json",
+      "title": "StopActivateResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/stop_activate_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_status_request.json",
+      "title": "StopStatusRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/stop_status_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_status_response.json",
+      "title": "StopStatusResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/stop_status_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+      "title": "SystemPingRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/system_ping_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/system_ping_response.json",
+      "title": "SystemPingResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/system_ping_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+      "title": "TaskCreateRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/task_create_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_create_response.json",
+      "title": "TaskCreateResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/task_create_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_get_request.json",
+      "title": "TaskGetRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/task_get_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_get_response.json",
+      "title": "TaskGetResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/task_get_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_list_request.json",
+      "title": "TaskListRequest",
+      "version": 1,
+      "source": "schemas/source/kcp/task_list_request.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_request",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_list_response.json",
+      "title": "TaskListResponse",
+      "version": 1,
+      "source": "schemas/source/kcp/task_list_response.v1.json",
+      "domain": "kcp",
+      "kind": "kcp_response",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/approval_record.json",
+      "title": "ApprovalRecord",
+      "version": 1,
+      "source": "schemas/source/policy/approval_record.v1.json",
+      "domain": "policy",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/permission_decision.json",
+      "title": "PermissionDecision",
+      "version": 1,
+      "source": "schemas/source/policy/permission_decision.v1.json",
+      "domain": "policy",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/policy_rule.json",
+      "title": "PolicyRule",
+      "version": 1,
+      "source": "schemas/source/policy/policy_rule.v1.json",
+      "domain": "policy",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/action_request.json",
+      "title": "ActionRequest",
+      "version": 1,
+      "source": "schemas/source/task/action_request.v1.json",
+      "domain": "task",
+      "kind": "domain_object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/recovery_attempt_ref.json",
+      "title": "RecoveryAttemptRef",
+      "version": 1,
+      "source": "schemas/source/task/recovery_attempt_ref.v1.json",
+      "domain": "task",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/recovery_decision_candidate.json",
+      "title": "RecoveryDecisionCandidate",
+      "version": 1,
+      "source": "schemas/source/task/recovery_decision_candidate.v1.json",
+      "domain": "task",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/task_scope.json",
+      "title": "TaskScope",
+      "version": 1,
+      "source": "schemas/source/task/task_scope.v1.json",
+      "domain": "task",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/task_spec.json",
+      "title": "TaskSpec",
+      "version": 1,
+      "source": "schemas/source/task/task_spec.v1.json",
+      "domain": "task",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/verification_result.json",
+      "title": "VerificationResult",
+      "version": 1,
+      "source": "schemas/source/task/verification_result.v1.json",
+      "domain": "task",
+      "kind": "object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    }
+  ]
+}

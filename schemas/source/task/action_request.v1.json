@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/action_request.json",
+  "title": "ActionRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "action_id",
+    "task_id",
+    "capability_id",
+    "operation",
+    "structured_arguments",
+    "resource_refs",
+    "task_scope_ref",
+    "side_effect_class",
+    "idempotency_key",
+    "verification_policy",
+    "status",
+    "schema_version",
+    "revision",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "step_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "parent_action_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "structured_arguments": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "resource_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "task_scope_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "side_effect_class": {
+      "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "permission_decision_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "approval_record_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "verification_policy": {
+      "$ref": "#/$defs/verificationPolicy"
+    },
+    "rollback_policy": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/rollbackPolicy" }
+      ]
+    },
+    "status": {
+      "$ref": "https://schemas.shittim.local/v1/common/action_status.json"
+    },
+    "recovery_meta": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/recoveryMeta" }
+      ]
+    },
+    "lease": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/lease" }
+      ]
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "verificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "expected_outcome", "timeout"],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_outcome": true,
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rollbackPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compensatable"],
+      "properties": {
+        "compensatable": {
+          "type": "boolean"
+        },
+        "compensation_action_ref": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        },
+        "auto_rollback_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "recoveryMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recovery_attempted",
+        "recovery_decision_candidate_ids",
+        "recovery_attempt_refs"
+      ],
+      "properties": {
+        "unknown_side_effect_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recovery_attempted": {
+          "type": "boolean"
+        },
+        "recovery_decision_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "recovery_attempt_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "last_recovery_error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["holder", "expires_at", "max_uses"],
+      "properties": {
+        "holder": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

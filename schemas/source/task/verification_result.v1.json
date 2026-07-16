@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/verification_result.json",
+  "title": "VerificationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "action_id",
+    "strategy_used",
+    "outcome",
+    "verifier_kind",
+    "observed_resource_refs",
+    "evidence_refs",
+    "verified_at",
+    "observations",
+    "side_effect_confirmed",
+    "recommendation",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "strategy_used": {
+      "type": "string",
+      "minLength": 1
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["verified_ok", "verified_failed", "inconclusive"]
+    },
+    "verifier_kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "observed_resource_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "before_version": {
+      "type": ["string", "null"]
+    },
+    "after_version": {
+      "type": ["string", "null"]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "side_effect_confirmed": {
+      "type": ["boolean", "null"]
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "retry",
+        "rollback",
+        "policy_decision_required"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_type", "expected", "actual", "passed"],
+      "properties": {
+        "check_type": {
+          "type": "string",
+          "enum": [
+            "return_code",
+            "resource_state",
+            "snapshot_diff",
+            "external_query",
+            "user_confirm"
+          ]
+        },
+        "expected": true,
+        "actual": true,
+        "passed": {
+          "type": "boolean"
+        },
+        "evidence_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

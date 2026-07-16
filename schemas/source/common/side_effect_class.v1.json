@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/side_effect_class.json",
+  "title": "SideEffectClass",
+  "description": "Risk/match/audit/recovery label only; never an implicit allow/confirm/deny.",
+  "type": "string",
+  "enum": ["S0", "S1", "S2", "S3", "S4", "S5"],
+  "additionalProperties": false
+}

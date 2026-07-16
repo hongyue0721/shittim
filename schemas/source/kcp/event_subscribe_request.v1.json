@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json",
+  "title": "EventSubscribeRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_types",
+    "aggregate_types",
+    "after_outbox_position"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "event_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "task.created",
+          "task.state_changed",
+          "stop_fence.activated"
+        ]
+      }
+    },
+    "aggregate_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "after_outbox_position": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]+$"
+    }
+  }
+}

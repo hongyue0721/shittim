@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+  "title": "SystemPingRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "echo"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "echo": {
+      "type": ["string", "null"]
+    }
+  }
+}

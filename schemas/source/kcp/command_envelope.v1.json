@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/command_envelope.json",
+  "title": "KcpCommandEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "message_kind",
+    "request_id",
+    "actor",
+    "entry_point",
+    "auth",
+    "task_id",
+    "context",
+    "deadline",
+    "idempotency_key",
+    "expected_revision",
+    "command_type",
+    "payload"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "message_kind": {
+      "type": "string",
+      "const": "command"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "auth": {
+      "type": "null"
+    },
+    "task_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "context": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expected_revision": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "command_type": {
+      "type": "string",
+      "enum": ["task.create", "stop.activate"]
+    },
+    "payload": {
+      "type": "object",
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "command_type": { "const": "task.create" }
+        },
+        "required": ["command_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://schemas.shittim.local/v1/kcp/task_create_request.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command_type": { "const": "stop.activate" }
+        },
+        "required": ["command_type"]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "https://schemas.shittim.local/v1/kcp/stop_activate_request.json"
+          }
+        }
+      }
+    }
+  ]
+}

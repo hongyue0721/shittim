@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/task_scope.json",
+  "title": "TaskScope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "revision",
+    "task_id",
+    "resource_patterns",
+    "exclusions",
+    "allowed_capability_hints",
+    "source_refs",
+    "created_by",
+    "expires_at",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "resource_patterns": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "exclusions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "allowed_capability_hints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "created_by": {
+      "$ref": "#/$defs/actorEntryPoint"
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "actorEntryPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor", "entry_point"],
+      "properties": {
+        "actor": {
+          "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+        },
+        "entry_point": {
+          "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+        }
+      }
+    }
+  }
+}

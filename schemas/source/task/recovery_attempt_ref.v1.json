@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/recovery_attempt_ref.json",
+  "title": "RecoveryAttemptRef",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "task_id",
+    "source_action_id",
+    "candidate_id",
+    "attempt_action_ids",
+    "started_at",
+    "outcome",
+    "verification_result_refs"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "candidate_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attempt_action_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "recovered",
+        "not_recovered",
+        "inconclusive",
+        "cancelled"
+      ]
+    },
+    "resulting_source_action_status": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "$ref": "https://schemas.shittim.local/v1/common/action_status.json"
+        }
+      ]
+    },
+    "verification_result_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "error_code": {
+      "type": ["string", "null"],
+      "minLength": 1
+    }
+  }
+}

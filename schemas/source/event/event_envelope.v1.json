@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/event/event_envelope.json",
+  "title": "EventEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "type",
+    "schema_version",
+    "aggregate_type",
+    "aggregate_id",
+    "sequence",
+    "outbox_position",
+    "occurred_at",
+    "causation_ref",
+    "correlation_id",
+    "dedup_key",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "task.created",
+        "task.state_changed",
+        "stop_fence.activated"
+      ]
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "aggregate_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "aggregate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "outbox_position": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "causation_ref": {
+      "$ref": "https://schemas.shittim.local/v1/common/causation_ref.json"
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedup_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object",
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "task.created" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "task" },
+          "payload": {
+            "$ref": "https://schemas.shittim.local/v1/event/task_created_payload.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "task.state_changed" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "task" },
+          "payload": {
+            "$ref": "https://schemas.shittim.local/v1/event/task_state_changed_payload.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": { "const": "stop_fence.activated" }
+        },
+        "required": ["type"]
+      },
+      "then": {
+        "properties": {
+          "aggregate_type": { "const": "stop_fence" },
+          "aggregate_id": { "const": "global" },
+          "payload": {
+            "$ref": "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json"
+          }
+        }
+      }
+    }
+  ]
+}

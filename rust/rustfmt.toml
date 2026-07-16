@@ -1,0 +1,4 @@
+# Stable rustfmt settings for the workspace.
+# Generated files under kernel-contracts/src/generated include `rustfmt::skip`
+# so cargo fmt does not rewrite deterministic codegen output.
+edition = "2021"

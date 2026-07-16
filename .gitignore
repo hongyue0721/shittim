@@ -1,0 +1,36 @@
+# Rust
+/rust/target/
+**/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / frontend (future)
+node_modules/
+.pnpm-store/
+dist/
+*.tsbuildinfo
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Test / coverage
+coverage/
+*.profraw
+*.profdata
+lcov.info
+
+# Generated scratch
+/tmp/
+*.tmp

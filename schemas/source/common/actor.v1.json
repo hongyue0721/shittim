@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/actor.json",
+  "title": "Actor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "id",
+    "kind",
+    "source",
+    "authentication_level",
+    "confidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "owner",
+        "known_user",
+        "guest",
+        "companion",
+        "system",
+        "extension"
+      ],
+      "description": "owner is a reserved future-auth label only; v1 must not derive authorization from it."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable source system/namespace string; not an EntryPoint."
+    },
+    "authentication_level": {
+      "type": "string",
+      "enum": [
+        "unauthenticated",
+        "asserted",
+        "platform_verified",
+        "system_authenticated"
+      ]
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

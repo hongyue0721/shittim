@@ -35,4 +35,6 @@
 
 基础安装仅有两个常驻后台运行时：Rust `agentd` Kernel 与 TypeScript/Pi `agent-runtime`；桌面客户端是可关闭重连的 Tauri 客户端。所有现实副作用都走唯一链路：`Task -> Policy -> agentd -> Broker/Extension -> system mechanism -> verify/audit`。无匹配用户规则时 Policy **allow**；确认和拒绝来自匹配规则、系统机制或运行恢复需要，不是默认保守矩阵。
 
+项目代码采用 [Apache License 2.0](LICENSE)。
+
 编码前必须读 `AGENT.md` 和受影响 spec；改动领域定义时只改其唯一事实源，并更新 `CONFORMANCE.md` 测试锚点。

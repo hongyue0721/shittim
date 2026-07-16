@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json",
+  "title": "StopFenceActivatedPayload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generation",
+    "reason",
+    "activated_by_actor_id",
+    "activated_from_entry_point",
+    "activated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "activated_by_actor_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "activated_from_entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

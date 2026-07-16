@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/event_subscribe_response.json",
+  "title": "EventSubscribeResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "subscription_id",
+    "next_outbox_position"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "subscription_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "next_outbox_position": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    }
+  }
+}

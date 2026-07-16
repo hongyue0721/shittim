@@ -45,7 +45,14 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 ## 当前不可用项
 
 - 没有 Socket/Pipe server；
-- 没有 Schema 文件；
-- 没有 Rust/TypeScript client；
+- 没有可运行的 agentd 或方法处理实现；
+- 没有 TypeScript client 包；
 - 没有认证扩展；
 - 没有 TCP/HTTP/JSON-RPC KCP endpoint。
+
+## 已有契约产物
+
+- KCP Envelope 与八方法 request/response JSON Schema：`schemas/source/kcp/`；
+- 生成的 Rust 类型、manifest catalog，以及 Command/Query/Event 的 typed envelope decode 与运行时校验：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）；
+- Response Envelope 只按 `status = ok | error` 校验。它不携带原始方法 discriminator，因此不生成方法级 typed envelope；客户端必须根据已配对的 `request_id` 和原请求方法，再用对应 `*_response.json` Schema 校验并解码 `payload`；
+- 这不表示 KCP server 已可用。

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/task_list_response.json",
+  "title": "TaskListResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "tasks", "next_cursor"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "https://schemas.shittim.local/v1/task/task_spec.json"
+      }
+    },
+    "next_cursor": {
+      "type": ["string", "null"],
+      "minLength": 1
+    }
+  }
+}

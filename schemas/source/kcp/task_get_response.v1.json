@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/task_get_response.json",
+  "title": "TaskGetResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "task": {
+      "$ref": "https://schemas.shittim.local/v1/task/task_spec.json"
+    }
+  }
+}

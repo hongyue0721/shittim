@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/entry_point.json",
+  "title": "EntryPoint",
+  "description": "KCP entry point closed set. Actor must not embed EntryPoint.",
+  "type": "string",
+  "enum": [
+    "local_desktop",
+    "local_ipc_client",
+    "agent_runtime",
+    "personal_remote_channel",
+    "group_channel",
+    "web_api",
+    "extension_originated_event",
+    "system_internal"
+  ],
+  "additionalProperties": false
+}

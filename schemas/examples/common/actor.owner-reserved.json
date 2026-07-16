@@ -1,0 +1,12 @@
+{
+  "$schema_id": "https://schemas.shittim.local/v1/common/actor.json",
+  "instance": {
+    "schema_version": 1,
+    "revision": 3,
+    "id": "actor-owner-label",
+    "kind": "owner",
+    "source": "actor-source://reserved/owner",
+    "authentication_level": "unauthenticated",
+    "confidence": 0.0
+  }
+}

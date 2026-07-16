@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/error.json",
+  "title": "KcpError",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "code", "message", "details", "retryable"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "details": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  }
+}

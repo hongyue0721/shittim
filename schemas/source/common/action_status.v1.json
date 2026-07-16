@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/action_status.json",
+  "title": "ActionStatus",
+  "type": "string",
+  "enum": [
+    "pending",
+    "approved",
+    "leased",
+    "in_flight",
+    "completed",
+    "failed",
+    "unknown_side_effect",
+    "rolling_back",
+    "rolled_back",
+    "rollback_failed",
+    "cancelled"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/event/task_state_changed_payload.json",
+  "title": "TaskStateChangedPayload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "from_status",
+    "to_status",
+    "task_revision",
+    "reason_code",
+    "changed_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "from_status": {
+      "$ref": "https://schemas.shittim.local/v1/common/task_status.json"
+    },
+    "to_status": {
+      "$ref": "https://schemas.shittim.local/v1/common/task_status.json"
+    },
+    "task_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

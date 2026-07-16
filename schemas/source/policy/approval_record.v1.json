@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/policy/approval_record.json",
+  "title": "ApprovalRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "approval_type",
+    "target",
+    "actor",
+    "entry_point",
+    "decision",
+    "evidence_refs",
+    "supersedes_ref",
+    "expires_at",
+    "created_at",
+    "resolved_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "approval_type": {
+      "type": "string",
+      "enum": [
+        "user_confirm",
+        "local_confirm",
+        "system_auth",
+        "delegation",
+        "implicit"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "denied", "deferred"]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "supersedes_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resolved_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "enum": ["approved", "denied"]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "resolved_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "resolved_at": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "action_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "plan_step_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

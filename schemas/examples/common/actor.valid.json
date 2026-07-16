@@ -1,0 +1,12 @@
+{
+  "$schema_id": "https://schemas.shittim.local/v1/common/actor.json",
+  "instance": {
+    "schema_version": 1,
+    "revision": 1,
+    "id": "actor-local-user-1",
+    "kind": "known_user",
+    "source": "actor-source://local/desktop",
+    "authentication_level": "unauthenticated",
+    "confidence": null
+  }
+}

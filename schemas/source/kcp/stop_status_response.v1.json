@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/stop_status_response.json",
+  "title": "StopStatusResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "active",
+    "generation",
+    "activated_at",
+    "activated_by",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "active": {
+      "type": "boolean"
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "activated_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "activated_by": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://schemas.shittim.local/v1/common/actor.json" }
+      ]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    }
+  }
+}

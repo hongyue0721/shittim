@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/common/content_origin.json",
+  "title": "ContentOrigin",
+  "description": "Kernel-owned content origin record. External inputs must not supply kernel_receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "entry_point",
+    "source_uri",
+    "upstream_stable_id",
+    "producer_ref",
+    "received_at",
+    "carrier_ref",
+    "parent_origin_refs",
+    "kernel_receipt"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "$ref": "#/$defs/contentOriginKind"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "source_uri": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "upstream_stable_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "producer_ref": {
+      "$ref": "#/$defs/producerRef"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "carrier_ref": {
+      "$ref": "#/$defs/carrierRef"
+    },
+    "parent_origin_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    },
+    "kernel_receipt": {
+      "$ref": "#/$defs/kernelReceipt"
+    }
+  },
+  "$defs": {
+    "contentOriginKind": {
+      "type": "string",
+      "enum": [
+        "user_input",
+        "companion_generated",
+        "system_generated",
+        "remote_message",
+        "web_content",
+        "document_content",
+        "model_output",
+        "extension_output",
+        "provider_output",
+        "imported_data"
+      ]
+    },
+    "producerRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["actor", "model", "extension", "provider", "system"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "carrierRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["command_request", "task", "artifact", "event"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "kernelReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt_id", "content_hash", "recorded_at"],
+      "properties": {
+        "receipt_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

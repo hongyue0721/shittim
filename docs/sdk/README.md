@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-当前只有 SDK 与协议规范，代码尚未开始。仓库中没有可发布的 Rust、TypeScript 或 Python SDK 包，没有生成类型、validator、客户端实现或 conformance runner。
+仓库已有首批 Kernel 契约生成类型与校验 API（`kernel-contracts`），但**没有**可发布的多语言 SDK 包、客户端实现或完整 conformance runner。
 
-SDK 类型必须从 JSON Schema 2020-12 唯一源生成，不能手写一套与 Kernel 契约平行的类型。生成和兼容策略见 [`ADR-0002`](../../adr/0002-schema生成与兼容策略.md)。
+SDK 类型必须从 JSON Schema 2020-12 唯一源生成，不能手写一套与 Kernel 契约平行的类型。生成和兼容策略见 [`ADR-0002`](../../adr/0002-schema生成与兼容策略.md)；当前生成命令见 [`../api/schema-generation.md`](../api/schema-generation.md)。
 
 ## 文档
 

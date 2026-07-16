@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/task_spec.json",
+  "title": "TaskSpec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "origin_ref",
+    "actor",
+    "proposer",
+    "goal",
+    "constraints",
+    "success_criteria",
+    "risk_hint",
+    "capability_hints",
+    "delegation_ref",
+    "task_scope_ref",
+    "parent_task_id",
+    "status",
+    "plan_version",
+    "schema_version",
+    "revision",
+    "created_at",
+    "updated_at",
+    "failed_recovery_meta"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "origin_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "proposer": {
+      "type": "string",
+      "enum": ["user", "companion", "system"]
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "risk_hint": {
+      "type": ["string", "null"]
+    },
+    "capability_hints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "delegation_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "task_scope_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "parent_task_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "status": {
+      "$ref": "https://schemas.shittim.local/v1/common/task_status.json"
+    },
+    "plan_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "failed_recovery_meta": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/failedRecoveryMeta" }
+      ]
+    }
+  },
+  "$defs": {
+    "failedRecoveryMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempted", "recovery_attempt_refs"],
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "last_attempt_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "failure_reason": {
+          "type": "string"
+        },
+        "recovery_attempt_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

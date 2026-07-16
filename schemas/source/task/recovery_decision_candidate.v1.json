@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/task/recovery_decision_candidate.json",
+  "title": "RecoveryDecisionCandidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "revision",
+    "task_id",
+    "source_action_id",
+    "trigger",
+    "candidate_kind",
+    "facts",
+    "rationale",
+    "status",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source_action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "unknown_side_effect",
+        "failed",
+        "cancel_with_committed_effect",
+        "compensation_unknown"
+      ]
+    },
+    "candidate_kind": {
+      "type": "string",
+      "enum": [
+        "verify_external_state",
+        "retry_original",
+        "compensate",
+        "continue_task",
+        "stop_task",
+        "mark_failed"
+      ]
+    },
+    "proposed_action_request": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "$ref": "https://schemas.shittim.local/v1/task/action_request.json"
+        }
+      ]
+    },
+    "facts": {
+      "$ref": "#/$defs/facts"
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "selected", "rejected", "expired"]
+    },
+    "permission_decision_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "candidate_kind": { "const": "retry_original" }
+        },
+        "required": ["candidate_kind"]
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "properties": {
+              "side_effect_confirmed": { "const": false },
+              "original_idempotency_guaranteed": { "const": true }
+            },
+            "required": [
+              "side_effect_confirmed",
+              "original_idempotency_guaranteed"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "facts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "side_effect_confirmed",
+        "original_idempotency_guaranteed",
+        "external_query_available",
+        "compensatable"
+      ],
+      "properties": {
+        "side_effect_confirmed": {
+          "type": ["boolean", "null"]
+        },
+        "original_idempotency_guaranteed": {
+          "type": "boolean"
+        },
+        "external_query_available": {
+          "type": "boolean"
+        },
+        "compensatable": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

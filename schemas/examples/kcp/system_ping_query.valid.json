@@ -1,0 +1,26 @@
+{
+  "$schema_id": "https://schemas.shittim.local/v1/kcp/query_envelope.json",
+  "instance": {
+    "protocol_version": "1.0",
+    "message_kind": "query",
+    "request_id": "11111111-1111-4111-8111-111111111111",
+    "actor": {
+      "schema_version": 1,
+      "revision": 1,
+      "id": "actor-local-user-1",
+      "kind": "known_user",
+      "source": "actor-source://local/desktop",
+      "authentication_level": "unauthenticated",
+      "confidence": null
+    },
+    "entry_point": "local_desktop",
+    "auth": null,
+    "task_id": null,
+    "deadline": "2026-07-16T12:00:00Z",
+    "query_type": "system.ping",
+    "payload": {
+      "schema_version": 1,
+      "echo": "ping"
+    }
+  }
+}

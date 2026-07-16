@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+  "title": "TaskCreateRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposer",
+    "goal",
+    "constraints",
+    "success_criteria",
+    "risk_hint",
+    "capability_hints",
+    "task_scope",
+    "delegation_ref",
+    "parent_task_id",
+    "origin"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "proposer": {
+      "type": "string",
+      "enum": ["user", "companion", "system"]
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "risk_hint": {
+      "type": ["string", "null"]
+    },
+    "capability_hints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "task_scope": {
+      "$ref": "#/$defs/taskScopeInput"
+    },
+    "delegation_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "parent_task_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "origin": {
+      "$ref": "#/$defs/originInput"
+    }
+  },
+  "$defs": {
+    "taskScopeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "resource_patterns",
+        "exclusions",
+        "allowed_capability_hints",
+        "expires_at"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "resource_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowed_capability_hints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "expires_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "originInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "source_uri",
+        "upstream_stable_id",
+        "producer_ref",
+        "parent_origin_refs"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "user_input",
+            "companion_generated",
+            "system_generated",
+            "remote_message",
+            "web_content",
+            "document_content",
+            "model_output",
+            "extension_output",
+            "provider_output",
+            "imported_data"
+          ]
+        },
+        "source_uri": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "upstream_stable_id": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "producer_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["actor", "model", "extension", "provider", "system"]
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "parent_origin_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+[package]
+name = "kernel-contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Generated Kernel contract types, JSON Schema validators, and RFC 8785 canonical hash APIs"
+
+[dependencies]
+hex.workspace = true
+jsonschema.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -1,0 +1,53 @@
+{
+  "$schema_id": "https://schemas.shittim.local/v1/policy/policy_rule.json",
+  "instance": {
+    "id": "rule-confirm-shell",
+    "schema_version": 1,
+    "revision": 1,
+    "name": "confirm shell",
+    "description": "require confirmation for shell-like ops",
+    "priority": 100,
+    "enabled": true,
+    "actor_match": {},
+    "content_origin_match": {},
+    "resource_match": {
+      "scope_patterns": ["file:///tmp/**"],
+      "exclude_patterns": []
+    },
+    "action_match": {
+      "capability_ids": ["shell.*"],
+      "operation_patterns": ["shell.*"]
+    },
+    "condition": {},
+    "effect": "confirm",
+    "confirmation_mode": "generic",
+    "expires_at": null,
+    "created_by": {
+      "actor": {
+        "schema_version": 1,
+        "revision": 1,
+        "id": "actor-local-user-1",
+        "kind": "known_user",
+        "source": "actor-source://local/desktop",
+        "authentication_level": "unauthenticated",
+        "confidence": null
+      },
+      "entry_point": "local_desktop"
+    },
+    "updated_by": {
+      "actor": {
+        "schema_version": 1,
+        "revision": 1,
+        "id": "actor-local-user-1",
+        "kind": "known_user",
+        "source": "actor-source://local/desktop",
+        "authentication_level": "unauthenticated",
+        "confidence": null
+      },
+      "entry_point": "local_desktop"
+    },
+    "created_at": "2026-07-16T12:00:00Z",
+    "updated_at": "2026-07-16T12:00:00Z",
+    "source": "user_defined"
+  }
+}

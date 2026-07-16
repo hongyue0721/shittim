@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/task_get_request.json",
+  "title": "TaskGetRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_id"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "task_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

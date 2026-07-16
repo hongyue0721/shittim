@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/kcp/stop_activate_request.json",
+  "title": "StopActivateRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reason", "origin_ref"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "origin_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    }
+  }
+}
