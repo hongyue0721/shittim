@@ -1,0 +1,35 @@
+# ADR-0004：Kernel SQLite 文件持久化基座
+
+- 状态：accepted
+- 日期：2026-07-17
+
+## 背景
+
+Kernel 需要一个本地、可迁移、可恢复的唯一持久化基座，先关闭不可变 AuditRecord、原子 Event Outbox、cursor/delivery 与 Policy rate-limit 消费的落地缺口。本决策不把 SQLite 扩张成网络服务，也不提前实现 Task、Action、PermissionDecision repository、KCP、`agentd` 或 Publisher 后台循环。
+
+## 决策
+
+1. 新增内部 Rust crate `kernel-sqlite`，使用 `rusqlite` 的 `bundled` SQLite，持久化目标只接受普通文件路径；拒绝空路径、`:memory:` 和所有以 `file:` 开头的 SQLite URI（不只 memory URI）。
+2. 每个连接开启并读取验证 `foreign_keys=ON`，设置并验证显式非零 `busy_timeout`。数据库初始化开启并验证 `journal_mode=WAL`；不自行覆盖 `synchronous`。
+3. migration 使用 crate 内嵌、严格升序 SQL，`schema_migrations(version,name,checksum)` 是单一版本源；checksum 为 SQL bytes 的 SHA-256。已应用名称/checksum 漂移返回 `migration_drift`，数据库版本高于 binary 返回 `database_schema_too_new`。每个 pending migration 在 `BEGIN IMMEDIATE` 中应用，业务 DDL 与对应 ledger 行同事务提交或回滚；`schema_migrations` bootstrap 在 pending migration 事务外独立幂等创建，因此首次 migration 失败时允许留下空 ledger 表，但不会留下 pending migration 的部分业务 DDL。
+4. 所有写 API 使用 `BEGIN IMMEDIATE`。`WriteTransaction` 只能由 `SqliteStore` 构造，调用方不能自行 commit；closure 成功提交，返回错误时回滚，panic 时先尽最大努力回滚并在释放 transaction 与连接 mutex guard 后恢复原 panic payload，避免 mutex 被展开过程 poison。commit 后补偿 rollback 或任一 rollback 失败时，当前 store 被标记为不可继续使用，后续操作 fail closed，不复用事务状态未知的连接。事务 closure 不接受 async 或网络 callback，外部发布和其它外部副作用必须在提交后执行。
+5. AuditRecord 只保存一份 RFC 8785 canonical JSON 文档；ID、类型、时间、Task、Action 查询使用 SQLite JSON expression index，不建立重复普通列双源。插入前运行正式 Schema 校验和 `sent` 支撑引用规则，读取时再次校验并反序列化生成类型。
+6. Outbox 以规范化列保存 Envelope 归因字段和 payload JSON，不额外保存 `envelope_json`。`append_event` 先用 `sequence=0`、`outbox_position="1"` 占位 Envelope 完成 Schema 与 typed decode 预检，再在内部 SAVEPOINT 中用聚合序列表 `UPSERT ... RETURNING` 分配首条 `0`、后续 `+1`，插入后用 AUTOINCREMENT rowid 形成全局 `outbox_position`，并对最终 Envelope 再校验。任一步失败由该 append 自行回滚到 SAVEPOINT，即使调用者检查错误后让外层 closure 返回成功，也不会提交该次 append 的 sequence、position 或部分行。
+7. Publisher 存储面仅提供按位置读取未投递记录及幂等 `mark_delivered`；第一次 `delivered_at` 不可覆盖。没有删除、retention、claim lease 或后台发布循环。
+8. Policy rate-limit 消费记录不清理。`RateLimitPort` 只从活动 `WriteTransaction` 借用；preview 不写，winner-only `check_and_consume` 在同一 `BEGIN IMMEDIATE` 事务重新计数并插入，窗口使用 `consumed_at_micros > instant - window`。不为 `SqliteStore` 实现可独立提交的 `RateLimitPort`。
+
+## 备选方案
+
+- 系统 SQLite 动态链接：拒绝；首批需要可重复构建和明确 SQLite 能力，选择 bundled。
+- 内存数据库：拒绝；无法验证真实文件锁、WAL、多连接竞争和恢复语义。
+- migration 框架：首批暂不采用；当前只有小型顺序 migration，自研 checksum 表面更小且无需引入 async/refinery。
+- Audit 普通列加完整 JSON：拒绝；会形成可漂移双源。
+- Outbox 保存完整 Envelope JSON：拒绝；列与文档会形成双源，完整 Envelope 可从规范化列确定重建和验证。
+- Store 级 rate-limit 独立事务：拒绝；会破坏 PermissionDecision 与消费同事务的 winner-only 原子性。
+
+## 影响与实现范围
+
+- 本 ADR 已由 `rust/crates/kernel-sqlite` 的 migration、Audit、Outbox、cursor/delivery 和 transaction-bound rate limit 实现覆盖。
+- Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、Provider/ModelCall 一致性，以及 task creation context 与未来 TaskSpec/Task 的跨对象一致性仍必须由后续 repository 在同一事务中完成；本基座不伪造对应权威表。
+- `system_internal` 使用 null actor 是否确无注册主体仍由生产者证明。
+- Task/Action/PermissionDecision repository、KCP、`agentd`、Publisher 循环、网络、retention 和 claim lease 不在本 ADR 已实现范围。
