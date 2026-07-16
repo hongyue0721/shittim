@@ -32,7 +32,7 @@ store.with_write_transaction(|transaction| {
 - closure 返回 `Ok` 才 commit，返回 `Err` 自动 rollback；panic 会先尽最大努力 rollback，释放 transaction 与连接锁后原样恢复 panic payload，因此不会因该 panic poison store mutex。调用者拿不到 commit API。
 - commit 后补偿 rollback、错误 rollback 或 panic rollback 若失败，当前 `SqliteStore` 会被标记为不可继续使用；后续操作 fail closed，避免复用事务状态未知的连接。
 - `WriteTransaction` 是受限表面，不公开任意 SQL。
-- 后续 Task/Action/PermissionDecision repository 可复用同一事务，但本 crate 当前没有实现这些 repository。
+- 后续 Task/Action/PermissionDecision repository 可复用同一事务，但本 crate 当前没有实现这些 repository。Task repository 开工前应遵守 [`task-repository-contract.md`](task-repository-contract.md)；其中 `task.create` 四项阻塞契约已关闭，但没有新增 migration 或 repository 代码。
 
 ## AuditRecord
 
@@ -51,7 +51,7 @@ store.with_write_transaction(|transaction| {
 - PermissionDecision 与 `policy_context.matched_rule_ref` / `policy_set_revision` 跨对象一致性；
 - rollback capability 从 Action/Verification/Recovery 权威事实投影；
 - Provider 与对应 ModelCall 的一致性；
-- task creation context 与同事务 TaskSpec/Task 的一致性；
+- Task creation context 与同事务 TaskSpec/Task/ContentOrigin/`task.created` 的固定 canonical 子事实一致性；规范与 fixture 已拍板，repository 未实现；
 - `system_internal` null actor 的“确无可归因主体”证明。
 
 这些必须由拥有对应权威表的后续 repository 在同一事务中实现，不能由默认值代替。

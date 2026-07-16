@@ -26,6 +26,7 @@
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
+- [x] 拍板 `task.create` repository 四项阻塞：规范化后的完整 payload receipt hash、精确幂等等价 projection、TaskScope/ContentOrigin 初值、固定 `task.creation_recorded` producer 与 `task.created` 上层 ID 边界；新增独立复合 hash fixture，并由 Rust 契约测试和 schema-tool 实际 CLI 双路径共同验证。
 - [x] `scripts/check-schema.sh` 覆盖重复生成、fmt、Clippy、workspace tests 和生成物 Git 漂移。
 - [x] 定义 `AuditRecord` v1：增加 `task.creation_recorded` 不可变创建快照，显式 `external_content_status` / PayloadManifest stable refs，并拍板 PermissionDecision/policy context、rollback 权威投影、实际 Provider/模型建议引用的双源一致性；Schema 内条件已有运行时测试，不自动公开为 Event/Outbox。
 - [x] 明确 Event aggregate `sequence`：首条已提交事件为 `0`，后续严格连续 `+1`，回滚事务暂分配不占号。
@@ -70,9 +71,8 @@
 
 ## 未完成
 
-- [ ] 实现 Task/Action/PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider、Task creation context 跨对象一致性；这些必须复用现有 `WriteTransaction`。
-- [ ] 实现请求幂等与乐观锁。
-- [ ] 实现 Event Publisher 后台循环；当前只有 `read_undelivered` / `mark_delivered` storage API，没有网络、retention、删除或 claim lease。
+- [ ] 实现 Task/TaskScope/ContentOrigin/idempotency、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider、Task creation canonical 子事实跨对象一致性；这些必须复用现有 `WriteTransaction`。`task.create` 契约已拍板，但没有表、migration 或实现。
+- [ ] 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已定义，尚未持久化。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
 - [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
@@ -82,16 +82,19 @@
 
 ## 当前阻塞
 
-- AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation context 仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
+- `task.create` repository 的四项规范阻塞已关闭：receipt hash、idempotency projection、TaskScope/ContentOrigin 初值、固定 Audit/Event producer 均有精确契约和 fixture。实现仍未开始；当前没有 Task/Scope/Origin/idempotency 表，非 null Delegation 正向路径仍因 authority repository 缺失而固定返回 `delegation_not_found`。
+- Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于上述四项阻塞。
+- AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
 - Node 24 LTS 已可用（24.18.0，pnpm user runtime），TypeScript 工具链不再受版本阻塞。
 - 真实模型 Provider、远程 Channel、跨平台 Provider 与 Privilege Broker 仍需要后续真实环境和用户选择；当前没有伪造支持。
 
 ## 下一步
 
-1. 在 `kernel-sqlite::WriteTransaction` 上实现 Task/Action/PermissionDecision repository，并关闭 Audit 跨对象一致性硬门。
-2. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切，随后接入 Publisher 循环。
-3. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
+1. 按 [`api/task-repository-contract.md`](api/task-repository-contract.md) 在 `kernel-sqlite::WriteTransaction` 上实现 Task/TaskScope/ContentOrigin/idempotency repository 与固定 Task creation Audit/Event producer；实现前单独拍板 Task list cursor。
+2. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
+3. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切，随后接入 Publisher 循环。
+4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
 
@@ -103,7 +106,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，`kernel-contracts` 44 项测试，`schema-tool` 10 项测试，`kernel-sqlite` 24 项测试，当前 workspace 共 148 项测试。
+全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，`kernel-contracts` 45 项测试（5 unit + 40 contract），`schema-tool` 11 项测试，`kernel-sqlite` 24 项测试，当前 workspace 共 150 项测试。
 
 ## 事实来源
 
@@ -114,4 +117,5 @@ git diff --check
 - Schema：[`api/schema-generation.md`](api/schema-generation.md)
 - 状态机 API：[`api/domain-task.md`](api/domain-task.md)
 - Policy matcher API：[`api/domain-policy.md`](api/domain-policy.md)
+- Task repository 契约：[`api/task-repository-contract.md`](api/task-repository-contract.md)
 - SQLite API：[`api/kernel-sqlite.md`](api/kernel-sqlite.md)

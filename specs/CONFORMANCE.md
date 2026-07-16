@@ -63,6 +63,7 @@
 测试：
 
 - Policy URI pattern 规范化与 segment glob：Resource、Actor source、ContentOrigin source 均使用 URI；`*` 单段、`**` 多段，非法内嵌 glob 和 regex 被拒绝；
+- `task.create` 只对非 null origin.source_uri 与 TaskScope include/exclude URI pattern 做 Policy URI 规范化；顺序/重复保留，其他字符串不 trim/排序，规范化 payload 重新通过 TaskCreateRequest Schema；
 - operation/capability 只接受精确或末尾 `.*`，空数组不限制，exclude 优先，`side_effect_max` 按 S0..S5 ceiling；
 - ContentOrigin 多值匹配要求同一条 origin 同时满足受限的 kind/source 维度，不得跨两条 origin 拼接命中；空数组/缺省维度不限制；
 - specificity tuple 的每个字段按本次实际命中的最具体备选 pattern 计分；数组重排或增加未命中备选不改变结果，通配越少越具体，最终同分按 rule ID UTF-8 字节序升序；
@@ -103,8 +104,15 @@
 - Envelope `protocol_version = 1.0`，payload/持久对象携带独立 `schema_version`；错误混用或缺失版本被拒绝；
 - Actor 带单调 revision；`owner` 仅预留标签；Envelope v1 不执行身份认证，只解析并记录 actor/entry_point；`auth` 只能为 null，非 null 返回 `unsupported_auth_schema`；
 - 已过期 deadline 与处理期间超时均返回 `deadline_exceeded`，不得静默丢弃；已开始且不可安全取消的外部动作先持久化为 `unknown_side_effect`/恢复待查，不伪称未生效；
-- `task.create` 幂等 scope 重复相同请求返回原 Task，不同规范化请求返回 `idempotency_conflict`；risk_hint 可为 null、capability_hints 可为空且 Kernel 不猜测；新建 Task 固定 `status=candidate`、`plan_version=0`、`revision=1`，只发布一个 `task.created`，且事件 `task_revision` 等于 Task revision；ContentOrigin、TaskScope、Task 与 Outbox 在同一事务创建；
-- `task.list` 的 parent_filter 明确区分 any/root/exact，稳定排序、limit 边界和 opaque cursor；
+- `task.create` 幂等 scope 精确为 `(actor.id, entry_point, command_type, idempotency_key)`；等价投影只含完整 actor revision 快照、entry_point、固定 command_type、Envelope task_id/context/expected_revision 与规范化完整 payload，明确排除 protocol/message/auth/request/deadline/key；RFC 8785 + SHA-256 同 hash 返回原 task_id 和当前 revision，不同 hash 返回 `idempotency_conflict`；记录与 Task 同生命周期、v1 不清理且无 processing 状态；
+- `task.create` receipt content hash 精确覆盖规范化后的完整 TaskCreateRequest payload，不含 Envelope/Kernel IDs/时间/receipt/物化对象；共享复合 hash fixture `schemas/fixtures/kcp/task_create_normalized_hash.v1.json`（不是 schema-tool 通用 `$schema_id`/`instance` example wrapper）必须自动验证：`schema-tool validate` 校验其中 `normalized_payload`，实际 CLI `canonicalize --hash` 分别处理 `normalized_payload` 与 `idempotency_projection`，并与 Rust `sha256_canonical` 得到相同 lowercase hash；
+- `task.create` 固定一个 accepted_at，并令 ContentOrigin received/receipt、TaskScope created/updated、Task created/updated、Audit occurred 与 Event occurred 全部等于该值；分别取时钟的实现不合格；
+- `task.create` TaskScope 初值固定 UUID/schema1/revision1/task ID、请求数组原序保留、`source_refs=[新 origin id]` 不展开 parent、完整 actor+entry point created_by、请求 expires、双时间 accepted_at；ContentOrigin 的 UUID/entry/carrier/receipt/parent 投影同样逐字段校验；
+- `task.create` 固定 `task.creation_recorded` producer：上层 Audit ID、严格 null/空数组、`reason_codes=["task_created"]`、`details={}`、唯一 origin ref、Task delegation、command causation、与 `task.created` 相同 correlation；与 Task canonical 子事实不一致必须使事务失败；
+- `task.created` event ID/correlation/dedup 由 Kernel 上层显式提供，repository 不生成；sequence=0、唯一事件、command causation、payload 与 Task 精确一致；
+- 非 null parent task 与每个 parent origin 必须存在；当前任何非 null delegation_ref 返回 `delegation_not_found`，Schema 仍允许非 null，正向 Delegation authority 路径明确未实现；
+- `task.create` 幂等 scope 重复相同请求返回原 Task，不同规范化请求返回 `idempotency_conflict`；risk_hint 可为 null、capability_hints 可为空且 Kernel 不猜测；新建 Task 固定 `status=candidate`、`plan_version=0`、`revision=1`，只发布一个 `task.created`；ContentOrigin、TaskScope、Task、Audit、幂等记录与 Outbox 在同一事务创建；
+- `task.list` 的 parent_filter 明确区分 any/root/exact，稳定排序、limit 边界和 opaque cursor；cursor 编码技术选择留待 repository 实现前的 ADR/API 拍板，本批不把任一编码写成事实；
 - `system.ping`、Task Query 和 Event Query 不产生领域副作用；
 - Event cursor 只使用十进制 `outbox_position`，按严格递增位置轮询；拒绝 event ID、时间戳或 aggregate sequence cursor；
 - EventEnvelope 包含 aggregate_type、sequence、outbox_position 和 `{kind,id}` causation_ref，causation kind 只允许 `command_request | event`；同一聚合首条已提交事件 `sequence = 0`，后续已提交事件严格连续 `+1`，事务回滚的暂分配不占号；

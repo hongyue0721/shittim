@@ -28,7 +28,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | 方法 | 类型 | 状态/副作用 | 幂等说明 |
 |---|---|---|---|
 | `system.ping` | Query | 只读 | 不适用 |
-| `task.create` | Command | 创建 Task Kernel 事实，不执行外部副作用 | actor.id/entry_point/command_type/idempotency_key scope |
+| `task.create` | Command | 创建 Task Kernel 事实，不执行外部副作用 | actor.id/entry_point/command_type/idempotency_key scope；精确 projection + JCS hash 见下文 |
 | `task.get` | Query | 只读 | 不适用 |
 | `task.list` | Query | 只读 | 不适用 |
 | `event.subscribe` | Query | 创建连接级临时订阅句柄，无领域副作用 | 不适用 |
@@ -36,11 +36,11 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
+完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已拍板只规范化 origin URI 和 TaskScope URI patterns，使用完整规范化 payload 计算 receipt hash，并使用精确 Envelope 业务投影计算幂等 hash；物化 Task/Scope/Origin/Audit/Event 的初值与单事务关系见 [Task repository 创建契约](task-repository-contract.md)。这些契约尚无 repository 或 handler 实现。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
 
 ## Cursor
 
-Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`sequence` 只用于聚合内顺序，不能作为全局 cursor。列表 cursor 是 Kernel 生成的不透明字符串。
+Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`sequence` 只用于聚合内顺序，不能作为全局 cursor。列表 cursor 是 Kernel 生成的不透明字符串；`task.list` 的具体 cursor 编码尚未选择，必须在 Task repository 实现前通过 ADR/API 拍板。
 
 ## 当前不可用项
 

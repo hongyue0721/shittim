@@ -208,6 +208,7 @@ Actor Schema：
 
 - `entry_point: EntryPoint` 是 ContentOrigin 自身的接收来源字段，用于内容来源链和 Policy 匹配；它不属于 Actor。Envelope 同样有自己的 `entry_point`，用于当前 KCP 调用入口；两者语义不同，可以在派生/转发时不同，不要求相等；
 - `source_uri` 存在时使用 `SECURITY_PRIVILEGE.md` 的 URI 规范化规则；
+- `kernel_receipt.content_hash` 是接收内容的 RFC 8785 JCS UTF-8 字节 SHA-256 lowercase。具体 producer 必须定义被哈希 JSON 对象的精确边界；不得把 Envelope、Kernel ID、时间戳、receipt 自身或后续物化对象混入内容哈希。`task.create` 的精确边界见第 5.5 节；
 - 上游没有稳定 ID 时必须为 `null`，不得生成并伪称上游事实；
 - `kernel_receipt` 由 Kernel 创建；外部消息 Schema 不接受该字段，若输入出现同名字段必须返回 `invalid_request`，Kernel 随后为已接受内容自行创建 receipt；
 - `parent_origin_refs` 表达派生来源，可为空；不得用它替代当前内容自身的 receipt；
@@ -287,7 +288,11 @@ Response：
 #### `task.create`
 
 - 属性：Command；创建 Kernel Task 事实，不执行 Task 中的外部副作用；
-- 幂等 scope：`(actor.id, entry_point, command_type, idempotency_key)`，保留期至少覆盖 Task 创建中和已创建去重查询；重复请求返回同一 `task_id` 与当前 revision；
+- 接受时间：Kernel 在验证与事务开始前为本次接受固定一个 `accepted_at`，下述所有创建时间均使用这个值，不允许各对象分别取时钟；
+- 规范化：只规范化非 null `origin.source_uri`、`task_scope.resource_patterns[]` 与 `task_scope.exclusions[]`，统一使用 `SECURITY_PRIVILEGE.md` 的 Policy URI 语法。数组顺序与重复项原样保留；其他字符串不 trim、不排序、不去重。规范化后的完整 payload 必须再次通过 `TaskCreateRequest` Schema，否则返回对应请求/Pattern 错误；
+- 幂等 scope：精确为 `(actor.id, entry_point, command_type, idempotency_key)`；记录与 Task 同生命周期，v1 不清理。全本地创建在一个 SQLite 事务中完成，不引入 `processing` 状态；
+- 幂等等价投影是精确 JSON object：`{ actor, entry_point, command_type: "task.create", task_id, context, expected_revision, payload }`。`actor` 是 Envelope 中完整 revision 快照，`task_id` / `context` / `expected_revision` 保留 Envelope 原值（含 null），`payload` 是规范化后的完整 `TaskCreateRequest`。投影排除 `protocol_version`、`message_kind`、`auth`、`request_id`、`deadline`、`idempotency_key`；按 RFC 8785 JCS UTF-8 + SHA-256 lowercase 得到等价哈希；
+- 同 scope/key 已有记录且等价哈希相同，返回同一 `task_id` 与该 Task 的当前 revision；哈希不同返回 `idempotency_conflict`。不得把 deadline、request ID 或认证承载差异误判成不同业务创建；
 - Request payload：
 
 ```text
@@ -319,9 +324,19 @@ Response：
 }
 ```
 
-Kernel 必须在同一 SQLite 事务中创建完整 ContentOrigin、TaskScope、Task 与 `task.created` Outbox 记录：ContentOrigin 的 `id`、`entry_point`、`received_at`、`carrier_ref = { kind: command_request, id: request_id }` 和 `kernel_receipt` 由 Kernel 填充；TaskScope 的 `task_id`、`created_by`、`created_at` 由 Kernel 填充，`source_refs` 至少包含新建 origin ID。请求不得提交这些 Kernel-owned 字段。这样首批目录无需另造 `origin.create` 或 `task_scope.create` API。
+Kernel 必须先验证引用，再在同一 SQLite 事务中创建幂等记录、完整 ContentOrigin、TaskScope、Task、固定 `task.creation_recorded` AuditRecord 与唯一 `task.created` Outbox 记录；任何 Schema、引用或 canonical 子事实一致性失败均整体回滚。请求不得提交 Kernel-owned 字段，这样首批目录无需另造 `origin.create` 或 `task_scope.create` API。
 
-新建 Task 的 Kernel 填充值固定为：`schema_version = 1`、`actor = Envelope.actor` 的完整 revision 快照、`status = candidate`、`plan_version = 0`、`revision = 1`、`created_at = updated_at = Kernel 接受该 Command 的时间`、`failed_recovery_meta = null`；请求中的 `risk_hint = null` 与空 `capability_hints` 均按原值持久化，不由 Kernel 猜测；`delegation_ref` 没有输入时为 `null`。创建事务只发出一个 `task.created` 事件，不同时发送 `task.state_changed`。
+引用规则固定为：非 null `parent_task_id` 必须已存在，否则 `parent_task_not_found`；每个 `origin.parent_origin_refs[]` 必须已存在，否则 `parent_origin_not_found`，且持久化时按请求顺序与重复原样保存；当前没有 Delegation authority repository，任何非 null `delegation_ref` 均返回 `delegation_not_found`。该正向路径尚未实现，但 Schema 继续允许非 null，不能用 Schema 禁止值来伪装引用校验。
+
+`ContentOrigin` 物化固定为：Kernel 上层分配 UUID `id` 并交给 repository 校验/写入；`schema_version = 1`；请求的 `kind`、规范化 `source_uri`、`upstream_stable_id`、`producer_ref`、`parent_origin_refs` 原样投影；`entry_point = Envelope.entry_point`；`received_at = accepted_at`；`carrier_ref = { kind: command_request, id: Envelope.request_id }`；Kernel 上层同样分配 UUID `kernel_receipt.receipt_id`，repository 只接收、校验并写入，`recorded_at = accepted_at`。`kernel_receipt.content_hash` 对**规范化后的完整 TaskCreateRequest payload JSON object**执行 RFC 8785 JCS，取 UTF-8 字节的 SHA-256 lowercase；它包含 payload 的全部字段（包括 `schema_version`、`proposer`、`goal`、scope 与 origin），不包含 Envelope、request/deadline/idempotency/auth/entry point/actor、Kernel IDs/时间、receipt 或任何物化对象。复合 hash fixture 见 `schemas/fixtures/kcp/task_create_normalized_hash.v1.json`；它不是 schema-tool 通用 `$schema_id`/`instance` example wrapper。
+
+`TaskScope` 物化固定为：Kernel 上层分配 UUID `id`，repository 只接收、校验并写入；`schema_version = 1`、`revision = 1`、`task_id =` 新 Task ID；规范化后的 `resource_patterns` / `exclusions` 以及请求的 `allowed_capability_hints` 均保持数组顺序和重复；`source_refs` **恰好**为 `[新 ContentOrigin.id]`，不展开 parent origins；`created_by = { actor: Envelope.actor 完整快照, entry_point: Envelope.entry_point }`；`expires_at` 使用请求值；`created_at = updated_at = accepted_at`。
+
+`TaskSpec` 物化固定为：Kernel 上层分配 UUID `id`，repository 只接收、校验并写入；`origin_ref` 与 `task_scope_ref` 分别引用上述新对象；`actor = Envelope.actor` 完整 revision 快照；规范化 payload 中的 `proposer`、`goal`、`constraints`、`success_criteria`、`risk_hint`、`capability_hints`、`delegation_ref`、`parent_task_id` 精确投影；`status = candidate`、`plan_version = 0`、`schema_version = 1`、`revision = 1`、`created_at = updated_at = accepted_at`、`failed_recovery_meta = null`。请求中的 null、空数组、顺序、重复和空白均不得由 Kernel 猜测或整理。
+
+`task.creation_recorded` 是该创建事务的固定 Audit producer：上层 Kernel 显式分配 Audit UUID；`schema_version=1`、`audit_type=task.creation_recorded`、`level=user_activity`、`actor=Envelope.actor`、`entry_point=Envelope.entry_point`、`occurred_at=accepted_at`、`task_id=新 Task.id`；`task_creation_context={ task_revision:1, goal:Task.goal, origin_ref:Task.origin_ref, proposer:Task.proposer }`；`action_id`、`permission_decision_ref`、`approval_record_ref`、`recovery_attempt_ref`、`extension_id`、`provider_id`、`stop_fence_generation`、`policy_context`、`summary` 均为 null；`delegation_ref=Task.delegation_ref`；model/payload manifest/verification/artifact/resource 数组为空；`external_content_status=not_sent`；`content_origin_refs` 恰好为 `[新 ContentOrigin.id]`；`causation_ref={ kind:command_request, id:Envelope.request_id }`；`correlation_id` 必须与同事务 `task.created` Event 完全相同；`rollback_capability=unknown`、`outcome=succeeded`、`reason_codes` 恰好为 `["task_created"]`、`details={}`。Audit 与 Task canonical 子事实不一致时事务失败，不能以 Audit 默认值掩盖不一致。
+
+`task.created` producer 不生成 caller-owned 标识：`event_id`、`correlation_id`、`dedup_key` 必须由 Kernel 上层显式提供；repository 只校验并写入。事件固定 `aggregate_type=task`、`aggregate_id=Task.id`、`sequence=0`、`occurred_at=accepted_at`、`causation_ref={ kind:command_request, id:Envelope.request_id }`；payload 的 `task_id`、`status`、`proposer`、`goal`、`task_revision`、`created_at` 必须与 Task 精确一致。创建事务只允许这一条 Event，不同时发送 `task.state_changed`。
 
 - Response payload：`{ schema_version: 1, task: TaskSpec }`；
 - 错误：`invalid_request`、`invalid_scope_pattern`、`delegation_not_found`、`parent_task_not_found`、`parent_origin_not_found`、`idempotency_conflict`、通用错误。
@@ -353,7 +368,7 @@ Kernel 必须在同一 SQLite 事务中创建完整 ContentOrigin、TaskScope、
 }
 ```
 
-空 `statuses` 表示不按状态限制。`parent_filter.mode = any` 不限制父级，`root` 只返回 `parent_task_id = null`，`exact` 要求 `task_id` 非 null 且只返回该父 Task 的直接子 Task；其他 mode 下 `task_id` 必须为 null。`proposer = null` 表示不限制；`created_after` 是严格大于。结果按 `(created_at desc, id asc)` 稳定排序。
+空 `statuses` 表示不按状态限制。`parent_filter.mode = any` 不限制父级，`root` 只返回 `parent_task_id = null`，`exact` 要求 `task_id` 非 null 且只返回该父 Task 的直接子 Task；其他 mode 下 `task_id` 必须为 null。`proposer = null` 表示不限制；`created_after` 是严格大于。结果按 `(created_at desc, id asc)` 稳定排序。cursor 仍是 Kernel 生成的不透明字符串；其编码与分页键的技术选择不在本批契约中拍板，Task repository 实现前必须在 ADR 或 API 契约中明确。
 
 - Response payload：`{ schema_version: 1, tasks: [TaskSpec, ...], next_cursor: <opaque string> | null }`；
 - 错误：`invalid_cursor`、通用错误。
@@ -422,7 +437,8 @@ EventEnvelope 字段与 Outbox 语义以 `CORE_ARCHITECTURE.md` 为准。首批 
 
 - `aggregate_type = "task"`，`aggregate_id = task_id`；
 - payload：`{ schema_version: 1, task_id: <uuid>, status: TaskStatus, proposer: user | companion | system, goal: <string>, task_revision: <positive integer>, created_at: <RFC 3339 UTC> }`；
-- `task_revision` 必须等于该事件所描述的 `TaskSpec.revision`；首批 `task.create` 中固定为 `1`。
+- `task_revision` 必须等于该事件所描述的 `TaskSpec.revision`；首批 `task.create` 中固定为 `1`；
+- 首批 `task.create` 的 `event_id`、`correlation_id`、`dedup_key` 由 Kernel 上层显式提供，repository 不得自行生成；`sequence=0`、`occurred_at=Task.created_at`、causation 为创建 Command request ID，payload 与 Task canonical 子事实不一致时整笔创建事务失败。
 
 #### `task.state_changed`
 
@@ -650,7 +666,7 @@ expires_at?
 created_at / updated_at
 ```
 
-`TaskSpec` 必须引用 `task_scope_ref`；`ActionRequest.resource_refs[]` 必须落在对应 TaskScope 内，超出时作为新的 Policy 输入处理，不能静默修改长期 ExplorationScope。
+`TaskSpec` 必须引用 `task_scope_ref`；`ActionRequest.resource_refs[]` 必须落在对应 TaskScope 内，超出时作为新的 Policy 输入处理，不能静默修改长期 ExplorationScope。`task.create` 的首版初值固定为 `revision=1`、`source_refs=[新 origin id]`、完整 actor+entry point 的 `created_by`，并令 `created_at=updated_at=accepted_at`；详见第 5.5 节。
 
 ### 6.10 ApprovalRecord
 
@@ -822,7 +838,7 @@ details: <object>
 - 全部 v1 字段均为 required；没有关联事实时使用显式 `null` 或空数组，区别“已知无事实”和“生产者漏字段”；
 - `actor` 保存完整 revision 快照。Schema 只约束 null actor 仅可用于 `system_internal`；“确无可归因注册主体”是生产者必须证明的业务事实，不能声称由 Schema 证明；
 - `delegation_ref` 与 `model_call_refs` 当前是非空 stable ref：Delegation 与 ModelCallRecord 虽已有规范名，但尚无 source Schema，不得假称 UUID 或已存在持久 Schema；
-- `task.creation_recorded` 必须携带非 null UUID `task_id` 与完整 `task_creation_context`，其中 `task_revision=1`，其余字段从同一事务 TaskSpec/Task 复制为不可变创建快照；其他 audit_type 的 context 必须为 null。该快照固定回答“为什么创建任务”，不把 TaskSpec 复制到所有 AuditRecord；
+- `task.creation_recorded` 必须携带非 null UUID `task_id` 与完整 `task_creation_context`，其中 `task_revision=1`，其余字段从同一事务 TaskSpec/Task 复制为不可变创建快照；其他 audit_type 的 context 必须为 null。该快照固定回答“为什么创建任务”，不把 TaskSpec 复制到所有 AuditRecord；`task.create` producer 的其余固定字段、空数组/null 值、reason code 与 Event correlation 见第 5.5 节，任一 canonical 子事实失配均回滚；
 - `external_content_status` 固定回答是否外发：`not_sent` 要求空 `payload_manifest_refs`；`sent` 必须至少由 content origin、artifact、resource、model call、payload manifest 或 causation 稳定引用之一支撑；`unknown` 必须有 reason code。PayloadManifest 目前只承诺 stable ref，不新增 source Schema或复制正文；
 - `permission_decision_ref` 非空时 `policy_context` 必须非空；未来 repository 必须读取不可变 PermissionDecision，校验 nullable `matched_rule_ref` 与 `policy_set_revision` 完全一致，不一致则 Audit 写入失败并回滚事务。排序摘要、mutation authority 与 auth evidence 是补充审计快照，不替代 PermissionDecision；
 - `rollback_capability` 不是独立可编辑结论，而是审计时从 `ActionRequest.rollback_policy`、Verification、Recovery 权威事实投影；明确可/不可补偿必须有权威事实，缺失或不可判定写 `unknown`，可解析事实冲突则写入失败；

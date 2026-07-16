@@ -16,6 +16,7 @@ const COMMAND_ID: &str = "https://schemas.shittim.local/v1/kcp/command_envelope.
 const QUERY_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
 const RESPONSE_ID: &str = "https://schemas.shittim.local/v1/kcp/response_envelope.json";
 const TASK_LIST_ID: &str = "https://schemas.shittim.local/v1/kcp/task_list_request.json";
+const TASK_CREATE_ID: &str = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
 const EVENT_SUBSCRIBE_ID: &str =
     "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json";
 const EVENT_POLL_ID: &str = "https://schemas.shittim.local/v1/kcp/event_poll_request.json";
@@ -332,6 +333,97 @@ fn jcs_known_vector_object_order_and_hash() {
     assert_eq!(
         digest,
         "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+    );
+}
+
+#[test]
+fn task_create_normalized_hash_fixture_is_executable() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../../schemas/fixtures/kcp/task_create_normalized_hash.v1.json"
+    ))
+    .expect("task.create hash fixture");
+
+    let envelope = &fixture["command_envelope"];
+    validate_json(COMMAND_ID, envelope).expect("fixture command envelope");
+    validate_json(TASK_CREATE_ID, &fixture["normalized_payload"])
+        .expect("normalized payload remains a TaskCreateRequest");
+
+    assert_eq!(
+        sha256_canonical(&fixture["normalized_payload"]).expect("receipt hash"),
+        fixture["receipt_content_hash"]
+            .as_str()
+            .expect("receipt hash string")
+    );
+    assert_eq!(
+        sha256_canonical(&fixture["idempotency_projection"]).expect("projection hash"),
+        fixture["idempotency_projection_hash"]
+            .as_str()
+            .expect("projection hash string")
+    );
+
+    let projection = fixture["idempotency_projection"]
+        .as_object()
+        .expect("projection object");
+    assert_eq!(projection.len(), 7);
+    for field in [
+        "actor",
+        "entry_point",
+        "command_type",
+        "task_id",
+        "context",
+        "expected_revision",
+        "payload",
+    ] {
+        assert!(
+            projection.contains_key(field),
+            "missing projection field {field}"
+        );
+    }
+    for excluded in [
+        "protocol_version",
+        "message_kind",
+        "auth",
+        "request_id",
+        "deadline",
+        "idempotency_key",
+    ] {
+        assert!(
+            !projection.contains_key(excluded),
+            "excluded envelope field {excluded} entered projection"
+        );
+    }
+    assert_eq!(projection["actor"], envelope["actor"]);
+    assert_eq!(projection["payload"], fixture["normalized_payload"]);
+
+    let original_payload = &envelope["payload"];
+    let normalized_payload = &fixture["normalized_payload"];
+    assert_eq!(normalized_payload["goal"], original_payload["goal"]);
+    assert_eq!(
+        normalized_payload["constraints"],
+        original_payload["constraints"]
+    );
+    assert_eq!(
+        normalized_payload["capability_hints"],
+        original_payload["capability_hints"]
+    );
+    assert_eq!(
+        normalized_payload["origin"]["parent_origin_refs"],
+        original_payload["origin"]["parent_origin_refs"]
+    );
+    assert_eq!(
+        normalized_payload["task_scope"]["resource_patterns"],
+        json!(["https://example.com/a/b/**", "https://example.com/a/b/**"])
+    );
+    assert_eq!(
+        normalized_payload["task_scope"]["exclusions"],
+        json!([
+            "https://example.com/a/b/cache/*",
+            "https://example.com/a/b/cache/*"
+        ])
+    );
+    assert_eq!(
+        normalized_payload["origin"]["source_uri"],
+        json!("https://example.com/inbox/request?x=%2F#Part")
     );
 }
 

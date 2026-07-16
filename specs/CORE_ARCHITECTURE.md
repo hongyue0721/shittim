@@ -595,13 +595,16 @@ Planner 不能直接调用 Extension。
 
 SQLite 事务用于：
 
-- Task 状态改变；
+- Task、TaskScope 与 ContentOrigin 创建/状态改变；
+- 请求幂等记录；
 - Action 创建；
 - 权限判定引用；
 - AuditRecord；
 - Artifact/Memory Candidate 元数据。
 
 当某项业务契约要求审计时，对应 AuditRecord 必须与该业务事实以及该事务要求产生的 Outbox 记录在同一个 SQLite 事务中校验并写入。AuditRecord Schema 校验或插入失败时，业务事实和 Outbox 必须整体回滚，不得留下“业务成功但审计缺失”的提交。AuditRecord 本身不因被写入而自动创建 EventEnvelope 或进入 Outbox。
+
+`task.create` 是首个固定 producer：单事务写入幂等记录、ContentOrigin、TaskScope、Task、`task.creation_recorded` 与唯一 `task.created` Outbox。Kernel 先固定一个 `accepted_at`，ContentOrigin receipt/received、TaskScope、Task、Audit 与 Event 的创建时间均从该值投影；receipt hash、幂等等价投影、对象初值、显式上层 IDs 和 Audit/Event canonical 子事实以 `IMPLEMENTATION_CONTRACTS.md` §5.5 为准。任何引用缺失、Schema 失败或子事实不一致均回滚；不得只提交 Task。
 
 外部副作用不能被 SQLite 回滚，因此必须使用：
 
@@ -667,7 +670,7 @@ AuditRecord v1 固定字段：
 | `actor` | Actor 的完整 revision 快照或 `null`；Schema 仅能约束 `null` 只用于 `entry_point = system_internal`，生产者还必须证明确无可归因注册主体，否则选择完整 actor |
 | `entry_point` / `occurred_at` | 既有 EntryPoint；Kernel 时间 |
 | 核心对象引用 | `task_id`、`action_id`、`permission_decision_ref`、`approval_record_ref`、`recovery_attempt_ref` 可空；`delegation_ref` 是非空稳定引用或 null，Delegation 尚无正式 source Schema |
-| `task_creation_context` | 仅 `task.creation_recorded` 为严格对象：固定 `task_revision=1`、非空 `goal`、UUID `origin_ref`、`proposer=user|companion|system`；从同事务 TaskSpec/Task 复制且不可变，其他 audit_type 必须为 null |
+| `task_creation_context` | 仅 `task.creation_recorded` 为严格对象：固定 `task_revision=1`、非空 `goal`、UUID `origin_ref`、`proposer=user|companion|system`；从同事务 TaskSpec/Task 复制且不可变，其他 audit_type 必须为 null。`task.create` producer 的完整固定字段（包括 `reason_codes=["task_created"]`、`details={}`、唯一 origin ref 与 Event correlation）见 IMPLEMENTATION_CONTRACTS §5.5 |
 | 建议与外发引用 | `model_call_refs` 是提出建议/参与推理的 ModelCallRecord 稳定引用；`payload_manifest_refs` 是 PayloadManifest 稳定引用；两类对象尚无正式 source Schema，不假称 UUID |
 | 外发状态 | `external_content_status = not_sent | sent | unknown`；not_sent 时 manifest refs 必须为空，sent 必须由至少一个来源/对象/模型调用/manifest/因果稳定引用支撑，unknown 必须有 reason code |
 | 来源与修改对象 | `content_origin_refs` 是唯一 UUID 数组；`artifact_refs`、`resource_refs` 是唯一非空稳定引用数组。`resource_refs` 回答修改何资源，现有资源引用不全是标准 URI，故不强加 URI format |
@@ -680,7 +683,7 @@ AuditRecord v1 固定字段：
 
 所有 v1 字段均 required；无关联事实时必须显式写 `null` 或空数组，使“已知无事实”区别于“生产者漏字段”。`task.creation_recorded` 的创建快照固定回答“为什么创建任务”，`external_content_status` 与 `payload_manifest_refs` 固定回答“是否发送外部内容”。固定引用闭包同时回答 SECURITY_PRIVILEGE §17 的委托、模型建议、执行者与权限、修改资源、验证、回滚、Policy 解释及 Stop Fence/恢复影响。
 
-双源一致性属于未来 Audit repository 的事务校验：`permission_decision_ref` 非空时 `policy_context` 必须非空，且其中 nullable `matched_rule_ref`、`policy_set_revision` 必须等于该不可变 PermissionDecision；不一致则 Audit 写入失败并整体回滚。`decision_ordering_summary`、mutation authority 与 auth evidence 只是补充审计快照。`rollback_capability` 必须从 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影，不可独立编辑；明确值缺乏权威事实则使用 `unknown`，可解析事实冲突则写入失败。`provider_id` 是实际操作 Provider，`model_call_refs` 是建议/推理引用，两者可并存；若引用对应本次模型操作，未来持久层必须校验 provider 一致。
+双源一致性属于对应 repository 的事务校验：`permission_decision_ref` 非空时 `policy_context` 必须非空，且其中 nullable `matched_rule_ref`、`policy_set_revision` 必须等于该不可变 PermissionDecision；不一致则 Audit 写入失败并整体回滚。`decision_ordering_summary`、mutation authority 与 auth evidence 只是补充审计快照。`rollback_capability` 必须从 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影，不可独立编辑；明确值缺乏权威事实则使用 `unknown`，可解析事实冲突则写入失败。`provider_id` 是实际操作 Provider，`model_call_refs` 是建议/推理引用，两者可并存；若引用对应本次模型操作，未来持久层必须校验 provider 一致。Task repository 还必须校验 `task.creation_recorded` 与同事务 Task/ContentOrigin/Event 的固定 canonical 子事实；该路径尚未实现。
 
 Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_context` 未知字段；`if/then/else` 约束 task creation 上下文、PermissionDecision 非空时的 policy_context、not_sent 空 manifest 与 unknown 非空原因。跨对象 PermissionDecision/rollback/provider 一致性，以及 sent 在多个候选引用数组中至少存在一个支撑引用，由 producer/repository 与 Conformance 约束，当前不声称已有持久层测试。开放的 `details` 仍无法由 Schema 完全禁止重复归因。
 

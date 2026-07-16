@@ -18,7 +18,7 @@
 
 ### 1.1 ContentOrigin 与命令真实性
 
-每份进入系统的内容都带 ContentOrigin。完整字段、`kind` 枚举和 EntryPoint 枚举由 `IMPLEMENTATION_CONTRACTS.md` 定义；本文件只规定其安全语义：来源必须包含产生者类别、入口、上游稳定标识（可得时）、接收时间、携带它的 Task/Artifact 及不可伪造的 Kernel 接收证据。网页、文档、模型文本、第三方 Extension 输出、群聊及远程消息始终是外部内容。
+每份进入系统的内容都带 ContentOrigin。完整字段、`kind` 枚举和 EntryPoint 枚举由 `IMPLEMENTATION_CONTRACTS.md` 定义；本文件只规定其安全语义：来源必须包含产生者类别、入口、上游稳定标识（可得时）、接收时间、携带它的 Task/Artifact 及不可伪造的 Kernel 接收证据。receipt 的 content hash 必须由具体 producer 对已拍板的规范化内容边界执行 RFC 8785 + SHA-256，不得把 Envelope 或 Kernel 后生成字段混入并伪称原始内容。网页、文档、模型文本、第三方 Extension 输出、群聊及远程消息始终是外部内容。
 
 只有经 Kernel Control Protocol 验证、由 Kernel 创建的命令或事件才是 Kernel Command 或 Kernel Event。外部内容不得通过名称、JSON 外形、引用、提示词或转述伪造这两类对象，也不能伪造 Policy mutation evidence、授权租约或 Broker 请求。它可以作为自然语言治理的输入，但必须经过入口归属、解析、结构化变更和 Policy mutation authority 检查。
 

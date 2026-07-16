@@ -260,6 +260,60 @@ fn sample_actor_path() -> PathBuf {
 }
 
 #[test]
+fn task_create_fixture_validates_and_hashes_through_cli() {
+    let fixture_path = repo_root().join("schemas/fixtures/kcp/task_create_normalized_hash.v1.json");
+    let fixture = read_json(&fixture_path);
+    let temp = std::env::temp_dir().join(format!(
+        "shittim-task-create-cli-fixture-{}",
+        std::process::id()
+    ));
+    if temp.exists() {
+        std::fs::remove_dir_all(&temp).expect("remove old task.create CLI fixture dir");
+    }
+    std::fs::create_dir_all(&temp).expect("create task.create CLI fixture dir");
+
+    let normalized_payload_path = temp.join("normalized_payload.json");
+    let idempotency_projection_path = temp.join("idempotency_projection.json");
+    write_json(&normalized_payload_path, &fixture["normalized_payload"]);
+    write_json(
+        &idempotency_projection_path,
+        &fixture["idempotency_projection"],
+    );
+
+    let (code, stdout, stderr) = run_tool(&[
+        "validate",
+        "--schema",
+        "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+        "--instance",
+        normalized_payload_path
+            .to_str()
+            .expect("UTF-8 payload path"),
+    ]);
+    assert_eq!(code, 0, "payload validation failed: {stdout}\n{stderr}");
+
+    for (path, expected_hash_field) in [
+        (&normalized_payload_path, "receipt_content_hash"),
+        (&idempotency_projection_path, "idempotency_projection_hash"),
+    ] {
+        let (code, stdout, stderr) = run_tool(&[
+            "canonicalize",
+            path.to_str().expect("UTF-8 canonicalize path"),
+            "--hash",
+        ]);
+        assert_eq!(code, 0, "canonicalize failed: {stdout}\n{stderr}");
+        assert_eq!(
+            stdout.trim(),
+            fixture[expected_hash_field]
+                .as_str()
+                .expect("fixture hash string"),
+            "CLI hash mismatch for {expected_hash_field}"
+        );
+    }
+
+    std::fs::remove_dir_all(temp).expect("clean task.create CLI fixture dir");
+}
+
+#[test]
 fn canonicalize_hash_empty_object() {
     let dir = std::env::temp_dir().join("shittim-schema-tool-tests");
     std::fs::create_dir_all(&dir).expect("tmpdir");
