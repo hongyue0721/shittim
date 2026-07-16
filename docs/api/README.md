@@ -11,6 +11,7 @@
 - [Schema 生成与契约类型](schema-generation.md)
 - [domain-task 内部 Rust API](domain-task.md)（非 KCP 外部 API）
 - [domain-policy 内部 Rust API](domain-policy.md)（非 KCP 外部 API）
+- [AuditRecord v1](audit-record.md)（本地不可变审计事实；非公开 Event）
 - [Kernel Control Protocol](kernel-control-protocol.md)
 - [Event Catalog](event-catalog.md)
 - [Error Catalog](error-catalog.md)

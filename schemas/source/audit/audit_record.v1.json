@@ -1,0 +1,374 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/v1/audit/audit_record.json",
+  "title": "AuditRecord",
+  "description": "Immutable agentd-owned local audit fact. It is not automatically a public Event or Outbox record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "audit_type",
+    "level",
+    "actor",
+    "entry_point",
+    "occurred_at",
+    "task_id",
+    "task_creation_context",
+    "action_id",
+    "permission_decision_ref",
+    "approval_record_ref",
+    "recovery_attempt_ref",
+    "delegation_ref",
+    "model_call_refs",
+    "payload_manifest_refs",
+    "external_content_status",
+    "verification_result_refs",
+    "content_origin_refs",
+    "artifact_refs",
+    "resource_refs",
+    "extension_id",
+    "provider_id",
+    "causation_ref",
+    "correlation_id",
+    "rollback_capability",
+    "stop_fence_generation",
+    "policy_context",
+    "outcome",
+    "reason_codes",
+    "summary",
+    "details"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "audit_type": {
+      "type": "string",
+      "enum": [
+        "task.creation_recorded",
+        "command.accepted",
+        "permission.evaluated",
+        "kernel.invariant_blocked",
+        "event.published",
+        "recovery.recorded",
+        "config.changed"
+      ],
+      "description": "Closed v1 audit classification; it does not claim every listed producer is implemented."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["user_activity", "operational", "security", "debug"]
+    },
+    "actor": {
+      "description": "Complete Actor revision snapshot, or null only for system_internal records. Producers must establish that no registered actor is attributable before using null.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://schemas.shittim.local/v1/common/actor.json" }
+      ]
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "task_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "task_creation_context": {
+      "description": "Immutable task-creation audit snapshot copied from the same-transaction TaskSpec. It is non-null only for task.creation_recorded.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/task_creation_context" }
+      ]
+    },
+    "action_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "permission_decision_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "approval_record_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "recovery_attempt_ref": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "delegation_ref": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Stable Delegation reference. Delegation has no source Schema in this repository yet, so this is not constrained to UUID."
+    },
+    "model_call_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Stable ModelCallRecord references identifying model recommendations or reasoning participants. ModelCallRecord has no source Schema in this repository yet."
+    },
+    "payload_manifest_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Stable PayloadManifest references associated with external content transfer. PayloadManifest has no source Schema in this repository yet."
+    },
+    "external_content_status": {
+      "type": "string",
+      "enum": ["not_sent", "sent", "unknown"],
+      "description": "Whether content was sent outside the local trust boundary. Producers must support sent with stable closure references and explain unknown through reason_codes."
+    },
+    "verification_result_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "uniqueItems": true
+    },
+    "content_origin_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "uniqueItems": true
+    },
+    "artifact_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "resource_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "description": "Non-empty stable resource references. Existing resource refs are not uniformly constrained to standard URI syntax."
+    },
+    "extension_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "provider_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "causation_ref": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "https://schemas.shittim.local/v1/common/causation_ref.json" }
+      ]
+    },
+    "correlation_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "rollback_capability": {
+      "type": "string",
+      "enum": ["compensatable", "not_compensatable", "unknown"]
+    },
+    "stop_fence_generation": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "policy_context": {
+      "description": "Audit-time policy context snapshot; it does not duplicate PolicyRule.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/policy_context" }
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "blocked", "deferred", "observed"]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "summary": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Policy/configuration-controlled extension body. Required top-level attribution fields provide explicit null/empty facts; Schema cannot fully prevent producers from duplicating them here."
+    }
+  },
+  "$defs": {
+    "task_creation_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_revision",
+        "goal",
+        "origin_ref",
+        "proposer"
+      ],
+      "properties": {
+        "task_revision": {
+          "type": "integer",
+          "const": 1
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "origin_ref": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "proposer": {
+          "type": "string",
+          "enum": ["user", "companion", "system"]
+        }
+      }
+    },
+    "policy_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matched_rule_ref",
+        "policy_set_revision",
+        "decision_ordering_summary",
+        "policy_mutation_authority",
+        "authentication_evidence_refs"
+      ],
+      "properties": {
+        "matched_rule_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "policy_set_revision": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "decision_ordering_summary": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "policy_mutation_authority": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "Stable authority/context description; it does not imply a unique Owner or a completed authentication system."
+        },
+        "authentication_evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "entry_point": { "const": "system_internal" }
+        },
+        "required": ["entry_point"]
+      },
+      "else": {
+        "properties": {
+          "actor": {
+            "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit_type": { "const": "task.creation_recorded" }
+        },
+        "required": ["audit_type"]
+      },
+      "then": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_creation_context": {
+            "$ref": "#/$defs/task_creation_context"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "task_creation_context": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "permission_decision_ref": { "type": "string" }
+        },
+        "required": ["permission_decision_ref"]
+      },
+      "then": {
+        "properties": {
+          "policy_context": {
+            "$ref": "#/$defs/policy_context"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "external_content_status": { "const": "not_sent" }
+        },
+        "required": ["external_content_status"]
+      },
+      "then": {
+        "properties": {
+          "payload_manifest_refs": { "const": [] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "external_content_status": { "const": "unknown" }
+        },
+        "required": ["external_content_status"]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

@@ -288,6 +288,224 @@ pub struct ApprovalRecordTarget {
     pub task_id: Option<String>,
 }
 
+/// Generated from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecord {
+    pub action_id: Option<String>,
+    pub actor: Option<Actor>,
+    pub approval_record_ref: Option<String>,
+    pub artifact_refs: Vec<String>,
+    pub audit_type: AuditRecordAuditType,
+    pub causation_ref: Option<CausationRef>,
+    pub content_origin_refs: Vec<String>,
+    pub correlation_id: Option<String>,
+    pub delegation_ref: Option<String>,
+    pub details: JsonValue,
+    pub entry_point: EntryPoint,
+    pub extension_id: Option<String>,
+    pub external_content_status: AuditRecordExternalContentStatus,
+    pub id: String,
+    pub level: AuditRecordLevel,
+    pub model_call_refs: Vec<String>,
+    pub occurred_at: String,
+    pub outcome: AuditRecordOutcome,
+    pub payload_manifest_refs: Vec<String>,
+    pub permission_decision_ref: Option<String>,
+    pub policy_context: Option<AuditRecordPolicyContext>,
+    pub provider_id: Option<String>,
+    pub reason_codes: Vec<String>,
+    pub recovery_attempt_ref: Option<String>,
+    pub resource_refs: Vec<String>,
+    pub rollback_capability: AuditRecordRollbackCapability,
+    pub schema_version: AuditRecordSchemaVersion,
+    pub stop_fence_generation: Option<i64>,
+    pub summary: Option<String>,
+    pub task_creation_context: Option<AuditRecordTaskCreationContext>,
+    pub task_id: Option<String>,
+    pub verification_result_refs: Vec<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordAuditType {
+    #[serde(rename = "task.creation_recorded")]
+    TaskCreationRecorded,
+    #[serde(rename = "command.accepted")]
+    CommandAccepted,
+    #[serde(rename = "permission.evaluated")]
+    PermissionEvaluated,
+    #[serde(rename = "kernel.invariant_blocked")]
+    KernelInvariantBlocked,
+    #[serde(rename = "event.published")]
+    EventPublished,
+    #[serde(rename = "recovery.recorded")]
+    RecoveryRecorded,
+    #[serde(rename = "config.changed")]
+    ConfigChanged,
+}
+
+impl AuditRecordAuditType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TaskCreationRecorded => "task.creation_recorded",
+            Self::CommandAccepted => "command.accepted",
+            Self::PermissionEvaluated => "permission.evaluated",
+            Self::KernelInvariantBlocked => "kernel.invariant_blocked",
+            Self::EventPublished => "event.published",
+            Self::RecoveryRecorded => "recovery.recorded",
+            Self::ConfigChanged => "config.changed",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordExternalContentStatus {
+    #[serde(rename = "not_sent")]
+    NotSent,
+    #[serde(rename = "sent")]
+    Sent,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl AuditRecordExternalContentStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotSent => "not_sent",
+            Self::Sent => "sent",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordLevel {
+    #[serde(rename = "user_activity")]
+    UserActivity,
+    #[serde(rename = "operational")]
+    Operational,
+    #[serde(rename = "security")]
+    Security,
+    #[serde(rename = "debug")]
+    Debug,
+}
+
+impl AuditRecordLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserActivity => "user_activity",
+            Self::Operational => "operational",
+            Self::Security => "security",
+            Self::Debug => "debug",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordOutcome {
+    #[serde(rename = "succeeded")]
+    Succeeded,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "blocked")]
+    Blocked,
+    #[serde(rename = "deferred")]
+    Deferred,
+    #[serde(rename = "observed")]
+    Observed,
+}
+
+impl AuditRecordOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Blocked => "blocked",
+            Self::Deferred => "deferred",
+            Self::Observed => "observed",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecordPolicyContext {
+    pub authentication_evidence_refs: Vec<String>,
+    pub decision_ordering_summary: Option<String>,
+    pub matched_rule_ref: Option<String>,
+    pub policy_mutation_authority: Option<String>,
+    pub policy_set_revision: Option<i64>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordRollbackCapability {
+    #[serde(rename = "compensatable")]
+    Compensatable,
+    #[serde(rename = "not_compensatable")]
+    NotCompensatable,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl AuditRecordRollbackCapability {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Compensatable => "compensatable",
+            Self::NotCompensatable => "not_compensatable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct AuditRecordSchemaVersion;
+impl Serialize for AuditRecordSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for AuditRecordSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecordTaskCreationContext {
+    pub goal: String,
+    pub origin_ref: String,
+    pub proposer: AuditRecordTaskCreationContextProposer,
+    pub task_revision: AuditRecordTaskCreationContextTaskRevision,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordTaskCreationContextProposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl AuditRecordTaskCreationContextProposer {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/v1/audit/audit_record.json`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct AuditRecordTaskCreationContextTaskRevision;
+impl Serialize for AuditRecordTaskCreationContextTaskRevision { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for AuditRecordTaskCreationContextTaskRevision { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/common/causation_ref.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

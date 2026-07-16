@@ -1,12 +1,12 @@
 # Event Catalog
 
-> 状态：仅规范，未实现。EventEnvelope 与 Outbox 语义以 [`CORE_ARCHITECTURE.md`](../../specs/CORE_ARCHITECTURE.md) 为准，首批 payload 以 [`IMPLEMENTATION_CONTRACTS.md` 第 5.6 节](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) 为准。
+> 状态：EventEnvelope 与三个首批 payload 的契约、Schema、Rust 生成类型及校验已完成；SQLite Outbox、Publisher 和订阅服务未实现。EventEnvelope 与 Outbox 语义以 [`CORE_ARCHITECTURE.md`](../../specs/CORE_ARCHITECTURE.md) 为准，首批 payload 以 [`IMPLEMENTATION_CONTRACTS.md` 第 5.6 节](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) 为准。
 
 ## EventEnvelope 关键语义
 
 - `type` 使用点号分隔的小写名称；
 - `aggregate_type` + `aggregate_id` 标识聚合；
-- `sequence` 是聚合内单调序号；
+- `sequence` 是聚合内已提交事件序号：首条为 `0`，后续严格连续 `+1`，回滚事务的暂分配不占号；
 - `outbox_position` 是全局单调投递位置，不表示跨聚合领域因果；
 - `causation_ref.kind` 只允许 `command_request | event`；
 - cursor 只使用 `outbox_position`；
@@ -21,8 +21,10 @@
 | `task.state_changed` | `task` | Task ID | schema_version 1 已在规范定义 |
 | `stop_fence.activated` | `stop_fence` | `global` | schema_version 1 已在规范定义 |
 
+AuditRecord 是独立的本地不可变审计对象，不属于这三个事件的 payload，也不会仅因写入 Audit Store 自动成为公开事件或进入 Outbox。参见 [AuditRecord v1](audit-record.md)。
+
 其他内部事件名称只有在加入正式 payload Schema、兼容说明和 Conformance 测试后，才成为对外 Catalog 成员。
 
 ## 当前状态
 
-目前没有 Outbox 表、Publisher、订阅 server、生成事件类型或消费 SDK。本文不得被用于声称事件已经可订阅。
+目前没有 Outbox 表、Publisher、订阅 server 或消费 SDK；已有生成事件类型和 Schema 校验不能被用于声称事件已经可订阅。

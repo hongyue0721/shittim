@@ -6,6 +6,7 @@
 
 /// Embedded schema documents generated from schemas/manifest.json.
 pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
+    ("https://schemas.shittim.local/v1/audit/audit_record.json", include_str!("../../../../../schemas/source/audit/audit_record.v1.json")),
     ("https://schemas.shittim.local/v1/common/action_status.json", include_str!("../../../../../schemas/source/common/action_status.v1.json")),
     ("https://schemas.shittim.local/v1/common/actor.json", include_str!("../../../../../schemas/source/common/actor.v1.json")),
     ("https://schemas.shittim.local/v1/common/causation_ref.json", include_str!("../../../../../schemas/source/common/causation_ref.v1.json")),

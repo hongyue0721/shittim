@@ -4,6 +4,19 @@
   "id_base": "https://schemas.shittim.local/v1/",
   "schemas": [
     {
+      "id": "https://schemas.shittim.local/v1/audit/audit_record.json",
+      "title": "AuditRecord",
+      "version": 1,
+      "source": "schemas/source/audit/audit_record.v1.json",
+      "domain": "audit",
+      "kind": "domain_object",
+      "compatibility": "v1-stable",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version"
+    },
+    {
       "id": "https://schemas.shittim.local/v1/common/action_status.json",
       "title": "ActionStatus",
       "version": 1,

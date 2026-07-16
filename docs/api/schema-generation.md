@@ -14,7 +14,7 @@
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| Schema 源 | `schemas/source/{common,task,policy,event,kcp}/` | 40 个 Draft 2020-12 schema |
+| Schema 源 | `schemas/source/{audit,common,task,policy,event,kcp}/` | 41 个 Draft 2020-12 schema |
 | Manifest | `schemas/manifest.json` | `$id`、source、kind、兼容与当前 Rust 目标 |
 | 生成类型 | `generated/types.rs` | struct/enum、const 单值类型、`NullOnly` |
 | 生成目录 | `generated/catalog.rs` | 由 manifest 生成的 embedded schema 与方法/事件闭集 |
@@ -47,7 +47,7 @@ cargo run --manifest-path rust/Cargo.toml -p schema-tool -- --repo-root "$PWD" \
 
 ### Validation-only 关键字
 
-`minimum/maximum`、`minLength/pattern/format`、`minItems/uniqueItems`、`allOf`、`if/then/else` 等保留在 source schema，由 `jsonschema` 0.28 Draft 2020-12 runtime validator 强制执行。`check` 还使用官方 2020-12 meta validator 验证 Schema 文档自身，并编译全部跨文件 `$ref`。
+`minimum/maximum`、`minLength/pattern/format`、`minItems/uniqueItems`、`allOf`、`if/then/else` 等保留在 source schema，由 `jsonschema` 0.28 Draft 2020-12 runtime validator 强制执行。AuditRecord 的 task creation、external status、PermissionDecision ref/context 条件即采用这一路径；生成 Rust 字段类型不等于编译期证明条件成立。`check` 还使用官方 2020-12 meta validator 验证 Schema 文档自身，并编译全部跨文件 `$ref`。
 
 ## Response Envelope 边界
 

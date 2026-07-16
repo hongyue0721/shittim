@@ -21,12 +21,14 @@
 ### Schema 与 Rust 契约
 
 - [x] 创建 Rust workspace 与 `rust-toolchain.toml`（1.97.0）。
-- [x] 创建 40 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
+- [x] 创建 41 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
 - [x] 实现 `schema-tool generate/check/validate/canonicalize`。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
 - [x] `scripts/check-schema.sh` 覆盖重复生成、fmt、Clippy、workspace tests 和生成物 Git 漂移。
+- [x] 定义 `AuditRecord` v1：增加 `task.creation_recorded` 不可变创建快照，显式 `external_content_status` / PayloadManifest stable refs，并拍板 PermissionDecision/policy context、rollback 权威投影、实际 Provider/模型建议引用的双源一致性；Schema 内条件已有运行时测试，不自动公开为 Event/Outbox。
+- [x] 明确 Event aggregate `sequence`：首条已提交事件为 `0`，后续严格连续 `+1`，回滚事务暂分配不占号。
 
 ### Task/Action 纯领域状态机
 
@@ -55,7 +57,7 @@
 
 ## 未完成
 
-- [ ] 实现 SQLite migration、Task/Action/Policy/Outbox repository；包括生产 `RateLimitPort` 原子滚动窗口。
+- [ ] 实现 SQLite migration、Task/Action/Policy/AuditRecord/Outbox repository；包括生产 `RateLimitPort` 原子滚动窗口、PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性与 Audit/业务/Outbox 同事务失败回滚。
 - [ ] 实现请求幂等、乐观锁、Event cursor 和原子 Outbox。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
@@ -66,12 +68,13 @@
 
 ## 当前阻塞
 
+- AuditRecord 的任务创建原因与外发状态 High 缺口已由 required 字段和运行时条件关闭；PermissionDecision/policy context、rollback 投影、Provider/ModelCall 双源规则已写入规范与 Conformance。这里只表示契约、示例、生成类型与 Schema 内验证完成；SQLite Audit Store、跨对象一致性校验和原子写入仍未实现，不得声称已有 repository 测试。
 - Node 24 LTS 已可用（24.18.0，pnpm user runtime），TypeScript 工具链不再受版本阻塞。
 - 真实模型 Provider、远程 Channel、跨平台 Provider 与 Privilege Broker 仍需要后续真实环境和用户选择；当前没有伪造支持。
 
 ## 下一步
 
-1. 建立 SQLite migration、repository、生产 RateLimitPort 与原子 Outbox。
+1. 建立 SQLite migration、repository、生产 RateLimitPort、Audit Store 与原子 Outbox，并实施 sequence 从 0 连续分配及回滚不占号。
 2. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切。
 3. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
@@ -85,7 +88,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，当前 workspace 共 112 项测试。
+全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，`kernel-contracts` 44 项测试，`schema-tool` 10 项测试，当前 workspace 共 124 项测试。
 
 ## 事实来源
 

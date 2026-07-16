@@ -1,0 +1,61 @@
+{
+  "$schema_id": "https://schemas.shittim.local/v1/audit/audit_record.json",
+  "instance": {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "schema_version": 1,
+    "audit_type": "task.creation_recorded",
+    "level": "security",
+    "actor": {
+      "schema_version": 1,
+      "revision": 4,
+      "id": "actor-local-user-1",
+      "kind": "known_user",
+      "source": "actor-source://local/desktop",
+      "authentication_level": "platform_verified",
+      "confidence": 0.99
+    },
+    "entry_point": "local_desktop",
+    "occurred_at": "2026-07-16T12:00:00Z",
+    "task_id": "22222222-2222-4222-8222-222222222222",
+    "task_creation_context": {
+      "task_revision": 1,
+      "goal": "Organize the Downloads directory",
+      "origin_ref": "66666666-6666-4666-8666-666666666666",
+      "proposer": "user"
+    },
+    "action_id": null,
+    "permission_decision_ref": null,
+    "approval_record_ref": null,
+    "recovery_attempt_ref": null,
+    "delegation_ref": "delegation://workspace/download-maintenance/v3",
+    "model_call_refs": [],
+    "payload_manifest_refs": [],
+    "external_content_status": "not_sent",
+    "verification_result_refs": [],
+    "content_origin_refs": [
+      "66666666-6666-4666-8666-666666666666"
+    ],
+    "artifact_refs": [
+      "artifact://change-plan/2026-07-16-1"
+    ],
+    "resource_refs": [],
+    "extension_id": null,
+    "provider_id": null,
+    "causation_ref": {
+      "kind": "command_request",
+      "id": "77777777-7777-4777-8777-777777777777"
+    },
+    "correlation_id": "download-maintenance-1",
+    "rollback_capability": "unknown",
+    "stop_fence_generation": null,
+    "policy_context": null,
+    "outcome": "succeeded",
+    "reason_codes": [
+      "task_created"
+    ],
+    "summary": "Task creation was recorded with its immutable creation context",
+    "details": {
+      "configured_body": "minimal"
+    }
+  }
+}

@@ -756,7 +756,7 @@ type                    // 点号小写，如 task.state_changed
 schema_version          // EventEnvelope 持久记录 schema
 aggregate_type
 aggregate_id
-sequence                // 聚合内单调递增
+sequence                // 首条已提交事件为 0；后续已提交事件严格连续 +1
 outbox_position         // 全局单调投递位置，不代表跨聚合因果顺序
 occurred_at
 causation_ref: { kind: command_request | event, id }
@@ -765,9 +765,74 @@ dedup_key
 payload                 // 类型化事件体，含自身 schema_version
 ```
 
-字段语义、cursor 与 `delivered_at` 发布语义见 `CORE_ARCHITECTURE.md`。
+同一聚合中，事务内暂时分配但最终回滚的 `sequence` 不占号；重试必须读取最后已提交序号重新分配。字段语义、cursor 与 `delivered_at` 发布语义见 `CORE_ARCHITECTURE.md`。
 
-### 6.15 PayloadManifest
+### 6.15 AuditRecord
+
+AuditRecord 是 `agentd` 拥有的不可变本地持久事实，不带 `revision`，不接受原地更新。它不是 EventEnvelope，不自动加入首批公开 Event Catalog，也不自动进入 Outbox。
+
+```text
+id: <uuid>
+schema_version: 1
+audit_type: task.creation_recorded | command.accepted | permission.evaluated
+          | kernel.invariant_blocked | event.published | recovery.recorded | config.changed
+level: user_activity | operational | security | debug
+actor: Actor | null
+entry_point: EntryPoint
+occurred_at: <RFC 3339 UTC>
+task_id: <uuid> | null
+task_creation_context: {
+  task_revision: 1
+  goal: <non-empty TaskSpec goal>
+  origin_ref: <ContentOrigin uuid>
+  proposer: user | companion | system
+} | null
+action_id: <uuid> | null
+permission_decision_ref: <uuid> | null
+approval_record_ref: <uuid> | null
+recovery_attempt_ref: <uuid> | null
+delegation_ref: <non-empty stable ref> | null
+model_call_refs: [<non-empty stable ModelCallRecord ref>, ...]
+payload_manifest_refs: [<non-empty stable PayloadManifest ref>, ...]
+external_content_status: not_sent | sent | unknown
+verification_result_refs: [<VerificationResult uuid>, ...]
+content_origin_refs: [<ContentOrigin id>, ...]
+artifact_refs: [<stable artifact ref>, ...]
+resource_refs: [<stable resource ref>, ...]
+extension_id: <stable id> | null
+provider_id: <stable id> | null
+causation_ref: { kind: command_request | event, id } | null
+correlation_id: <non-empty string> | null
+rollback_capability: compensatable | not_compensatable | unknown
+stop_fence_generation: <integer >= 1> | null
+policy_context: {
+  matched_rule_ref: <non-empty stable ref> | null
+  policy_set_revision: <integer >= 0> | null
+  decision_ordering_summary: <non-empty string> | null
+  policy_mutation_authority: <non-empty string> | null
+  authentication_evidence_refs: [<non-empty stable ref>, ...]
+} | null
+outcome: succeeded | failed | blocked | deferred | observed
+reason_codes: [<non-empty code>, ...]
+summary: <non-empty string> | null
+details: <object>
+```
+
+- `audit_type` v1 是闭集，提供可编码分类；列入闭集不等于对应生产路径已经实现；
+- 全部 v1 字段均为 required；没有关联事实时使用显式 `null` 或空数组，区别“已知无事实”和“生产者漏字段”；
+- `actor` 保存完整 revision 快照。Schema 只约束 null actor 仅可用于 `system_internal`；“确无可归因注册主体”是生产者必须证明的业务事实，不能声称由 Schema 证明；
+- `delegation_ref` 与 `model_call_refs` 当前是非空 stable ref：Delegation 与 ModelCallRecord 虽已有规范名，但尚无 source Schema，不得假称 UUID 或已存在持久 Schema；
+- `task.creation_recorded` 必须携带非 null UUID `task_id` 与完整 `task_creation_context`，其中 `task_revision=1`，其余字段从同一事务 TaskSpec/Task 复制为不可变创建快照；其他 audit_type 的 context 必须为 null。该快照固定回答“为什么创建任务”，不把 TaskSpec 复制到所有 AuditRecord；
+- `external_content_status` 固定回答是否外发：`not_sent` 要求空 `payload_manifest_refs`；`sent` 必须至少由 content origin、artifact、resource、model call、payload manifest 或 causation 稳定引用之一支撑；`unknown` 必须有 reason code。PayloadManifest 目前只承诺 stable ref，不新增 source Schema或复制正文；
+- `permission_decision_ref` 非空时 `policy_context` 必须非空；未来 repository 必须读取不可变 PermissionDecision，校验 nullable `matched_rule_ref` 与 `policy_set_revision` 完全一致，不一致则 Audit 写入失败并回滚事务。排序摘要、mutation authority 与 auth evidence 是补充审计快照，不替代 PermissionDecision；
+- `rollback_capability` 不是独立可编辑结论，而是审计时从 `ActionRequest.rollback_policy`、Verification、Recovery 权威事实投影；明确可/不可补偿必须有权威事实，缺失或不可判定写 `unknown`，可解析事实冲突则写入失败；
+- `provider_id` 是本次被审计操作实际使用的 Provider；`model_call_refs` 是提出建议或参与推理的 ModelCallRecord 引用，两者可同时存在且不互相替代。若引用对应本次模型操作，未来持久层校验 provider 一致；
+- `policy_context` 是审计时上下文快照，不复制 PolicyRule；Schema 可以校验同一 AuditRecord 内 PermissionDecision ref 非空时 context 非空，但无法跨对象验证字段相等；
+- 固定归因字段不得仅放入 `details`。Schema 通过 required 顶层字段要求显式事实并拒绝 `policy_context` 未知字段，但开放 `details` 无法完全禁止重复内容，生产者必须以顶层字段为准；
+- `details` 是由日志配置/适用 Policy 控制的结构化扩展正文。默认只记录最小元数据；Secret、Token 与未脱敏正文不默认记录，但 Schema 不硬禁；
+- 每当业务契约要求审计时，Kernel 必须先通过 AuditRecord Schema 校验，并在同一个 SQLite 事务中写入业务事实、AuditRecord 以及该业务事实要求的 Outbox 记录。Schema校验、跨对象一致性校验或 AuditRecord 插入失败必须使整个事务回滚；不得降级为只写业务事实或只写日志文本。当前仓库尚未实现 repository，不得声称上述跨对象检查已有代码或测试。
+
+### 6.16 PayloadManifest
 
 与 MODEL_RUNTIME.md 的规范名和字段语义一致。它描述一次模型调用实际候选 Payload 的对象集合，而不是通用对象存储清单：
 
@@ -797,7 +862,7 @@ created_at
 
 Manifest 不保存 Payload 正文，也不承担审批或内容审查。
 
-### 6.16 ModelCallRecord
+### 6.17 ModelCallRecord
 
 ```text
 id
@@ -822,7 +887,7 @@ cancel_or_timeout_result?
 
 `ModelCallRecord` 是 MODEL_RUNTIME.md 的规范名；不得另建 `ModelCall` 平行类型。
 
-### 6.17 DelegationContract
+### 6.18 DelegationContract
 
 ```text
 id
@@ -844,7 +909,7 @@ created_by
 created_at / updated_at
 ```
 
-### 6.18 MemoryCandidate
+### 6.19 MemoryCandidate
 
 ```text
 id
@@ -861,7 +926,7 @@ reason
 status: proposed | committed | rejected | superseded
 ```
 
-### 6.19 CapabilityDescriptor
+### 6.20 CapabilityDescriptor
 
 ```text
 id / profile / extension
@@ -875,7 +940,7 @@ verification hints
 cost / platform
 ```
 
-### 6.20 OperationSnapshot
+### 6.21 OperationSnapshot
 
 ```text
 snapshot_id
@@ -1041,7 +1106,9 @@ Provider Registry 根据：
 - 所有可并发修改的持久对象额外携带 `revision`（单调递增整数）；
 - 更新操作通过 `expected_revision` 实现乐观锁；
 - revision 冲突返回 `revision_conflict` 错误，由调用者重新读取后重试；
-- 不可并发修改的对象（如不可变 Event）不需要 revision。
+- 不可并发修改的对象（如不可变 EventEnvelope 与 AuditRecord）不需要 revision；
+- EventEnvelope `sequence` 对每个聚合从首条已提交事件 `0` 开始，后续已提交事件严格连续 `+1`；回滚事务的暂分配不占号；
+- AuditRecord v1 使用正式 Schema，是不可变本地事实，不带 revision，不自动公开为 Event 或写入 Outbox；业务要求审计时与业务事实及所需 Outbox 同事务，审计校验/插入失败整体回滚；
 
 ## 14. 日志
 
@@ -1056,14 +1123,14 @@ Provider Registry 根据：
 
 ### 14.2 默认策略
 
-- 默认记录**最小元数据**：操作类型、时间、Task/Action ID、结果状态、错误码；
+- 默认记录**最小元数据**：AuditRecord 的分类、层级、时间、entry point、适用的 Actor revision 快照，以及 Task/Action、Delegation、模型建议、验证、资源、Policy、回滚/恢复等显式稳定引用与结果原因；
 - 不默认记录 Secret、密码、Token、完整未脱敏敏感文档、完整模型 Prompt；
 - 用户可通过 Policy Rule 进一步限制或扩大日志内容；
 - 日志保留策略由用户配置（默认保留天数、存储上限）。
 
 ### 14.3 不硬禁
 
-Secret 和未脱敏正文**不被硬编码禁止**写入日志（某些诊断场景可能需要），但：
+日志正文使用 AuditRecord 的 `summary` 与 `details`；固定 actor/entry_point/task/action/delegation/model/verification/resource/policy/rollback/recovery/causation/correlation/outcome 等归因必须有顶层显式字段，不能仅藏在 `details`。Schema 无法完全禁止 `details` 重复这些值，生产者必须以顶层字段为准。Secret 和未脱敏正文**不被硬编码禁止**写入日志（某些诊断场景可能需要），但：
 
 - Debug Trace 级别在默认配置中关闭；
 - 启用完整日志可由用户或 Bot 配置，并必须记录风险与来源；

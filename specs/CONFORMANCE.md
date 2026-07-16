@@ -107,9 +107,14 @@
 - `task.list` 的 parent_filter 明确区分 any/root/exact，稳定排序、limit 边界和 opaque cursor；
 - `system.ping`、Task Query 和 Event Query 不产生领域副作用；
 - Event cursor 只使用十进制 `outbox_position`，按严格递增位置轮询；拒绝 event ID、时间戳或 aggregate sequence cursor；
-- EventEnvelope 包含 aggregate_type、sequence、outbox_position 和 `{kind,id}` causation_ref，causation kind 只允许 `command_request | event`；
+- EventEnvelope 包含 aggregate_type、sequence、outbox_position 和 `{kind,id}` causation_ref，causation kind 只允许 `command_request | event`；同一聚合首条已提交事件 `sequence = 0`，后续已提交事件严格连续 `+1`，事务回滚的暂分配不占号；
 - `delivered_at` 只代表 Publisher 发布，不因某订阅者未消费而回滚，也不伪称全部订阅者已消费；
 - at-least-once 重投允许同一 event/outbox记录重复投递，但 `outbox_position` 全局唯一且只分配一次；消费者按 dedup_key/event_id 幂等，跨聚合 outbox_position 不被解释为领域因果；
+- AuditRecord v1 是 `agentd` 拥有的不可变本地事实，不带 revision；全部字段 required，无关联事实使用显式 null/空数组；未知字段、未知 audit_type、`policy_context` 未知字段和非 `system_internal` 的 null actor 被 Schema 拒绝；`task.creation_recorded` 必须有 UUID task_id 与严格创建快照（revision=1、goal、origin、proposer），其他 audit_type 的该快照必须为 null；Actor 非空时必须保存完整 revision 快照；
+- AuditRecord 的稳定引用闭包必须结构化回答任务创建原因、Delegation、模型建议/推理、VerificationResult、修改资源、是否外发、回滚能力、Stop Fence/恢复影响，以及匹配规则、排序依据、policy mutation authority 与 auth evidence；`not_sent` 拒绝非空 manifest refs，`sent` 的 producer 至少提供 content origin/artifact/resource/model call/payload manifest/causation 支撑，`unknown` 必须有 reason code；ModelCallRecord/PayloadManifest/Delegation 当前只使用非空 stable ref，不声称已有 source Schema 或 UUID；
+- `permission_decision_ref` 非空时 `policy_context` 必须非空；未来 Audit repository 必须将 nullable matched_rule_ref、policy_set_revision 与不可变 PermissionDecision 比对，失配使 Audit/业务/Outbox 同事务回滚；该跨对象一致性当前只有 Conformance 契约，没有 SQLite 实现或自动化测试；
+- `rollback_capability` 必须由 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影且不可独立编辑；事实缺失/不可判定用 unknown，可解析事实冲突使事务失败；`provider_id` 表示实际操作 Provider，`model_call_refs` 表示建议/推理参与者，二者可并存；同一模型操作的 provider 一致性属于未来 repository 检查；
+- AuditRecord 不自动成为首批公开 Event、不自动进入 Outbox；业务契约要求审计时，业务事实、AuditRecord 与该业务事实要求的 Outbox 在同一事务提交，Schema/跨对象一致性/插入失败整体回滚；固定归因必须有顶层 required 字段，不能仅藏进 details，但 Schema 无法完全禁止开放 details 重复这些值；正文默认最小记录但不硬禁 Secret；
 - 首批事件类型及 payload 严格为 `task.created`、`task.state_changed`、`stop_fence.activated`，使用点号小写；
 - `stop.activate` 就是首批 Emergency Stop 入口：先持久化 Fence generation 与事件，再撤销输入/权限租约、取消 in-flight Action、通知 Extension 并更新 Task；重复调用保持同一 active generation；Fence 不因 Security Mode 恢复而解除，KCP 第一版不存在清除方法；
 - PermissionDecision 包含不可变 id、evaluated_at、evaluation_context_hash、policy_set_revision；同一 Action 的 decision_revision 严格递增，ActionRequest 引用当前 decision；
