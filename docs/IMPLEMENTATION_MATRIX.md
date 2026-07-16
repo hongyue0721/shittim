@@ -4,35 +4,34 @@
 
 | 领域 | 规范状态 | Schema | 实现 | 自动化测试 | 备注 |
 |---|---|---|---|---|---|
-| Task/Action 状态机 | 已消歧 | 已有首批类型 Schema | 未开始 | 未开始 | rolling_back、Approval、Lease、补偿语义已定义；状态机逻辑未编码 |
-| Recovery/Verification | 已消歧 | 已有 Schema | 未开始 | Schema 校验子集 | Candidate、Attempt、VerificationResult 类型已生成 |
-| Policy matcher | 已消歧 | PolicyRule/PermissionDecision/ApprovalRecord Schema 已有 | 未开始 | confirm/allow/deny 条件约束已测 | URI glob/specificity 未实现 |
-| ContentOrigin/Actor/EntryPoint | 已定义 | 已有 Schema + 生成类型 | 类型/校验 | 未知 enum/字段拒绝已测 | v1 auth 只能 null；owner 为未认证预留标签 |
-| PermissionDecision | 已定义 | 已有 Schema | 类型/校验 | 未开始业务评估 | hash/revision/ref 字段已建模 |
-| Event/SQLite Outbox | 已消歧 | EventEnvelope + 3 payload Schema | typed decode；未开始存储/发布 | payload 错配、cursor、事件闭集已测 | cursor 只用 outbox_position |
-| KCP Envelope | 已定义 | command/query/response + error Schema | command/query/event typed decode；response 仅 envelope 校验与开放 payload | auth/protocol/version/错配 payload/ok-error 已测 | protocol 1.0；非 JSON-RPC |
-| KCP 首批八个方法 | 已定义 | 8 方法 request/response Schema | 未开始 server | 方法 enum 闭集已测 | 无 Stop Fence 清除方法 |
-| 首批三个事件 | 已定义 | payload Schema | 未开始发布 | 示例校验 | 点号小写事件名 |
+| Task/Action 状态机 | 已消歧 | 已有首批类型 Schema | `domain-task` 纯领域实现 | NxN、证据、proptest | plan_version=0；success 字符串多重集合；parent_action_id 是补偿唯一事实 |
+| Recovery/Verification | 已消歧 | Candidate/Attempt/Verification Schema | 验证摘要与 retry_original 合法性 | completed/failed/unknown/retry 测试 | 其它恢复候选只做枚举层接受，不代表授权或执行 |
+| Policy matcher | 已消歧 | PolicyRule/PermissionDecision/ApprovalRecord Schema | 尚未实现 matcher；仅能消费已评估结果 | allow/deny/confirm 应用 | URI glob、specificity、Condition v1 未实现 |
+| ContentOrigin/Actor/EntryPoint | 已定义 | Schema + 生成类型 | 类型与运行时校验 | enum/未知字段/auth 测试 | owner 是未认证预留标签 |
+| PermissionDecision | 已定义 | Schema + 生成类型 | 尚未生成业务判定 | Schema 条件测试 | policy_set_revision 等字段已建模 |
+| Event/SQLite Outbox | 已消歧 | EventEnvelope + 3 payload | typed decode；domain-task 只产 EventIntent | payload/cursor/闭集测试 | 无真实 sequence/outbox_position 分配 |
+| KCP Envelope | 已定义 | command/query/response/error | Command/Query/Event typed decode | auth/protocol/错配/ok-error | Response 根据原请求方法使用独立 response Schema |
+| KCP 首批八方法 | 已定义 | 8 组 request/response Schema | 尚无 server/handler | 方法闭集与 payload 绑定 | 无 Stop Fence 解除方法 |
+| 首批三个事件 | 已定义 | 3 个 payload Schema | 尚无发布器 | 类型与 payload 错配测试 | 点号小写 |
 | KCP 本地传输 | ADR accepted | 不适用 | 未开始 | 未开始 | Unix Socket / Windows Named Pipe |
-| Schema 生成链 | ADR accepted | 源 + manifest 已落地 | types + generated catalog + typed decode | generate twice / meta-schema / drift / JCS | 自有受限 codegen；JCS 用成熟库；仅 Rust |
-| Rust workspace | ADR accepted | 不适用 | 已落地 | fmt/clippy/test | rustc/cargo 1.97.0；无假 agentd |
-| TypeScript workspace | ADR accepted | 不适用 | 未开始 | 未开始 | Node 24.18.0 可用，本轮未建 TS |
-| pnpm workspace | ADR accepted | 不适用 | 未开始 | 未开始 | 选择 pnpm 11.3.0 |
-| Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 依赖版本由首次 lockfile 固定 |
-| Extension SDK | 规范已有 | 未开始 | 未开始 | 未开始 | 无可安装 SDK 包 |
-| Provider | 仅接口边界 | 未开始 | 未开始 | 未开始 | 未实现、不得伪造真实副作用 |
+| Schema 生成链 | ADR accepted | 40 个 source + manifest | schema-tool + kernel-contracts | meta/$ref/drift/JCS | 当前只生成 Rust |
+| Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task | fmt/clippy/workspace test | rustc/cargo 1.97.0 |
+| TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 未开始 | 未开始 | Node 24.18.0 已可用 |
+| Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 将使用 Tauri/React/AntD，蓝白配色 |
+| Extension SDK | 规范已有 | 未开始 | 未开始 | 未开始 | 当前无可安装 SDK 包 |
+| Provider/平台能力 | 仅接口边界 | 未开始 | 未开始 | 未开始 | 不伪造支持 |
 
 ## 状态含义
 
-- **已定义/已消歧**：规范足以进入 Schema 或实现设计，不代表代码存在。
-- **ADR accepted**：实施选择已接受，但仍可能尚未落地。
-- **类型/校验**：有 JSON Schema、生成类型与运行时校验，无业务状态所有者。
-- **未开始**：没有对应业务实现或传输实现。
+- **纯领域实现**：只计算规则和意图，不拥有持久化或外部副作用。
+- **类型与运行时校验**：有 Schema/生成类型，不代表业务状态所有者已实现。
+- **未开始**：没有对应实现或真实能力。
 
 ## 相关入口
 
 - [进度](PROGRESS.md)
 - [API 文档](api/README.md)
+- [domain-task API](api/domain-task.md)
 - [Schema 生成](api/schema-generation.md)
 - [SDK 文档](sdk/README.md)
 - [ADR 索引](../adr/README.md)

@@ -1,63 +1,88 @@
 # Shittim 实现进度
 
-> 状态日期：首批 Rust workspace + Schema 单一生成源落地后。
+> 状态日期：`domain-task` 纯领域状态机通过独立验收后。
 
 ## 当前阶段
 
-已建立可重复的 Rust workspace、JSON Schema 2020-12 源、`schemas/manifest.json`、受限确定性 codegen（`schema-tool`）以及 `kernel-contracts` 生成类型 / manifest 目录 / Command、Query、Event typed decode / 校验 / RFC 8785 哈希 API。Response 根据原请求方法使用独立 response Schema 解码，不伪称已有方法级 typed Response Envelope。
+已完成 Rust/Schema 契约基座与 `domain-task` 纯领域 Task/Action 状态机。当前仍没有 SQLite、真实 Outbox、KCP server、`agentd`、TypeScript workspace、桌面客户端或 Provider。
 
-尚未实现业务状态机、SQLite、KCP server、agentd 运行时、TypeScript workspace 或任何 Provider/Extension。
+`domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图，不保存事实，也不分配真实 EventEnvelope。
 
 ## 已完成
 
-- [x] 建立 Freedom-first、Kernel Owns Reality 与 Core 不可自改规范基线。
-- [x] 明确 Task `rolling_back` 入口与外部补偿不是 SQLite rollback。
-- [x] 明确 Action confirm、ApprovalRecord、Lease 过期及补偿 Action 语义。
-- [x] 明确 Policy pattern、Condition v1、Specificity 与稳定排序。
-- [x] 明确 EventEnvelope、全局 `outbox_position`、cursor 与首批事件目录。
-- [x] 明确 KCP v1 Envelope、首批八个方法、错误目录、版本字段与 auth/deadline 行为。
-- [x] 明确 Shittim 首批 `owner` 仅为未认证预留标签，第一版不产生 Owner 权限。
-- [x] 明确 `stop.activate` 即 Emergency Stop 入口，Fence 第一版持久且不可由 Security Mode 暗中解除。
-- [x] 接受首批工具链、Schema 生成和 KCP 本地传输 ADR。
-- [x] 创建 Rust workspace（`rust/Cargo.toml`）与 `rust-toolchain.toml`（1.97.0）。
-- [x] 创建 `schemas/source/` 首批 common/task/policy/event/kcp JSON Schema 2020-12 源。
-- [x] 创建 `schemas/manifest.json`（$id 唯一、source 路径、kind、generation targets）。
-- [x] 实现 `schema-tool` CLI：`generate` / `check` / `validate` / `canonicalize`。
-- [x] 实现 `kernel-contracts`：生成类型与目录、由 conditional Schema 自动派生的 KCP/Event tagged payload decode、Draft 2020-12 校验、RFC 8785 + SHA-256 小写 API。
-- [x] `schema-tool check` 执行官方 Draft 2020-12 meta-schema 校验、跨文件 `$ref` 编译与生成漂移检查。
-- [x] JCS 使用 `serde_json_canonicalizer` 0.3.2，并提供可复用 RFC/UTF-16 fixture。
-- [x] 提供 `scripts/check-schema.sh` 入口（纯 Rust/cargo，无 Node 依赖），并检查已跟踪生成物无 Git 漂移。
+### 规范与工程基线
+
+- [x] 建立 Freedom-first、Kernel Owns Reality、Core 不可自改规范基线。
+- [x] 补齐 Task/Action/Recovery、Policy、Event/Outbox、KCP 首批可编码契约。
+- [x] 明确 `owner` 只是未认证预留标签；`stop.activate` 是首批 Emergency Stop 入口。
+- [x] 接受工作区、Schema 生成和 KCP 本地传输 ADR。
 - [x] 添加 Apache-2.0 根许可证。
 
-## 未开始
+### Schema 与 Rust 契约
 
-- [ ] 实现纯领域 Task/Action 状态机与 Policy matcher。
-- [ ] 实现 SQLite migration、Task/Action/Policy/Outbox 存储。
+- [x] 创建 Rust workspace 与 `rust-toolchain.toml`（1.97.0）。
+- [x] 创建 40 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
+- [x] 实现 `schema-tool generate/check/validate/canonicalize`。
+- [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
+- [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
+- [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
+- [x] `scripts/check-schema.sh` 覆盖重复生成、fmt、Clippy、workspace tests 和生成物 Git 漂移。
+
+### Task/Action 纯领域状态机
+
+- [x] 新增 `rust/crates/domain-task`，直接使用生成的 TaskStatus/ActionStatus，不复制状态枚举。
+- [x] 实现 CORE §10 Task 状态图、revision 和 plan_version 规则；兼容 `task.create` 的 `plan_version=0`。
+- [x] `succeeded` 按 `TaskSpec.success_criteria` 完整字符串**多重集合**精确覆盖，每个 occurrence 均需 `verified_ok`。
+- [x] `partially_completed` 和 `rolling_back` 均要求明确副作用引用，不凭状态猜测事实。
+- [x] 实现 CORE §11 Action 状态图；confirm 是 pending metadata update，不是假装 approved。
+- [x] `completed`/`failed` 要求 Verification 事实；不确定结果要求 crash/timeout/ambiguous 等结构化原因。
+- [x] Lease 过期与确定未派发取消返回绑定 action_id 的原子释放意图。
+- [x] 补偿身份只由 `ActionRequest.parent_action_id` 推导，不存在平行 ActionRole。
+- [x] `retry_original` 仅在副作用明确未发生且幂等保障成立时合法。
+- [x] 新增 NxN 矩阵、证据测试与 proptest；`domain-task` 共 47 项测试。
+- [x] 新增 [`api/domain-task.md`](api/domain-task.md)；本批无外部 SDK API 变化。
+
+## 未完成
+
+- [ ] 实现 Freedom-first Policy matcher、URI pattern、specificity 和 Condition v1。
+- [ ] 实现 SQLite migration、Task/Action/Policy/Outbox repository。
+- [ ] 实现请求幂等、乐观锁、Event cursor 和原子 Outbox。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
-- [ ] 实现 conformance 自动化测试全量（当前仅 Schema/契约子集）。
-- [ ] 创建 TypeScript workspace 与 pnpm lockfile（Node 24.18.0 已可用，但本轮未建 TS）。
-- [ ] 创建 Tauri/React/AntD 客户端。
-- [ ] 发布 Extension SDK 生成物和示例。
-- [ ] 实现 agentd 进程与业务命令处理。
+- [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
+- [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
+- [ ] 创建 Tauri/React/Ant Design 蓝白桌面客户端。
+- [ ] 实现 Extension SDK、Provider、Memory、Initiative、Computer Use 与 Broker。
+- [ ] 完成 `specs/CONFORMANCE.md` 全量自动化测试。
 
 ## 当前阻塞
 
-- Node 24 LTS 阻塞已解除（实际可用 24.18.0 via pnpm user runtime）；但 TypeScript workspace 仍未创建，不得声称 TS 包存在。
-- 领域状态机、存储与 KCP 传输尚未实现；API/SDK 文档只能描述 Schema 生成物与规范状态，不能声称可运行服务。
+- Node 24 LTS 已可用（24.18.0，pnpm user runtime），TypeScript 工具链不再受版本阻塞。
+- 真实模型 Provider、远程 Channel、跨平台 Provider 与 Privilege Broker 仍需要后续真实环境和用户选择；当前没有伪造支持。
 
-## 下一批建议顺序
+## 下一步
 
-1. 在 `kernel-contracts` 之上实现纯领域状态机与 Policy matcher（无 IO）。
-2. 实现 SQLite schema、Outbox 与 revision/幂等持久化。
-3. 实现 KCP 本地传输（ADR-0003）与首批八方法处理。
-4. 按 `specs/CONFORMANCE.md` 扩展契约、属性和恢复测试。
-5. 再创建 TypeScript client/SDK 与桌面端，并从同一 Schema 源生成 TS 类型。
+1. 实现纯 `domain-policy` matcher 和完整规则排序测试。
+2. 建立 SQLite migration、repository 与原子 Outbox。
+3. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切。
+4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
+
+## 最近验证
+
+```text
+cargo fmt --manifest-path rust/Cargo.toml --all -- --check
+cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+cargo test --manifest-path rust/Cargo.toml --workspace
+./scripts/check-schema.sh
+git diff --check
+```
+
+全部通过；`domain-task` 47 项测试，当前 workspace 共 89 项测试。
 
 ## 事实来源
 
 - 全局不变量：[`../AGENT.md`](../AGENT.md)
-- 运行时与状态机：[`../specs/CORE_ARCHITECTURE.md`](../specs/CORE_ARCHITECTURE.md)
-- Policy：[`../specs/SECURITY_PRIVILEGE.md`](../specs/SECURITY_PRIVILEGE.md)
-- KCP/对象/Schema：[`../specs/IMPLEMENTATION_CONTRACTS.md`](../specs/IMPLEMENTATION_CONTRACTS.md)
-- 自动化验收：[`../specs/CONFORMANCE.md`](../specs/CONFORMANCE.md)
-- Schema 生成命令：[`api/schema-generation.md`](api/schema-generation.md)
+- 状态机与恢复：[`../specs/CORE_ARCHITECTURE.md`](../specs/CORE_ARCHITECTURE.md)
+- 实现契约：[`../specs/IMPLEMENTATION_CONTRACTS.md`](../specs/IMPLEMENTATION_CONTRACTS.md)
+- 验收：[`../specs/CONFORMANCE.md`](../specs/CONFORMANCE.md)
+- Schema：[`api/schema-generation.md`](api/schema-generation.md)
+- 状态机 API：[`api/domain-task.md`](api/domain-task.md)

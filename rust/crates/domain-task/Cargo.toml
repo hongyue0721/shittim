@@ -1,0 +1,17 @@
+[package]
+name = "domain-task"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pure domain Task/Action state machine, invariants, and recovery candidate checks"
+
+[dependencies]
+kernel-contracts = { path = "../kernel-contracts" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
