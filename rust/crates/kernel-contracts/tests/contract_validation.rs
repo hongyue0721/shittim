@@ -1,9 +1,10 @@
 //! Contract-level validation tests for first-batch schemas.
 
 use kernel_contracts::{
-    sha256_canonical, validate_json, EventPayload, KcpCommandEnvelopeProtocolVersion,
-    KcpCommandPayload, NullOnly, SchemaCatalog, TypedEventEnvelope, TypedKcpCommandEnvelope,
-    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
+    sha256_canonical, validate_json, ContractError, ContractFailureClassification,
+    ContractFailureStage, EventPayload, KcpCommandEnvelopeProtocolVersion, KcpCommandPayload,
+    NullOnly, SchemaCatalog, TypedEventEnvelope, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope,
+    EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
 };
 use serde_json::{json, Value};
 
@@ -32,6 +33,118 @@ fn sample_actor() -> Value {
         "authentication_level": "unauthenticated",
         "confidence": null
     })
+}
+
+#[test]
+fn contract_errors_have_stable_preflight_stage_classification() {
+    let cases = [
+        (
+            ContractError::SchemaValidation {
+                schema_id: QUERY_ID.into(),
+                detail: "invalid".into(),
+            },
+            ContractFailureStage::CallerSchemaValidation,
+            ContractFailureClassification::CallerInvalid,
+            Some(QUERY_ID),
+        ),
+        (
+            ContractError::WireDecodeAfterSchema {
+                schema_id: QUERY_ID.into(),
+                detail: "wire".into(),
+            },
+            ContractFailureStage::WireDecodeAfterSchema,
+            ContractFailureClassification::InternalContractFailure,
+            Some(QUERY_ID),
+        ),
+        (
+            ContractError::PayloadDecodeAfterSchema {
+                schema_id: QUERY_ID.into(),
+                discriminator: "system.ping".into(),
+                detail: "payload".into(),
+            },
+            ContractFailureStage::PayloadDecodeAfterSchema,
+            ContractFailureClassification::InternalContractFailure,
+            Some(QUERY_ID),
+        ),
+        (
+            ContractError::GeneratedDiscriminatorMapping {
+                schema_id: QUERY_ID.into(),
+                discriminator: "missing".into(),
+            },
+            ContractFailureStage::GeneratedDiscriminatorMapping,
+            ContractFailureClassification::InternalContractFailure,
+            Some(QUERY_ID),
+        ),
+        (
+            ContractError::UnknownSchema {
+                schema_id: "https://schemas.shittim.local/v1/missing.json".into(),
+            },
+            ContractFailureStage::SchemaCatalog,
+            ContractFailureClassification::InternalContractFailure,
+            Some("https://schemas.shittim.local/v1/missing.json"),
+        ),
+        (
+            ContractError::Catalog("compile failure".into()),
+            ContractFailureStage::SchemaCatalog,
+            ContractFailureClassification::InternalContractFailure,
+            None,
+        ),
+        (
+            ContractError::Canonicalize("canonical".into()),
+            ContractFailureStage::SchemaCatalog,
+            ContractFailureClassification::InternalContractFailure,
+            None,
+        ),
+        (
+            ContractError::InvalidJson("json".into()),
+            ContractFailureStage::SchemaCatalog,
+            ContractFailureClassification::InternalContractFailure,
+            None,
+        ),
+    ];
+    for (error, stage, classification, schema_id) in cases {
+        let classified = error.classification_for_preflight();
+        assert_eq!(classified.stage, stage);
+        assert_eq!(classified.classification, classification);
+        assert_eq!(classified.schema_id.as_deref(), schema_id);
+    }
+}
+
+#[test]
+fn generated_decode_after_validation_reports_structured_internal_stages() {
+    let wire_error = TypedKcpQueryEnvelope::decode_after_validation(json!({})).expect_err("wire");
+    assert_eq!(
+        wire_error.classification_for_preflight().stage,
+        ContractFailureStage::WireDecodeAfterSchema
+    );
+
+    let mut payload_failure = sample_ping_query();
+    payload_failure["payload"] = json!({"schema_version": 1, "echo": 7});
+    let payload_error =
+        TypedKcpQueryEnvelope::decode_after_validation(payload_failure).expect_err("payload");
+    assert_eq!(
+        payload_error.classification_for_preflight().stage,
+        ContractFailureStage::PayloadDecodeAfterSchema
+    );
+
+    let mut mapping_failure = sample_ping_query();
+    mapping_failure["query_type"] = json!("generated.missing");
+    let mapping_error =
+        TypedKcpQueryEnvelope::decode_after_validation(mapping_failure).expect_err("mapping");
+    assert_eq!(
+        mapping_error.classification_for_preflight().stage,
+        ContractFailureStage::GeneratedDiscriminatorMapping
+    );
+}
+
+#[test]
+fn unknown_schema_has_catalog_classification() {
+    let error = validate_json("https://schemas.shittim.local/v1/missing.json", &json!({}))
+        .expect_err("unknown schema");
+    assert_eq!(
+        error.classification_for_preflight().stage,
+        ContractFailureStage::SchemaCatalog
+    );
 }
 
 #[test]

@@ -9,6 +9,8 @@ pub mod generated;
 pub mod validator;
 
 pub use canonical::{canonical_json_bytes, canonical_json_string, sha256_canonical, sha256_hex};
-pub use error::ContractError;
+pub use error::{
+    ClassifiedContractFailure, ContractError, ContractFailureClassification, ContractFailureStage,
+};
 pub use generated::*;
 pub use validator::{validate_json, SchemaCatalog};

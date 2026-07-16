@@ -1,6 +1,6 @@
 # Error Catalog
 
-> 状态：Schema 与 `system.ping` / `task.create` / `task.get` typed handler 的稳定映射均已实现；Value preflight 的精确分类与固定消息已规范化但 Rust 尚未实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录)、[§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping) 与 [§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)。
+> 状态：Schema、Value preflight 固定分类与 `system.ping` / `task.create` / `task.get` typed handler 稳定映射均已实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录)、[§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping) 与 [§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)。
 
 ## Value preflight 与 typed handler 分界
 
@@ -18,7 +18,7 @@ Value preflight 只接收已经解析的 `serde_json::Value`。request ID 不可
 
 错误类型缺失通常是 `invalid_request`；只有确认是 string/integer 后的不支持值进入 `unsupported_*`。根 `payload.schema_version` integer 非 1 才是 `unsupported_schema_version`；嵌套版本或普通字段失败是 `invalid_request`。跨 family 方法名是 `unsupported_method`。
 
-最终 error response 必须通过不可替换 generated Response Schema。catalog/schema/generated mapping 的内部不一致返回本地 ContractFailure；实现禁止按错误 message 猜分类。
+最终 error response 通过不可替换 generated Response Schema。`kernel-contracts` 的 `ContractFailureStage` / `classification_for_preflight()` 结构化区分 caller Schema violation 与 wire/payload/discriminator/catalog 内部失败；实现不按 error message 猜分类。
 
 三个 typed application handler 的正常 dispatcher 输入已经通过 preflight、完整 Schema、typed decode 与 registration narrow，因此不得在 handler 内返回 `invalid_request`；现有公共 `handle_*` 的错误直调仍是本地 InputMethodMismatch。五个合法但未注册的方法返回本地不可序列化 `KnownCatalogMethodNotImplemented`，也不新增 `method_unavailable`。
 

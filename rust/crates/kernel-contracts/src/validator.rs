@@ -17,8 +17,9 @@ impl SchemaCatalog {
     pub fn load_embedded() -> Result<Self, ContractError> {
         let mut documents = BTreeMap::new();
         for (id, raw) in EMBEDDED_SCHEMA_DOCUMENTS {
-            let value: Value = serde_json::from_str(raw)
-                .map_err(|error| ContractError::Catalog(format!("parse {id}: {error}")))?;
+            let value: Value = serde_json::from_str(raw).map_err(|error| {
+                ContractError::Catalog(format!("parse embedded schema {id}: {error}"))
+            })?;
             documents.insert((*id).to_string(), value);
         }
 
@@ -31,7 +32,9 @@ impl SchemaCatalog {
                 .with_draft(Draft::Draft202012)
                 .with_retriever(retriever.clone())
                 .build(document)
-                .map_err(|error| ContractError::Catalog(format!("compile {id}: {error}")))?;
+                .map_err(|error| {
+                    ContractError::Catalog(format!("compile embedded schema {id}: {error}"))
+                })?;
             validators.insert(id.clone(), validator);
         }
         Ok(Self {
@@ -41,10 +44,12 @@ impl SchemaCatalog {
     }
 
     pub fn validate(&self, schema_id: &str, instance: &Value) -> Result<(), ContractError> {
-        let validator = self
-            .validators
-            .get(schema_id)
-            .ok_or_else(|| ContractError::UnknownSchema(schema_id.to_string()))?;
+        let validator =
+            self.validators
+                .get(schema_id)
+                .ok_or_else(|| ContractError::UnknownSchema {
+                    schema_id: schema_id.to_string(),
+                })?;
         let errors: Vec<String> = validator
             .iter_errors(instance)
             .map(|error| format!("{} at {}", error, error.instance_path))

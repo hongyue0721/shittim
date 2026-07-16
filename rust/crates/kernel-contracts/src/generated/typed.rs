@@ -34,7 +34,7 @@ use super::types::{
 use serde::Deserialize;
 use serde_json::Value;
 
-const EVENT_ENVELOPE_SCHEMA: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
+pub const EVENT_ENVELOPE_SCHEMA_ID: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedEventEnvelope {
@@ -79,14 +79,21 @@ struct RawEventEnvelope {
 
 impl TypedEventEnvelope {
     pub fn decode(value: Value) -> Result<Self, ContractError> {
-        validate_json(EVENT_ENVELOPE_SCHEMA, &value)?;
-        let raw: RawEventEnvelope = deserialize_wire(EVENT_ENVELOPE_SCHEMA, value)?;
+        validate_json(EVENT_ENVELOPE_SCHEMA_ID, &value)?;
+        Self::decode_after_validation(value)
+    }
+
+    /// Decodes a value that has already passed this envelope's generated Schema.
+    ///
+    /// Callers must validate with the matching envelope Schema before using this method.
+    pub fn decode_after_validation(value: Value) -> Result<Self, ContractError> {
+        let raw: RawEventEnvelope = deserialize_wire(EVENT_ENVELOPE_SCHEMA_ID, value)?;
         let discriminator = raw.type_;
         let payload = match discriminator.as_str() {
-            "task.created" => EventPayload::TaskCreated(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA, "task.created", raw.payload)?)),
-            "task.state_changed" => EventPayload::TaskStateChanged(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA, "task.state_changed", raw.payload)?)),
-            "stop_fence.activated" => EventPayload::StopFenceActivated(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA, "stop_fence.activated", raw.payload)?)),
-            value => return Err(ContractError::Catalog(format!("unsupported type: {value}"))),
+            "task.created" => EventPayload::TaskCreated(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA_ID, "task.created", raw.payload)?)),
+            "task.state_changed" => EventPayload::TaskStateChanged(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA_ID, "task.state_changed", raw.payload)?)),
+            "stop_fence.activated" => EventPayload::StopFenceActivated(Box::new(deserialize_payload(EVENT_ENVELOPE_SCHEMA_ID, "stop_fence.activated", raw.payload)?)),
+            value => return Err(ContractError::GeneratedDiscriminatorMapping { schema_id: EVENT_ENVELOPE_SCHEMA_ID.to_string(), discriminator: value.to_string() }),
         };
         Ok(Self {
             aggregate_id: raw.aggregate_id,
@@ -105,7 +112,7 @@ impl TypedEventEnvelope {
     }
 }
 
-const KCP_COMMAND_ENVELOPE_SCHEMA: &str = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
+pub const KCP_COMMAND_ENVELOPE_SCHEMA_ID: &str = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedKcpCommandEnvelope {
@@ -150,13 +157,20 @@ struct RawKcpCommandEnvelope {
 
 impl TypedKcpCommandEnvelope {
     pub fn decode(value: Value) -> Result<Self, ContractError> {
-        validate_json(KCP_COMMAND_ENVELOPE_SCHEMA, &value)?;
-        let raw: RawKcpCommandEnvelope = deserialize_wire(KCP_COMMAND_ENVELOPE_SCHEMA, value)?;
+        validate_json(KCP_COMMAND_ENVELOPE_SCHEMA_ID, &value)?;
+        Self::decode_after_validation(value)
+    }
+
+    /// Decodes a value that has already passed this envelope's generated Schema.
+    ///
+    /// Callers must validate with the matching envelope Schema before using this method.
+    pub fn decode_after_validation(value: Value) -> Result<Self, ContractError> {
+        let raw: RawKcpCommandEnvelope = deserialize_wire(KCP_COMMAND_ENVELOPE_SCHEMA_ID, value)?;
         let discriminator = raw.command_type;
         let payload = match discriminator.as_str() {
-            "task.create" => KcpCommandPayload::TaskCreate(Box::new(deserialize_payload(KCP_COMMAND_ENVELOPE_SCHEMA, "task.create", raw.payload)?)),
-            "stop.activate" => KcpCommandPayload::StopActivate(Box::new(deserialize_payload(KCP_COMMAND_ENVELOPE_SCHEMA, "stop.activate", raw.payload)?)),
-            value => return Err(ContractError::Catalog(format!("unsupported command_type: {value}"))),
+            "task.create" => KcpCommandPayload::TaskCreate(Box::new(deserialize_payload(KCP_COMMAND_ENVELOPE_SCHEMA_ID, "task.create", raw.payload)?)),
+            "stop.activate" => KcpCommandPayload::StopActivate(Box::new(deserialize_payload(KCP_COMMAND_ENVELOPE_SCHEMA_ID, "stop.activate", raw.payload)?)),
+            value => return Err(ContractError::GeneratedDiscriminatorMapping { schema_id: KCP_COMMAND_ENVELOPE_SCHEMA_ID.to_string(), discriminator: value.to_string() }),
         };
         Ok(Self {
             actor: raw.actor,
@@ -176,7 +190,7 @@ impl TypedKcpCommandEnvelope {
     }
 }
 
-const KCP_QUERY_ENVELOPE_SCHEMA: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
+pub const KCP_QUERY_ENVELOPE_SCHEMA_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedKcpQueryEnvelope {
@@ -219,17 +233,24 @@ struct RawKcpQueryEnvelope {
 
 impl TypedKcpQueryEnvelope {
     pub fn decode(value: Value) -> Result<Self, ContractError> {
-        validate_json(KCP_QUERY_ENVELOPE_SCHEMA, &value)?;
-        let raw: RawKcpQueryEnvelope = deserialize_wire(KCP_QUERY_ENVELOPE_SCHEMA, value)?;
+        validate_json(KCP_QUERY_ENVELOPE_SCHEMA_ID, &value)?;
+        Self::decode_after_validation(value)
+    }
+
+    /// Decodes a value that has already passed this envelope's generated Schema.
+    ///
+    /// Callers must validate with the matching envelope Schema before using this method.
+    pub fn decode_after_validation(value: Value) -> Result<Self, ContractError> {
+        let raw: RawKcpQueryEnvelope = deserialize_wire(KCP_QUERY_ENVELOPE_SCHEMA_ID, value)?;
         let discriminator = raw.query_type;
         let payload = match discriminator.as_str() {
-            "system.ping" => KcpQueryPayload::SystemPing(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "system.ping", raw.payload)?)),
-            "task.get" => KcpQueryPayload::TaskGet(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "task.get", raw.payload)?)),
-            "task.list" => KcpQueryPayload::TaskList(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "task.list", raw.payload)?)),
-            "event.subscribe" => KcpQueryPayload::EventSubscribe(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "event.subscribe", raw.payload)?)),
-            "event.poll" => KcpQueryPayload::EventPoll(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "event.poll", raw.payload)?)),
-            "stop.status" => KcpQueryPayload::StopStatus(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA, "stop.status", raw.payload)?)),
-            value => return Err(ContractError::Catalog(format!("unsupported query_type: {value}"))),
+            "system.ping" => KcpQueryPayload::SystemPing(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "system.ping", raw.payload)?)),
+            "task.get" => KcpQueryPayload::TaskGet(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "task.get", raw.payload)?)),
+            "task.list" => KcpQueryPayload::TaskList(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "task.list", raw.payload)?)),
+            "event.subscribe" => KcpQueryPayload::EventSubscribe(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "event.subscribe", raw.payload)?)),
+            "event.poll" => KcpQueryPayload::EventPoll(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "event.poll", raw.payload)?)),
+            "stop.status" => KcpQueryPayload::StopStatus(Box::new(deserialize_payload(KCP_QUERY_ENVELOPE_SCHEMA_ID, "stop.status", raw.payload)?)),
+            value => return Err(ContractError::GeneratedDiscriminatorMapping { schema_id: KCP_QUERY_ENVELOPE_SCHEMA_ID.to_string(), discriminator: value.to_string() }),
         };
         Ok(Self {
             actor: raw.actor,
@@ -250,7 +271,7 @@ fn deserialize_wire<T>(schema_id: &str, value: Value) -> Result<T, ContractError
 where
     T: for<'de> Deserialize<'de>,
 {
-    serde_json::from_value(value).map_err(|error| ContractError::SchemaValidation {
+    serde_json::from_value(value).map_err(|error| ContractError::WireDecodeAfterSchema {
         schema_id: schema_id.to_string(),
         detail: error.to_string(),
     })
@@ -264,8 +285,9 @@ fn deserialize_payload<T>(
 where
     T: for<'de> Deserialize<'de>,
 {
-    serde_json::from_value(value).map_err(|error| ContractError::SchemaValidation {
+    serde_json::from_value(value).map_err(|error| ContractError::PayloadDecodeAfterSchema {
         schema_id: schema_id.to_string(),
-        detail: format!("payload for {discriminator}: {error}"),
+        discriminator: discriminator.to_string(),
+        detail: error.to_string(),
     })
 }

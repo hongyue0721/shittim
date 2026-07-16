@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：Envelope/Schema 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现；`serde_json::Value` preflight + 三方法注册式 dispatcher 合同已在 [§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher) 闭合，但 Rust 尚未实现，仍无可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
+> 状态：Envelope/Schema、`serde_json::Value` preflight、三方法 registration/dispatcher 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现；仍无可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -44,7 +44,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 - 固定优先级为 request_id 可关联性、message family、protocol、auth、family method、根 payload schema version、完整 Schema/generated decode。
 - request ID 不可关联时本地拒绝且不发响应；可关联的五类 preflight error 使用固定安全 message、`details=null`、`retryable=false`，并经过不可替换 Response Schema 门。
 - 八方法合法请求都必须先成为 generated typed Accepted；三方法 narrow 为 `RegisteredRequest`，其余五个得到本地不可序列化 `KnownCatalogMethodNotImplemented`，不是 wire error。
-- 公开调用必须分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`；详见 [`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。当前这些 Rust API 尚未实现。
+- 公开调用分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`，已在 `kernel-kcp` 实现；详细 API 见 [`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。
 
 ## 三方法 typed handler 边界
 
@@ -59,7 +59,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 
 ## 实现阶段门
 
-当前三方法 typed handler 阶段门已完成，Value preflight/registration/dispatcher 合同也已闭合，但对应 Rust 尚未实现。即使实现后，五个 Catalog 方法仍缺正式 handler；在八方法 registration 完整、bytes/frame/transport/server 生命周期关闭前不得启动 server，也不新增 `method_unavailable`。
+当前 Value preflight/registration/dispatcher 与三方法 typed handler 阶段门均已完成，但五个 Catalog 方法仍缺正式 handler。即使已有 Value 边界，在八方法 registration 完整、bytes/frame/transport/server 生命周期关闭前不得启动 server，也不新增 `method_unavailable`。
 
 
 ## Cursor
@@ -68,8 +68,7 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 
 ## 当前不可用项
 
-- 已有三个 typed application handler Rust 实现，公共 API 只接收 typed envelope；未来正常 dispatcher 路径会先 narrow 为 registered request；
-- Value preflight/registration/dispatcher 只有合同与测试锚点，没有 Rust 实现；
+- 已有 Value preflight/registration/dispatcher 与三个 typed application handler Rust 实现；公共 raw 边界只接受调用方已解析的 `Value`；
 - 其余五个 Catalog 方法没有正式 handler；
 - 没有 Socket/Pipe server；
 - 没有可运行的 `agentd` 组合根；
@@ -80,6 +79,6 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 ## 已有契约产物
 
 - KCP Envelope 与八方法 request/response JSON Schema：`schemas/source/kcp/`；
-- 生成的 Rust 类型、manifest catalog，以及 Command/Query/Event 的 typed envelope decode 与运行时校验：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）；
+- 生成的 Rust 类型、manifest catalog，Command/Query/Event typed envelope decode，以及 `decode_after_validation` 的结构化 post-Schema 错误：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）；
 - Response Envelope 只按 `status = ok | error` 校验。它不携带原始方法 discriminator，因此不生成方法级 typed envelope；handler/客户端必须根据原请求方法用对应 response Schema 校验成功 `payload`，再校验通用 Response Envelope；
-- 这表示三个 typed handler 已可供未来 dispatcher 调用；不表示 Value preflight、八方法 dispatcher 或 KCP server 已可用。
+- 这表示不可连接 Value preflight、三方法 dispatcher/handler 已可供未来组合根调用；不表示五个缺失 handler或 KCP server 已可用。

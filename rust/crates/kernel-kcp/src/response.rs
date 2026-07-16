@@ -1,6 +1,10 @@
 //! Handler response and local contract-failure values.
 
-use kernel_contracts::KcpResponseEnvelope;
+use crate::ports::ResponseContractValidator;
+use kernel_contracts::{
+    KcpError, KcpErrorSchemaVersion, KcpResponseEnvelope, KcpResponseEnvelopeMessageKind,
+    KcpResponseEnvelopeProtocolVersion, KcpResponseEnvelopeStatus,
+};
 use uuid::Uuid;
 
 /// One validated KCP response and durable post-commit notification hints.
@@ -54,4 +58,62 @@ pub enum PostCommitNotificationIntent {
         /// Committed Event UUID.
         event_id: Uuid,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SafeWireErrorKind {
+    InvalidRequest,
+    UnsupportedProtocolVersion,
+    UnsupportedSchemaVersion,
+    UnsupportedMethod,
+    UnsupportedAuthSchema,
+}
+
+pub(crate) fn validated_error_response_with_validator(
+    request_id: &str,
+    kind: SafeWireErrorKind,
+    validator: &impl ResponseContractValidator,
+) -> Result<KcpResponseEnvelope, HandlerContractFailure> {
+    let (code, message) = match kind {
+        SafeWireErrorKind::InvalidRequest => ("invalid_request", "request is invalid"),
+        SafeWireErrorKind::UnsupportedProtocolVersion => (
+            "unsupported_protocol_version",
+            "protocol version is not supported",
+        ),
+        SafeWireErrorKind::UnsupportedSchemaVersion => (
+            "unsupported_schema_version",
+            "payload schema version is not supported",
+        ),
+        SafeWireErrorKind::UnsupportedMethod => ("unsupported_method", "method is not supported"),
+        SafeWireErrorKind::UnsupportedAuthSchema => (
+            "unsupported_auth_schema",
+            "authentication schema is not supported",
+        ),
+    };
+    let response = KcpResponseEnvelope {
+        error: Some(KcpError {
+            code: code.to_owned(),
+            details: None,
+            message: message.to_owned(),
+            retryable: false,
+            schema_version: KcpErrorSchemaVersion,
+        }),
+        message_kind: KcpResponseEnvelopeMessageKind::Value,
+        payload: None,
+        protocol_version: KcpResponseEnvelopeProtocolVersion::Value,
+        request_id: request_id.to_owned(),
+        status: KcpResponseEnvelopeStatus::Error,
+    };
+    let valid = serde_json::to_value(&response)
+        .ok()
+        .filter(|value| validator.validate_response_envelope(value).is_ok())
+        .is_some();
+    if valid {
+        Ok(response)
+    } else {
+        Err(HandlerContractFailure {
+            kind: HandlerContractFailureKind::FinalResponseInvalid,
+            message: "final response contract validation failed",
+        })
+    }
 }

@@ -145,6 +145,11 @@ fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
             .expect("read generated typed bindings");
     assert!(typed.contains("TestDynamic(Box<TestDynamicRequest>)"));
     assert!(typed.contains("\"test.dynamic\" => KcpCommandPayload::TestDynamic"));
+    assert!(typed.contains("pub const KCP_COMMAND_ENVELOPE_SCHEMA_ID: &str"));
+    assert!(typed.contains("pub fn decode_after_validation(value: Value)"));
+    assert!(typed.contains("ContractError::WireDecodeAfterSchema"));
+    assert!(typed.contains("ContractError::PayloadDecodeAfterSchema"));
+    assert!(typed.contains("ContractError::GeneratedDiscriminatorMapping"));
     std::fs::remove_dir_all(temp).expect("clean temp repo");
 }
 

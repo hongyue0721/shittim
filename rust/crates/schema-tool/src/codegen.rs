@@ -859,7 +859,7 @@ fn render_typed_envelope(
 
     let mut out = String::new();
     out.push_str(&format!(
-        "const {}_SCHEMA: &str = {:?};\n\n",
+        "pub const {}_SCHEMA_ID: &str = {:?};\n\n",
         to_upper_snake_case(&binding.title),
         binding.schema_id
     ));
@@ -900,14 +900,14 @@ fn render_typed_envelope(
     }
     out.push_str("}\n\n");
 
-    let schema_const = format!("{}_SCHEMA", to_upper_snake_case(&binding.title));
+    let schema_const = format!("{}_SCHEMA_ID", to_upper_snake_case(&binding.title));
     let discriminator_field = to_snake_case(&binding.discriminator);
     out.push_str(&format!(
         "impl {} {{\n    pub fn decode(value: Value) -> Result<Self, ContractError> {{\n",
         binding.typed_name
     ));
     out.push_str(&format!(
-        "        validate_json({schema_const}, &value)?;\n"
+        "        validate_json({schema_const}, &value)?;\n        Self::decode_after_validation(value)\n    }}\n\n    /// Decodes a value that has already passed this envelope's generated Schema.\n    ///\n    /// Callers must validate with the matching envelope Schema before using this method.\n    pub fn decode_after_validation(value: Value) -> Result<Self, ContractError> {{\n"
     ));
     out.push_str(&format!(
         "        let raw: {} = deserialize_wire({schema_const}, value)?;\n",
@@ -926,7 +926,7 @@ fn render_typed_envelope(
             mapping.discriminator_value
         ));
     }
-    out.push_str(&format!("            value => return Err(ContractError::Catalog(format!(\"unsupported {}: {{value}}\"))),\n", binding.discriminator));
+    out.push_str(&format!("            value => return Err(ContractError::GeneratedDiscriminatorMapping {{ schema_id: {schema_const}.to_string(), discriminator: value.to_string() }}),\n"));
     out.push_str("        };\n        Ok(Self {\n");
     for assignment in assignments {
         out.push_str(&assignment);
@@ -1048,7 +1048,7 @@ fn mapping_error(location: &str, detail: &str) -> anyhow::Error {
 }
 
 fn render_typed_decode_helpers() -> &'static str {
-    "fn deserialize_wire<T>(schema_id: &str, value: Value) -> Result<T, ContractError>\nwhere\n    T: for<'de> Deserialize<'de>,\n{\n    serde_json::from_value(value).map_err(|error| ContractError::SchemaValidation {\n        schema_id: schema_id.to_string(),\n        detail: error.to_string(),\n    })\n}\n\nfn deserialize_payload<T>(\n    schema_id: &str,\n    discriminator: &str,\n    value: Value,\n) -> Result<T, ContractError>\nwhere\n    T: for<'de> Deserialize<'de>,\n{\n    serde_json::from_value(value).map_err(|error| ContractError::SchemaValidation {\n        schema_id: schema_id.to_string(),\n        detail: format!(\"payload for {discriminator}: {error}\"),\n    })\n}\n"
+    "fn deserialize_wire<T>(schema_id: &str, value: Value) -> Result<T, ContractError>\nwhere\n    T: for<'de> Deserialize<'de>,\n{\n    serde_json::from_value(value).map_err(|error| ContractError::WireDecodeAfterSchema {\n        schema_id: schema_id.to_string(),\n        detail: error.to_string(),\n    })\n}\n\nfn deserialize_payload<T>(\n    schema_id: &str,\n    discriminator: &str,\n    value: Value,\n) -> Result<T, ContractError>\nwhere\n    T: for<'de> Deserialize<'de>,\n{\n    serde_json::from_value(value).map_err(|error| ContractError::PayloadDecodeAfterSchema {\n        schema_id: schema_id.to_string(),\n        discriminator: discriminator.to_string(),\n        detail: error.to_string(),\n    })\n}\n"
 }
 
 fn envelope_discriminators(

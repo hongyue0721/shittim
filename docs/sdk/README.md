@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-仓库已有首批 Kernel 契约生成类型与校验 API（`kernel-contracts`）、Kernel 内部 Task create/get SQLite repository，以及不可连接的 Rust typed application handler（`kernel-kcp`）。Value preflight/registration/dispatcher 已有明确合同，但尚无 Rust 实现。当前**没有**可发布的多语言 SDK 包、raw KCP 客户端实现或完整 conformance runner。`kernel-sqlite` repository 与 `kernel-kcp` 的 handler/backend traits，以及未来 preflight/dispatcher 本地结果，都是 `agentd` 内部边界，不是外部 SDK；response Schema validator 完全内置且不在 public SDK API 中，Extension 或调用方不能替换该门。
+仓库已有首批 Kernel 契约生成类型与校验 API（`kernel-contracts`）、Kernel 内部 Task create/get SQLite repository，以及不可连接的 Rust Value preflight、registration/typed dispatcher 与 application handlers（`kernel-kcp`）。当前**没有**可发布的多语言 SDK 包、raw KCP 客户端实现或完整 conformance runner。`kernel-sqlite` repository 与 `kernel-kcp` 的 preflight/dispatcher/handler/backend 类型都是 `agentd` 内部边界，不是外部 SDK；response Schema validator 完全内置且不在 public SDK API 中，Extension 或调用方不能替换该门。
 
 SDK 类型必须从 JSON Schema 2020-12 唯一源生成，不能手写一套与 Kernel 契约平行的类型。生成和兼容策略见 [`ADR-0002`](../../adr/0002-schema生成与兼容策略.md)；当前生成命令见 [`../api/schema-generation.md`](../api/schema-generation.md)。
 

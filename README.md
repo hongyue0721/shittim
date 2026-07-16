@@ -27,7 +27,7 @@
 
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
-- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；Schema/生成类型、Task create/get repository 与三个不可连接 typed handler 已实现，Value preflight/注册式 dispatcher 合同已闭合但 Rust 尚未实现，`agentd` 与可连接 server 也尚未实现。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；Schema/生成类型、Task create/get repository、不可连接 Value preflight/三方法 dispatcher 与 typed handlers 已实现，`agentd` 与可连接 server 尚未实现。
 - [`docs/sdk/README.md`](docs/sdk/README.md)：SDK 文档入口；当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 
