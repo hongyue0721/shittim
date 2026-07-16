@@ -64,6 +64,7 @@
 
 - Policy URI pattern 规范化与 segment glob：Resource、Actor source、ContentOrigin source 均使用 URI；`*` 单段、`**` 多段，非法内嵌 glob 和 regex 被拒绝；
 - operation/capability 只接受精确或末尾 `.*`，空数组不限制，exclude 优先，`side_effect_max` 按 S0..S5 ceiling；
+- ContentOrigin 多值匹配要求同一条 origin 同时满足受限的 kind/source 维度，不得跨两条 origin 拼接命中；空数组/缺省维度不限制；
 - specificity tuple 的每个字段按本次实际命中的最具体备选 pattern 计分；数组重排或增加未命中备选不改变结果，通配越少越具体，最终同分按 rule ID UTF-8 字节序升序；
 - `effect=confirm` 必须有 `confirmation_mode`，`allow`/`deny` 携带该字段 Schema 校验失败；
 - authentication_level 按 `unauthenticated < asserted < platform_verified < system_authenticated` 比较，任一等级均不自动授权；

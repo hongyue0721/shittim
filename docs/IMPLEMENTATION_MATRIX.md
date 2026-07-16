@@ -6,16 +6,16 @@
 |---|---|---|---|---|---|
 | Task/Action 状态机 | 已消歧 | 已有首批类型 Schema | `domain-task` 纯领域实现 | NxN、证据、proptest | plan_version=0；success 字符串多重集合；parent_action_id 是补偿唯一事实 |
 | Recovery/Verification | 已消歧 | Candidate/Attempt/Verification Schema | 验证摘要与 retry_original 合法性 | completed/failed/unknown/retry 测试 | 其它恢复候选只做枚举层接受，不代表授权或执行 |
-| Policy matcher | 已消歧 | PolicyRule/PermissionDecision/ApprovalRecord Schema | 尚未实现 matcher；仅能消费已评估结果 | allow/deny/confirm 应用 | URI glob、specificity、Condition v1 未实现 |
+| Policy matcher | 已消歧；ContentOrigin 多值同一-origin 语义已补充 | PolicyRule/PermissionDecision/ApprovalRecord Schema | `domain-policy` 纯领域实现 | URI/glob、排序、Condition v1、rate-limit 并发/proptest | Default Allow；Stop/Recovery 独立 Blocked；无持久化 rate-limit 实现 |
 | ContentOrigin/Actor/EntryPoint | 已定义 | Schema + 生成类型 | 类型与运行时校验 | enum/未知字段/auth 测试 | owner 是未认证预留标签 |
-| PermissionDecision | 已定义 | Schema + 生成类型 | 尚未生成业务判定 | Schema 条件测试 | policy_set_revision 等字段已建模 |
+| PermissionDecision | 已定义 | Schema + 生成类型 | `domain-policy` 生成非持久 draft/binding/canonical input | decision mapping、default allow、RFC 8785 key params | ID/evaluated_at/decision revision/policy set revision/最终 context hash 由未来 agentd 持久层拥有 |
 | Event/SQLite Outbox | 已消歧 | EventEnvelope + 3 payload | typed decode；domain-task 只产 EventIntent | payload/cursor/闭集测试 | 无真实 sequence/outbox_position 分配 |
 | KCP Envelope | 已定义 | command/query/response/error | Command/Query/Event typed decode | auth/protocol/错配/ok-error | Response 根据原请求方法使用独立 response Schema |
 | KCP 首批八方法 | 已定义 | 8 组 request/response Schema | 尚无 server/handler | 方法闭集与 payload 绑定 | 无 Stop Fence 解除方法 |
 | 首批三个事件 | 已定义 | 3 个 payload Schema | 尚无发布器 | 类型与 payload 错配测试 | 点号小写 |
 | KCP 本地传输 | ADR accepted | 不适用 | 未开始 | 未开始 | Unix Socket / Windows Named Pipe |
 | Schema 生成链 | ADR accepted | 40 个 source + manifest | schema-tool + kernel-contracts | meta/$ref/drift/JCS | 当前只生成 Rust |
-| Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task | fmt/clippy/workspace test | rustc/cargo 1.97.0 |
+| Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task、domain-policy | fmt/clippy/workspace test | rustc/cargo 1.97.0 |
 | TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 未开始 | 未开始 | Node 24.18.0 已可用 |
 | Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 将使用 Tauri/React/AntD，蓝白配色 |
 | Extension SDK | 规范已有 | 未开始 | 未开始 | 未开始 | 当前无可安装 SDK 包 |
@@ -32,6 +32,7 @@
 - [进度](PROGRESS.md)
 - [API 文档](api/README.md)
 - [domain-task API](api/domain-task.md)
+- [domain-policy API](api/domain-policy.md)
 - [Schema 生成](api/schema-generation.md)
 - [SDK 文档](sdk/README.md)
 - [ADR 索引](../adr/README.md)

@@ -1,0 +1,19 @@
+[package]
+name = "domain-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pure Freedom-first policy matcher, deterministic specificity, and Condition v1"
+
+[dependencies]
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+kernel-contracts = { path = "../kernel-contracts" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

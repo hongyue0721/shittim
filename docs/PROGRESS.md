@@ -1,12 +1,12 @@
 # Shittim 实现进度
 
-> 状态日期：`domain-task` 纯领域状态机通过独立验收后。
+> 状态日期：`domain-policy` Freedom-first 纯领域 matcher 通过独立验收后。
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座与 `domain-task` 纯领域 Task/Action 状态机。当前仍没有 SQLite、真实 Outbox、KCP server、`agentd`、TypeScript workspace、桌面客户端或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机与 `domain-policy` 纯领域 matcher。当前仍没有 SQLite、真实 Outbox、KCP server、`agentd`、TypeScript workspace、桌面客户端或 Provider。
 
-`domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图，不保存事实，也不分配真实 EventEnvelope。
+`domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。二者都不保存事实、分配 UUID/时间或创建真实持久对象。
 
 ## 已完成
 
@@ -42,10 +42,20 @@
 - [x] 新增 NxN 矩阵、证据测试与 proptest；`domain-task` 共 47 项测试。
 - [x] 新增 [`api/domain-task.md`](api/domain-task.md)；本批无外部 SDK API 变化。
 
+### Freedom-first Policy matcher
+
+- [x] 新增 `rust/crates/domain-policy`，直接使用生成 PolicyRule/Actor/ContentOrigin/EntryPoint/SideEffectClass/decision enum。
+- [x] 实现 URI 规范化、segment glob、capability/operation `.*`、exclude、side-effect ceiling。
+- [x] 按 SECURITY §2.3 实现 specificity 与 priority/effect/revision/ID 稳定排序，只计算实际命中备选。
+- [x] 实现 time window、Delegation/local-presence 精确布尔和 authoritative `RateLimitPort` winner-only 原子消费重选。
+- [x] Stop Fence/Recovery invariant 优先返回独立 Blocked，不创建隐藏 deny；S0–S5 无规则均 Default Allow。
+- [x] 生成非持久 `PermissionDecisionDraft`、RFC 8785 key params hash 与 `CanonicalEvaluationInput`，不伪造持久 revision/hash。
+- [x] 补充 ContentOrigin 多值同一-origin 匹配语义及 Conformance 锚点。
+- [x] 新增 [`api/domain-policy.md`](api/domain-policy.md)。
+
 ## 未完成
 
-- [ ] 实现 Freedom-first Policy matcher、URI pattern、specificity 和 Condition v1。
-- [ ] 实现 SQLite migration、Task/Action/Policy/Outbox repository。
+- [ ] 实现 SQLite migration、Task/Action/Policy/Outbox repository；包括生产 `RateLimitPort` 原子滚动窗口。
 - [ ] 实现请求幂等、乐观锁、Event cursor 和原子 Outbox。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
@@ -61,10 +71,9 @@
 
 ## 下一步
 
-1. 实现纯 `domain-policy` matcher 和完整规则排序测试。
-2. 建立 SQLite migration、repository 与原子 Outbox。
-3. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切。
-4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
+1. 建立 SQLite migration、repository、生产 RateLimitPort 与原子 Outbox。
+2. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切。
+3. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
 
@@ -76,7 +85,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`domain-task` 47 项测试，当前 workspace 共 89 项测试。
+全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，当前 workspace 共 112 项测试。
 
 ## 事实来源
 
@@ -86,3 +95,4 @@ git diff --check
 - 验收：[`../specs/CONFORMANCE.md`](../specs/CONFORMANCE.md)
 - Schema：[`api/schema-generation.md`](api/schema-generation.md)
 - 状态机 API：[`api/domain-task.md`](api/domain-task.md)
+- Policy matcher API：[`api/domain-policy.md`](api/domain-policy.md)

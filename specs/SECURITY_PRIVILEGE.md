@@ -52,6 +52,7 @@ Policy pattern 不得使用正则表达式，也不得依赖实现语言的 glob
 - 匹配单位是 URI 的 scheme、authority 和以 `/` 分隔的 path segment。无通配符 token 必须精确匹配；`*` 只匹配一个完整 segment；`**` 匹配零个或多个完整 segment；通配符只能作为完整 segment，不得写成 `foo*`、`**bar`；query/fragment 若被 pattern 提供则按规范化后的完整字符串精确匹配，不支持通配；
 - `operation_patterns[]` 与 `capability_ids[]` 的元素只允许精确值或末尾 `.*` 前缀形式。`document.read` 精确匹配自身，`document.*` 匹配 `document.` 开头且至少还有一个字符的值；禁止中间通配和 regex；
 - 任一匹配数组为空数组或字段缺省，表示该维度“不限制”，不是“匹配为空集合”；
+- ContentOrigin 的 `kinds[]` 与 `source_patterns[]` 分别约束同一个 origin：当两者均受限时，至少存在一条 ContentOrigin 同时命中 kind 和 source pattern，规则才匹配；不得用一条 origin 命中 kind、另一条 origin 命中 source 来拼接匹配；任一数组为空或字段缺省时该维度不限制；
 - `exclude_patterns[]` 在 include 匹配后应用，任何 exclude 命中都使整条规则不匹配，优先于 include；
 - `side_effect_max` 按 `S0 < S1 < S2 < S3 < S4 < S5` 作为 ceiling：Action 等级小于等于 ceiling 才匹配；字段缺省表示不限制。
 
