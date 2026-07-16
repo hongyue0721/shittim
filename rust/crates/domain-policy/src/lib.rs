@@ -23,4 +23,4 @@ pub use types::{
     KernelInvariantBlock, KernelInvariantState, LocalPresenceEvidence, PermissionBindingDraft,
     PermissionDecisionDraft, PolicyEvaluationContext, PolicyEvaluationResult,
 };
-pub use uri::normalize_uri;
+pub use uri::{normalize_uri, normalize_uri_pattern};

@@ -43,6 +43,23 @@ match result {
 - Stop Fence generation / recovery reason 由 Kernel 输入；
 - 即使规则损坏，active invariant 仍先阻断普通副作用边界。
 
+## URI 规范化 API
+
+`domain-policy` 公开唯一的 Policy URI parser/normalizer 表面，供 Kernel 内其他 crate 复用，不暴露 matcher 的 `NormalizedUri`、score 或匹配内部类型：
+
+```rust
+use domain_policy::{normalize_uri, normalize_uri_pattern, PolicyError};
+
+fn normalize_inputs(value: &str, pattern: &str) -> Result<(String, String), PolicyError> {
+    Ok((normalize_uri(value)?, normalize_uri_pattern(pattern)?))
+}
+```
+
+- `normalize_uri(&str)`：规范化一条普通 URI；任何 glob token 都返回 `PolicyErrorCode::InvalidUriPattern`。
+- `normalize_uri_pattern(&str)`：规范化一条 URI pattern；只允许 path 中完整 segment `*` / `**`，query/fragment 仍为精确字符串，scheme/authority 不允许 glob。
+- 两者都执行 scheme/host 小写、默认端口移除、dot segments 消解、百分号十六进制大写、RFC 8089 `file:` 校验与 Windows drive 大写；反斜杠和非法 authority 均 fail closed。
+- API 故意只处理单项，不提供数组 normalizer；调用方负责保持数组顺序与重复项，并决定错误如何归属。当前 `task.create` repository 契约要求逐项调用，但 repository 尚未实现。
+
 ## Pattern 与排序
 
 - URI value/pattern 都规范化：scheme/host 小写、默认端口移除、dot segments、百分号十六进制大写；保留字符不解码；反斜杠拒绝；file drive 大写。

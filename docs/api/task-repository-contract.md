@@ -14,7 +14,7 @@
 - `payload.task_scope.resource_patterns[]`；
 - `payload.task_scope.exclusions[]`。
 
-使用 SECURITY 的 Policy URI 语法。数组顺序和重复项保留；其他字符串不 trim、不排序、不去重。结果必须再次通过 `TaskCreateRequest` Schema。
+使用 `domain-policy::{normalize_uri, normalize_uri_pattern}` 公开单项 API：`source_uri` 调用 `normalize_uri`，两个 pattern 数组由 repository 按输入顺序逐项调用 `normalize_uri_pattern`。该复用表面已经实现并使用同一 Policy parser/normalizer；数组顺序和重复项仍由 repository 保留，API 不排序、不去重、不聚合错误。Task repository 本身仍未实现。
 
 ## 两个 canonical hash
 

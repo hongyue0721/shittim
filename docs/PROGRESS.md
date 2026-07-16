@@ -48,7 +48,7 @@
 ### Freedom-first Policy matcher
 
 - [x] 新增 `rust/crates/domain-policy`，直接使用生成 PolicyRule/Actor/ContentOrigin/EntryPoint/SideEffectClass/decision enum。
-- [x] 实现 URI 规范化、segment glob、capability/operation `.*`、exclude、side-effect ceiling。
+- [x] 实现 URI 规范化、segment glob、capability/operation `.*`、exclude、side-effect ceiling；公开单项 `normalize_uri` / `normalize_uri_pattern` 复用同一 parser，供未来 Task repository 保序、保重复地逐项调用。
 - [x] 按 SECURITY §2.3 实现 specificity 与 priority/effect/revision/ID 稳定排序，只计算实际命中备选。
 - [x] 实现 time window、Delegation/local-presence 精确布尔和 authoritative `RateLimitPort` winner-only 原子消费重选。
 - [x] Stop Fence/Recovery invariant 优先返回独立 Blocked，不创建隐藏 deny；S0–S5 无规则均 Default Allow。
@@ -71,7 +71,7 @@
 
 ## 未完成
 
-- [ ] 实现 Task/TaskScope/ContentOrigin/idempotency、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider、Task creation canonical 子事实跨对象一致性；这些必须复用现有 `WriteTransaction`。`task.create` 契约已拍板，但没有表、migration 或实现。
+- [ ] 实现 Task/TaskScope/ContentOrigin/idempotency、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider、Task creation canonical 子事实跨对象一致性；这些必须复用现有 `WriteTransaction`。`task.create` 契约已拍板，Policy URI 单项 normalizer 已公开可复用，但没有表、migration 或 repository 实现。
 - [ ] 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已定义，尚未持久化。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
@@ -106,7 +106,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`domain-task` 47 项测试，`domain-policy` 23 项测试，`kernel-contracts` 45 项测试（5 unit + 40 contract），`schema-tool` 11 项测试，`kernel-sqlite` 24 项测试，当前 workspace 共 150 项测试。
+全部通过；`domain-task` 47 项测试，`domain-policy` 30 项测试，`kernel-contracts` 45 项测试（5 unit + 40 contract），`schema-tool` 11 项测试，`kernel-sqlite` 24 项测试，当前 workspace 共 157 项测试。
 
 ## 事实来源
 

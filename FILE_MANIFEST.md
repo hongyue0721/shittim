@@ -15,7 +15,7 @@
 - `docs/PROGRESS.md` — 121 lines
 - `docs/api/README.md` — 32 lines
 - `docs/api/audit-record.md` — 84 lines
-- `docs/api/domain-policy.md` — 99 lines
+- `docs/api/domain-policy.md` — 116 lines
 - `docs/api/domain-task.md` — 116 lines
 - `docs/api/error-catalog.md` — 32 lines
 - `docs/api/event-catalog.md` — 30 lines

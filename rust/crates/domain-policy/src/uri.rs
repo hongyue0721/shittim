@@ -40,8 +40,20 @@ impl UriPatternScore {
 }
 
 /// Normalizes a concrete URI according to the policy matching contract.
+///
+/// This accepts no glob tokens. Call [`normalize_uri_pattern`] for Policy URI patterns.
 pub fn normalize_uri(value: &str) -> Result<String, PolicyError> {
     Ok(parse_uri(value, false)?.value)
+}
+
+/// Normalizes one Policy URI pattern according to the segment-glob contract.
+///
+/// Only complete path segments `*` and `**` are accepted. Scheme and authority never support
+/// globs, while query and fragment are normalized but remain exact strings and therefore also
+/// reject glob tokens. This function deliberately handles one pattern at a time: callers retain
+/// ownership of array ordering, duplicate preservation, and error aggregation.
+pub fn normalize_uri_pattern(pattern: &str) -> Result<String, PolicyError> {
+    Ok(parse_uri(pattern, true)?.value)
 }
 
 pub(crate) fn normalize_uri_value(value: &str) -> Result<NormalizedUri, PolicyError> {
@@ -96,18 +108,9 @@ fn parse_uri(input: &str, allow_glob: bool) -> Result<NormalizedUri, PolicyError
         return Err(uri_error("backslash is not valid in a policy URI"));
     }
     validate_percent_encoding(input)?;
-    if contains_forbidden_glob(input, allow_glob) {
-        return Err(uri_error("glob tokens must be complete path segments"));
-    }
+    validate_glob_placement(input, allow_glob)?;
 
-    let parse_input = if allow_glob {
-        input
-            .replace("**", "policy-multi-glob")
-            .replace('*', "policy-single-glob")
-    } else {
-        input.to_string()
-    };
-    let url = Url::parse(&parse_input).map_err(|error| uri_error(error.to_string()))?;
+    let url = Url::parse(input).map_err(|error| uri_error(error.to_string()))?;
     if url.cannot_be_a_base() || (url.host().is_none() && url.scheme() != "file") {
         return Err(uri_error("URI must contain a valid authority"));
     }
@@ -135,8 +138,7 @@ fn parse_uri(input: &str, allow_glob: bool) -> Result<NormalizedUri, PolicyError
     let raw_segments: Vec<String> = url
         .path_segments()
         .ok_or_else(|| uri_error("URI path cannot be segmented"))?
-        .map(restore_globs)
-        .map(|segment| uppercase_percent_encoding(&segment))
+        .map(uppercase_percent_encoding)
         .collect();
     let mut path_segments = remove_dot_segments(raw_segments)?;
     if scheme == "file" {
@@ -144,22 +146,8 @@ fn parse_uri(input: &str, allow_glob: bool) -> Result<NormalizedUri, PolicyError
     }
     validate_glob_segments(&path_segments, allow_glob)?;
 
-    let query = url
-        .query()
-        .map(restore_globs)
-        .map(|part| uppercase_percent_encoding(&part));
-    let fragment = url
-        .fragment()
-        .map(restore_globs)
-        .map(|part| uppercase_percent_encoding(&part));
-    if allow_glob
-        && query
-            .iter()
-            .chain(fragment.iter())
-            .any(|part| part.contains('*'))
-    {
-        return Err(uri_error("query and fragment do not support glob tokens"));
-    }
+    let query = url.query().map(uppercase_percent_encoding);
+    let fragment = url.fragment().map(uppercase_percent_encoding);
 
     let path = if path_segments.is_empty() {
         "/".to_string()
@@ -311,14 +299,53 @@ fn uppercase_percent_encoding(input: &str) -> String {
     output
 }
 
-fn restore_globs(segment: &str) -> String {
-    segment
-        .replace("policy-multi-glob", "**")
-        .replace("policy-single-glob", "*")
-}
+fn validate_glob_placement(input: &str, allow_glob: bool) -> Result<(), PolicyError> {
+    if !input.contains('*') {
+        return Ok(());
+    }
+    if !allow_glob {
+        return Err(uri_error("glob tokens are not valid in a concrete URI"));
+    }
 
-fn contains_forbidden_glob(input: &str, allow_glob: bool) -> bool {
-    !allow_glob && input.contains('*')
+    let before_fragment = input.split_once('#').map_or(input, |(head, _)| head);
+    if input
+        .split_once('#')
+        .is_some_and(|(_, fragment)| fragment.contains('*'))
+    {
+        return Err(uri_error("query and fragment do not support glob tokens"));
+    }
+    let before_query = before_fragment
+        .split_once('?')
+        .map_or(before_fragment, |(head, _)| head);
+    if before_fragment
+        .split_once('?')
+        .is_some_and(|(_, query)| query.contains('*'))
+    {
+        return Err(uri_error("query and fragment do not support glob tokens"));
+    }
+
+    let authority_start = before_query
+        .find("://")
+        .map(|index| index + 3)
+        .ok_or_else(|| uri_error("URI pattern must contain a scheme and authority"))?;
+    if before_query[..authority_start].contains('*') {
+        return Err(uri_error("scheme and authority do not support glob tokens"));
+    }
+    let authority_and_path = &before_query[authority_start..];
+    let (authority, path) = authority_and_path
+        .split_once('/')
+        .map_or((authority_and_path, ""), |(authority, path)| {
+            (authority, path)
+        });
+    if authority.contains('*') {
+        return Err(uri_error("scheme and authority do not support glob tokens"));
+    }
+    for segment in path.split('/') {
+        if segment.contains('*') && segment != "*" && segment != "**" {
+            return Err(uri_error("glob tokens must be complete path segments"));
+        }
+    }
+    Ok(())
 }
 
 fn validate_glob_segments(segments: &[String], allow_glob: bool) -> Result<(), PolicyError> {
@@ -351,6 +378,64 @@ mod tests {
         assert_eq!(value.value, "https://example.com/a/c/%2F?q=x#f");
         assert!(any_uri_pattern(&["https://example.com/a/*/%2f?q=x#f".into()], &value).unwrap());
         assert!(any_uri_pattern(&["https://example.com/**".into()], &value).unwrap());
+    }
+
+    #[test]
+    fn public_normalizers_cover_task_create_fixture_semantics() {
+        assert_eq!(
+            normalize_uri("HTTPS://Example.COM:443/inbox/./message/../request?x=%2f#Part").unwrap(),
+            "https://example.com/inbox/request?x=%2F#Part"
+        );
+        assert_eq!(
+            normalize_uri_pattern("HTTPS://Example.COM:443/a/./b/**").unwrap(),
+            "https://example.com/a/b/**"
+        );
+        assert_eq!(
+            normalize_uri_pattern("HTTPS://Example.COM:443/a/b/tmp/../cache/*").unwrap(),
+            "https://example.com/a/b/cache/*"
+        );
+
+        let duplicate_patterns = [
+            "HTTPS://Example.COM:443/a/./b/**",
+            "https://example.com/a/b/**",
+        ];
+        let normalized = duplicate_patterns
+            .iter()
+            .map(|pattern| normalize_uri_pattern(pattern))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            normalized,
+            ["https://example.com/a/b/**", "https://example.com/a/b/**"]
+        );
+    }
+
+    #[test]
+    fn public_pattern_normalizer_preserves_exact_query_fragment_and_file_drive() {
+        assert_eq!(
+            normalize_uri_pattern("HTTPS://Example.COM:443/a/**?x=%2f#Part").unwrap(),
+            "https://example.com/a/**?x=%2F#Part"
+        );
+        assert_eq!(
+            normalize_uri_pattern("file:///c:/Users/*/**").unwrap(),
+            "file:///C:/Users/*/**"
+        );
+    }
+
+    #[test]
+    fn public_pattern_normalizer_rejects_invalid_patterns_fail_closed() {
+        for pattern in [
+            "https://example.com/foo*",
+            "https://*.example.com/a",
+            "https://example.com/a?q=*",
+            "https://example.com/a#*",
+            "file://server/share/*",
+            "file:///C:\\Users\\*",
+            "https://example.com/(foo)",
+        ] {
+            let error = normalize_uri_pattern(pattern).unwrap_err();
+            assert_eq!(error.code, PolicyErrorCode::InvalidUriPattern, "{pattern}");
+        }
     }
 
     #[test]
