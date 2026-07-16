@@ -75,7 +75,7 @@
 
 - [x] 闭合 `system.ping` / `task.create` / `task.get` 的 typed validated input 边界；当时未包含 Value preflight，现已由后续 §5.11 合同单独闭合。
 - [x] 固定成功 payload 方法级 Schema 门、最终 Response Envelope Schema 门、request_id 原样与 ok/error 互斥。
-- [x] 固定可注入 `KernelClock`、UUID/opaque ID generator 和闭集 `BackendError` 高阶 Task backend；SQLite adapter 穷举 `StoreErrorCode`，复用 `with_write_transaction` + 现有 repository，不暴露 transaction/SQL。
+- [x] 固定可注入 `KernelClock`、UUID/opaque ID generator 和闭集 `BackendError` 高阶 Task backend；实现 `SystemKernelClock` 与使用可失败 OS 随机源的 `RandomKernelIdGenerator`，随机源失败进入 `IdGenerationError` 而非 panic；SQLite adapter 穷举 `StoreErrorCode`，复用 `with_write_transaction` + 现有 repository，不暴露 transaction/SQL。
 - [x] 固定 deadline RFC 3339 UTC instant 比较与两次读取：入口先检查；create 事务不可中途取消，commit 后到期返回 `deadline_exceeded` 但事实保留并以同一 idempotency key 恢复。
 - [x] 固定六个 Kernel UUID（版本不限定）、独立 correlation/dedup 生成，不把 Kernel-owned 标识伪装成 caller-owned 或固定派生规则。
 - [x] 固定 Created/Replayed 均返回当前 Task；Created 同时返回可信绑定的 committed Event ID，只有 Created 产生 durable Outbox 的 post-commit Publisher wake-up intent，通知失败不回滚、不声明 delivered。
@@ -97,7 +97,7 @@
 - [x] `narrow_to_registered` 对 generated payload enum 穷举，无 wildcard：三 registered + 五不可序列化 Known enum。
 - [x] 实现 borrowing `TypedDispatcher<C,G,B>`，直接调用三个 public `handle_*`，不增加平行 ports、不重复 deadline/Schema、不改写 `HandlerResult` 或 intent。
 - [x] 增加 static negative Serialize assertions、八方法合法 Value、priority/field/cross-family/root/nested version、known malformed/valid、固定 error response、private unknown-schema/final-response fault seam、dispatcher response/ContractFailure/Created intent 与 clock 路由测试。
-- [x] `kernel-contracts` 53 项测试；`schema-tool` 14 项测试；`kernel-kcp` 40 项测试（6 unit + 34 integration）。
+- [x] `kernel-contracts` 53 项测试；`schema-tool` 14 项测试；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
 - [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
 
 ## 未完成
@@ -139,7 +139,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；workspace 共 223 项测试，`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 40。
+全部通过；workspace 共 229 项测试，`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 46。
 
 ## 事实来源
 

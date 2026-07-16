@@ -8,6 +8,8 @@ description = "Non-connectable KCP Value preflight, registration, typed dispatch
 
 [dependencies]
 chrono.workspace = true
+getrandom.workspace = true
+hex.workspace = true
 kernel-contracts = { path = "../kernel-contracts" }
 kernel-sqlite = { path = "../kernel-sqlite" }
 serde.workspace = true

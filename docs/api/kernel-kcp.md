@@ -30,8 +30,8 @@ let result = dispatcher.dispatch(request);
 
 handler/dispatcher 复用：
 
-- `KernelClock`：返回已解析的 `DateTime<Utc>`；
-- `KernelIdGenerator`：按 purpose 分配六个 UUID 文本和两个 opaque ID；
+- `KernelClock`：返回已解析的 `DateTime<Utc>`；公开 `SystemKernelClock` 使用 OS 系统时钟，并以显式 epoch 前借位、整数溢出和 chrono 可表示范围检查把异常映射为 `ClockError`，不走隐式 panic 转换；
+- `KernelIdGenerator`：按 purpose 分配六个 UUID 文本和两个 opaque ID；公开 `RandomKernelIdGenerator` 使用可失败的 OS 随机源，随机源失败映射为 `IdGenerationError` 而不是 panic；当前 UUID 使用 v4 只是实现细节，不形成协议版本承诺，opaque ID 是无 caller 派生信息的 128-bit 小写十六进制文本；
 - `TaskApplicationBackend`：只暴露 create/get 与闭集 `BackendError`。
 
 `TypedDispatcher` 借用这三个端口，并按 variant 只把所需能力传给对应 public handler。它不创建平行接口、不重复 deadline 或 Schema 检查，也不改写 `HandlerResult`。

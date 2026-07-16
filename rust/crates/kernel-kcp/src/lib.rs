@@ -11,6 +11,7 @@ mod handlers;
 mod ports;
 mod preflight;
 mod response;
+mod runtime;
 pub mod sqlite_adapter;
 
 pub use dispatcher::{
@@ -30,3 +31,4 @@ pub use response::{
     HandledResponse, HandlerContractFailure, HandlerContractFailureKind, HandlerResult,
     PostCommitNotificationIntent,
 };
+pub use runtime::{RandomKernelIdGenerator, SystemKernelClock};
