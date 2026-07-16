@@ -1,6 +1,6 @@
 # Task Repository 创建与读取契约
 
-> 状态：`kernel-sqlite` create/get repository 已实现；KCP handler/server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
+> 状态：`kernel-sqlite` create/get repository 已实现；`system.ping` / `task.create` / `task.get` typed handler 合同已闭合但代码与 server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
 
 ## 范围
 
@@ -32,7 +32,7 @@
 
 ## 单事务物化
 
-Kernel 上层先显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event UUID，以及 Event correlation/dedup，并固定一个 `accepted_at`。repository 在同一 `WriteTransaction` 中：
+Kernel 上层先用第一次 `KernelClock` 读取同时完成入口 deadline 检查并固定唯一 `accepted_at`；随后由注入 generator 显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event 六个合法、两两不同的全局唯一 UUID，以及独立生成的非空 Event correlation/dedup。UUID 版本不固定，测试使用 deterministic fake；correlation/dedup 不从 caller 的 request/idempotency/task 字段推导。repository 在同一 `WriteTransaction` 中：
 
 1. 校验 parent Task、parent origins 与 Delegation 引用；当前非 null Delegation 一律 `delegation_not_found`。
 2. 写幂等记录。
@@ -42,7 +42,14 @@ Kernel 上层先显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event UU
 6. 创建固定 `task.creation_recorded` AuditRecord。
 7. 写唯一 `task.created` Outbox，聚合首序号为 `0`。
 
-任何 Schema、引用、hash 或 Task/Audit/Event canonical 子事实不一致均回滚。
+任何 Schema、引用、hash 或 Task/Audit/Event canonical 子事实不一致均回滚。handler/backend adapter 不复制上述逻辑，只在 `SqliteStore::with_write_transaction` 内调用 `WriteTransaction::create_task`。
+
+## Typed handler 与 commit 后边界
+
+- backend 只暴露高阶 `create_task` / `get_task`，不暴露 `WriteTransaction`、connection、SQL、normalize 或 hash；
+- `Created` / `Replayed` 都返回 repository 严格读取后的当前 Task；
+- SQLite 事务不可中途取消，事务内不重复读 clock；commit 后第二次读 clock。若此时 deadline 到期，响应为 `deadline_exceeded`，但事实与幂等记录保留，客户端用同一 key 重放或查询；
+- 仅 `Created` 产生 `{task_id,event_id}` post-commit notification intent，用于事务外唤醒 Publisher。它不是第二条 Event，也不声明 delivered；commit 后的 deadline/internal/response contract failure 仍必须保留该 intent，通知失败不回滚 Outbox 或 Task。
 
 ## 暂不拍板
 
@@ -60,6 +67,6 @@ Kernel 上层先显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event UU
 ## 未实现
 
 - Delegation authority 正向查询；非 null Delegation 固定失败；
-- `task.create` / `task.get` KCP handler 与 server；
+- `task.create` / `task.get` typed handler Rust 实现与 server（合同见 §5.10）；
 - Task 更新、`task.list` cursor/查询；
 - Action、PermissionDecision repository。

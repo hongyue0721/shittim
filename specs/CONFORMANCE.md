@@ -113,7 +113,20 @@
 - 非 null parent task 与每个 parent origin 必须存在；当前任何非 null delegation_ref 返回 `delegation_not_found`，Schema 仍允许非 null，正向 Delegation authority 路径明确未实现；
 - `task.create` 幂等 scope 重复相同请求返回原 Task，不同规范化请求返回 `idempotency_conflict`；risk_hint 可为 null、capability_hints 可为空且 Kernel 不猜测；新建 Task 固定 `status=candidate`、`plan_version=0`、`revision=1`，只发布一个 `task.created`；ContentOrigin、TaskScope、Task、Audit、幂等记录与 Outbox 在同一事务创建；
 - `task.list` 的 parent_filter 明确区分 any/root/exact，稳定排序、limit 边界和 opaque cursor；cursor 编码技术选择留待 repository 实现前的 ADR/API 拍板，本批不把任一编码写成事实；
-- `system.ping`、Task Query 和 Event Query 不产生领域副作用；
+- typed application handler 输入必须已经通过对应 Command/Query Envelope Schema、方法 payload Schema 和 typed decode；raw JSON/frame/preflight 的 `invalid_request`、protocol/auth/method/schema 版本分派不在 handler 内，handler 不得重复猜测或重分类；
+- `system.ping`、`task.create`、`task.get` handler 使用 fake backend/fake clock/deterministic fake ID generator 做库级矩阵；本阶段不得启动 Socket/Named Pipe 或构造可连接 server；
+- 三方法第一次可观察操作是 clock 读取，并在任何 ID/backend 前按 `now >= deadline` 检查；入口已过期不访问 backend、不分配 ID；
+- `system.ping` 复用第一次时间为 `kernel_time`，完成时第二次读 clock；`task.get` backend 后第二次读 clock；两者完成时到期均返回 `deadline_exceeded`；backend 错误与 deadline 同时出现时，成功读取到的到期结果优先，完成 clock 自身失败则 `internal_error`；
+- `task.create` 第一次 clock 同时固定唯一 `accepted_at`；deterministic fake generator 必须证明恰好分配 Task/Scope/Origin/receipt/Audit/Event 六个合法、两两不同的 UUID 及独立非空 correlation/dedup，生产 UUID 版本不固定且不得从 caller 字段派生；handler 在 backend 前验证 UUID 格式与本次互异，失败为 `internal_error`；
+- deadline 必须把 Envelope RFC 3339 文本与 clock UTC instant 按时间点比较，禁止字符串字典序；deadline 解析失败在任何 ID/backend 前映射 `internal_error`；
+- `task.create` adapter 只通过 backend 高阶端口调用现有 repository；测试 spy 必须证明 handler 不复制 normalize/hash/Audit/Event，SQLite adapter 只在 `SqliteStore::with_write_transaction` 内调用 `create_task`，不暴露 transaction/SQL；typed Envelope 到 `TaskCreateEnvelopeFacts` / request / allocation 的字段映射逐项断言；
+- backend error 使用 §5.10.2 的闭集分类；SQLite adapter 对当前每个 `StoreErrorCode` 穷举转换，同名公开分类或 `Internal`，新增 Store code 导致编译/测试更新，不允许 wildcard 或 message 匹配；
+- Created 与 Replayed 都返回 backend 给出的当前 Task；Created 必须同时返回与本次 operation Event UUID 相等的 `committed_event_id`，adapter 不能证明绑定时返回 Internal；仅 Created 携带一个 `TaskCreatedCommitted {task_id,event_id}` post-commit notification intent，Replayed 无 intent；Created 后即使 response contract 失败成为本地 HandlerContractFailure 也必须保留 intent；notifier 在事务外，失败不改变 response、不回滚事实、不声称 delivered；
+- `task.create` 事务内不做第二次 clock 读取、不轮询/取消；backend 的 Created/Replayed/错误返回后才第二次读 clock。完成到期优先返回 `deadline_exceeded`；完成 clock 失败优先 `internal_error`；未到期才映射 backend 结果。Created post-commit 到期/clock failure 均保留事实与 intent；同一幂等键重放返回当前 Task；
+- `task.get` 的 `None` 精确映射 `task_not_found`；Created/Replayed/get-found/not-found 均有独立用例；
+- 对三方法逐项测试 stable error mapping，不匹配 message：`invalid_scope_pattern`、`idempotency_conflict`、`delegation_not_found`、`parent_task_not_found`、`parent_origin_not_found`、`sqlite_busy`、`sqlite_full`、`sqlite_corrupt`、`stored_data_invalid`，以及 constraint/contract/serialization/not-found/internal/open/config/migration 等折叠 `internal_error`；断言固定 safe message、`details=null` 与 retryable。deadline 和 sqlite_busy 为 true，其余本矩阵为 false；
+- 每个成功 payload 在装 Envelope 前用原方法 response Schema 验证；每个最终成功/错误 Response Envelope 再用通用 Schema 验证，并断言 request_id 原样、protocol `1.0`、message `response`、success/error 互斥；Response 无 method discriminator，测试按原方法选择 payload Schema；
+- 构造成功 payload 的 response Schema 失败必须安全转换为 `internal_error`；最终 error Envelope 若也无法验证则产生本地 HandlerContractFailure，不发送未验证响应；Created 路径必须证明该 failure 仍向组合根返回 post-commit intent；
 - Event cursor 只使用十进制 `outbox_position`，按严格递增位置轮询；拒绝 event ID、时间戳或 aggregate sequence cursor；
 - EventEnvelope 包含 aggregate_type、sequence、outbox_position 和 `{kind,id}` causation_ref，causation kind 只允许 `command_request | event`；同一聚合首条已提交事件 `sequence = 0`，后续已提交事件严格连续 `+1`，事务回滚的暂分配不占号；
 - `delivered_at` 只代表 Publisher 发布，不因某订阅者未消费而回滚，也不伪称全部订阅者已消费；

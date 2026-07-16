@@ -27,7 +27,7 @@
 
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
-- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前仅规范、代码未开始。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；Schema/生成类型和 Task create/get repository 已实现，三个 typed handler 合同已闭合，但 handler、`agentd` 与可连接 server 尚未实现。
 - [`docs/sdk/README.md`](docs/sdk/README.md)：SDK 文档入口；当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 

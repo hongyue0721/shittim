@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机、`domain-policy` 纯领域 matcher，以及 `kernel-sqlite` migration、AuditRecord、Event Outbox、rate limit 与 Task create/get repository。当前仍没有 Task 更新/list、Action/PermissionDecision repository、KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机、`domain-policy` 纯领域 matcher，以及 `kernel-sqlite` migration、AuditRecord、Event Outbox、rate limit 与 Task create/get repository。`system.ping` / `task.create` / `task.get` 的 typed application handler 合同已经闭合，可作为下一小功能直接编码；Rust handler 尚未实现。当前仍没有 Task 更新/list、Action/PermissionDecision repository、raw KCP preflight、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
 
 `domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
@@ -70,12 +70,25 @@
 - [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；`kernel-sqlite` 共 39 项测试。
 - [x] 新增 [`api/kernel-sqlite.md`](api/kernel-sqlite.md)。
 
+### KCP typed application handler 合同
+
+- [x] 闭合 `system.ping` / `task.create` / `task.get` 的 typed validated input 边界；raw JSON/frame/preflight 留待独立批次。
+- [x] 固定成功 payload 方法级 Schema 门、最终 Response Envelope Schema 门、request_id 原样与 ok/error 互斥。
+- [x] 固定可注入 `KernelClock`、UUID/opaque ID generator 和闭集 `BackendError` 高阶 Task backend；SQLite adapter 穷举 `StoreErrorCode`，复用 `with_write_transaction` + 现有 repository，不暴露 transaction/SQL。
+- [x] 固定 deadline RFC 3339 UTC instant 比较与两次读取：入口先检查；create 事务不可中途取消，commit 后到期返回 `deadline_exceeded` 但事实保留并以同一 idempotency key 恢复。
+- [x] 固定六个 Kernel UUID（版本不限定）、独立 correlation/dedup 生成，不把 Kernel-owned 标识伪装成 caller-owned 或固定派生规则。
+- [x] 固定 Created/Replayed 均返回当前 Task；Created 同时返回可信绑定的 committed Event ID，只有 Created 产生 durable Outbox 的 post-commit Publisher wake-up intent，通知失败不回滚、不声明 delivered。
+- [x] 固定三个方法按 backend/`StoreErrorCode` 的 KCP code、safe message、details=null、retryable 映射，不匹配错误 message。
+- [x] 增加完整 fake backend/clock/ID、deadline pre/post、Created/Replayed/get/notfound、每项错误与 payload/envelope Schema 的 Conformance 矩阵。
+
 ## 未完成
 
 - [ ] 实现 Task 更新/list、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性；Task create/get 与 task creation Audit/Event canonical 一致性已实现。
 - [ ] 为其它 Command 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已持久化。
-- [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
-- [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
+- [ ] 实现 `system.ping` / `task.create` / `task.get` 库级 typed application handler 与 fake-port conformance 测试；不得同时实现 raw preflight 或 server。
+- [ ] 为 raw JSON/frame/preflight 和全 Catalog 方法可用性补齐独立合同；关闭前不得提供可连接 KCP server，也不新增 `method_unavailable`。
+- [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
+- [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理（本批三方法合同不等于八方法可用）。
 - [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
 - [ ] 创建 Tauri/React/Ant Design 蓝白桌面客户端。
 - [ ] 实现 Extension SDK、Provider、Memory、Initiative、Computer Use 与 Broker。
@@ -83,8 +96,9 @@
 
 ## 当前阻塞
 
-- `task.create` repository 已完成；当前阻塞转为 KCP handler/server 与 Delegation authority 正向路径。非 null Delegation 仍固定返回 `delegation_not_found`。
-- Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于上述四项阻塞。
+- 三方法 typed handler 的编码合同已关闭；当前直接下一步是库级 handler 与 fake ports。raw preflight、全 Catalog 可用性和 server 生命周期仍未关闭，禁止越过阶段门。
+- `task.create` repository 已完成；Delegation authority 正向路径仍未实现，任何非 null Delegation 固定返回 `delegation_not_found`。
+- Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
 - Node 24 LTS 已可用（24.18.0，pnpm user runtime），TypeScript 工具链不再受版本阻塞。
@@ -92,9 +106,9 @@
 
 ## 下一步
 
-1. 实现 `task.create` / `task.get` KCP 本地 handler/server，并保持 `task.list` cursor 未拍板、未实现。
+1. 实现 `system.ping` / `task.create` / `task.get` 不可连接的库级 typed handler，严格按 §5.10 使用 fake backend/clock/IDs 完成 Conformance；不实现 server。
 2. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
-3. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切，随后接入 Publisher 循环。
+3. 单独闭合 raw KCP preflight 与全 Catalog 可用性，再实现本地传输、Task/Event 纵切与 Publisher 循环。
 4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证

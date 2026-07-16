@@ -171,7 +171,7 @@ UI 退出不触发上述流程。
 - `actor`：发起者身份；Actor 不重复携带 EntryPoint；
 - `entry_point`：Envelope 上的入口点；
 - `task_id` / `context`：所属 Task 或上下文；
-- `deadline`：过期时间；Kernel 收到时已过期必须返回 `deadline_exceeded`。处理期间超过 deadline 时取消可取消工作并返回同一错误；对于已开始且不能安全取消的外部动作，不得宣称已取消或回滚，必须持久化为 `unknown_side_effect`/恢复待查后返回 `deadline_exceeded`；不得静默丢弃；
+- `deadline`：过期时间；Kernel 收到时已过期必须返回 `deadline_exceeded`。处理期间超过 deadline 时取消可取消工作并返回同一错误；对于已开始且不能安全取消的外部动作，不得宣称已取消或回滚，必须持久化为 `unknown_side_effect`/恢复待查后返回 `deadline_exceeded`；不得静默丢弃。`task.create` 的本地 SQLite 事务不属于外部动作，但同样不可中途取消；其 commit 后到期返回错误而事实保留，按 `IMPLEMENTATION_CONTRACTS.md` §5.10 使用同一幂等键恢复；
 - `idempotency_key`：客户端生成的幂等键，范围由命令语义定义；
 - `expected_revision`：需要并发控制时携带对象当前 revision。
 
@@ -604,7 +604,9 @@ SQLite 事务用于：
 
 当某项业务契约要求审计时，对应 AuditRecord 必须与该业务事实以及该事务要求产生的 Outbox 记录在同一个 SQLite 事务中校验并写入。AuditRecord Schema 校验或插入失败时，业务事实和 Outbox 必须整体回滚，不得留下“业务成功但审计缺失”的提交。AuditRecord 本身不因被写入而自动创建 EventEnvelope 或进入 Outbox。
 
-`task.create` 是首个固定 producer：单事务写入幂等记录、ContentOrigin、TaskScope、Task、`task.creation_recorded` 与唯一 `task.created` Outbox。Kernel 先固定一个 `accepted_at`，ContentOrigin receipt/received、TaskScope、Task、Audit 与 Event 的创建时间均从该值投影；receipt hash、幂等等价投影、对象初值、显式上层 IDs 和 Audit/Event canonical 子事实以 `IMPLEMENTATION_CONTRACTS.md` §5.5 为准。任何引用缺失、Schema 失败或子事实不一致均回滚；不得只提交 Task。
+`task.create` 是首个固定 producer：单事务写入幂等记录、ContentOrigin、TaskScope、Task、`task.creation_recorded` 与唯一 `task.created` Outbox。typed handler 的第一次 `KernelClock` 读取同时固定 `accepted_at` 并做入口 deadline 检查；ContentOrigin receipt/received、TaskScope、Task、Audit 与 Event 的创建时间均从该值投影；receipt hash、幂等等价投影、对象初值、显式上层 IDs 和 Audit/Event canonical 子事实以 `IMPLEMENTATION_CONTRACTS.md` §5.5/§5.10 为准。任何引用缺失、Schema 失败或子事实不一致均回滚；不得只提交 Task。
+
+该 SQLite 事务从 `BEGIN IMMEDIATE` 到 commit 不轮询 deadline，也不提供中途取消。commit 成功后 handler 才读取完成时钟；若此时到期，KCP 返回 `deadline_exceeded`，但已提交 Task/Audit/Outbox 与幂等事实保留，客户端必须以同一幂等 scope/key 重放或查询。Created 时产生的 post-commit notification intent 只用于在事务外唤醒 Publisher；通知失败不能回滚 durable Outbox，也不表示 Event 已发布或被消费。
 
 外部副作用不能被 SQLite 回滚，因此必须使用：
 
