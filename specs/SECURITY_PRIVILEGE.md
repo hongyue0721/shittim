@@ -18,7 +18,7 @@
 
 ### 1.1 ContentOrigin 与命令真实性
 
-每份进入系统的内容都带 ContentOrigin，至少包含产生者类别、入口、上游稳定标识（可得时）、接收时间、携带它的 Task/Artifact 及其不可伪造的 Kernel 接收证据。网页、文档、模型文本、第三方 Extension 输出、群聊及远程消息始终是外部内容。
+每份进入系统的内容都带 ContentOrigin。完整字段、`kind` 枚举和 EntryPoint 枚举由 `IMPLEMENTATION_CONTRACTS.md` 定义；本文件只规定其安全语义：来源必须包含产生者类别、入口、上游稳定标识（可得时）、接收时间、携带它的 Task/Artifact 及不可伪造的 Kernel 接收证据。网页、文档、模型文本、第三方 Extension 输出、群聊及远程消息始终是外部内容。
 
 只有经 Kernel Control Protocol 验证、由 Kernel 创建的命令或事件才是 Kernel Command 或 Kernel Event。外部内容不得通过名称、JSON 外形、引用、提示词或转述伪造这两类对象，也不能伪造 Policy mutation evidence、授权租约或 Broker 请求。它可以作为自然语言治理的输入，但必须经过入口归属、解析、结构化变更和 Policy mutation authority 检查。
 
@@ -39,9 +39,77 @@
 - ContentOrigin；
 - 恢复状态与 Stop Fence。
 
-规则的唯一 `effect` 为 `allow`、`confirm` 或 `deny`。`confirm` 的执行方式由独立 `confirmation_mode` 表达：`generic | local | system_authentication | plan_revision`；它不改变 effect 排序。PermissionDecision 将 `confirm + confirmation_mode` 映射为 `require_confirmation`、`require_local_confirmation`、`require_system_authentication` 或 `require_plan_revision`，这些是执行结果，不是 PolicyRule 的平行 effect。系统认证也可以由底层系统机制实际要求，而不是第四种默认 effect。每条规则是版本化的结构化对象，可匹配 Actor、Entry Point、ContentOrigin、Task/Action、Resource/Task Scope、Side-effect Class、Extension 来源/权限声明、Delegation、Trigger、预算、认证状态、时间和恢复状态。
+规则的唯一 `effect` 为 `allow`、`confirm` 或 `deny`。当且仅当 `effect = confirm` 时，规则必须携带 `confirmation_mode: generic | local | system_authentication | plan_revision`；`allow` 与 `deny` 携带该字段属于无效 Schema，必须拒绝保存或启用。`confirmation_mode` 不改变 effect 排序。PermissionDecision 将 `confirm + confirmation_mode` 映射为 `require_confirmation`、`require_local_confirmation`、`require_system_authentication` 或 `require_plan_revision`，这些是执行结果，不是 PolicyRule 的平行 effect。系统认证也可以由底层系统机制实际要求，而不是第四种默认 effect。
 
-选择匹配规则时，严格按以下顺序：较高 `priority`、较高 `specificity`、effect 顺序 `deny` > `confirm` > `allow`、较新 `revision`。不存在匹配 PolicyRule 时，结果必须为 `allow`。推荐确认模板只是可安装或引用的规则模板，默认不启用，S0-S5 也不能隐式导出 confirm 或 deny。
+每条规则是版本化的结构化对象，可匹配 Actor、Entry Point、ContentOrigin、Task/Action、Resource/Task Scope、Side-effect Class、Extension 来源/权限声明、Delegation、Trigger、预算、认证状态、时间和恢复状态。`authentication_level` 是有序枚举：`unauthenticated < asserted < platform_verified < system_authenticated`；它只描述已观察到的认证证据强度，**不产生默认授权、默认确认或默认拒绝**。
+
+### 2.1 Pattern 规范
+
+Policy pattern 不得使用正则表达式，也不得依赖实现语言的 glob 差异。
+
+- `source` 描述 actor 记录的来源系统或命名空间；若参与 Policy 匹配，必须先表达为规范化 URI（例如 `actor-source://platform/account-domain`、`extension://<id>`），并使用相同 URI segment-glob 语法；不能规范化的历史 source 使该维度返回 `unsupported_policy_condition`，不得退化为未匹配；
+- Resource、Actor source 与 ContentOrigin source pattern 必须先规范化为 URI：scheme 与 host 转小写、移除默认端口、解析 `.` / `..` path segment、百分号编码采用大写十六进制且不解码保留字符；scheme 缺失、authority 不合法或 URI 解析失败都使规则无效。`file:` URI 按 RFC 8089 形式规范化；Windows drive letter 转大写，反斜杠输入无效而不是自动猜成 `/`；
+- 匹配单位是 URI 的 scheme、authority 和以 `/` 分隔的 path segment。无通配符 token 必须精确匹配；`*` 只匹配一个完整 segment；`**` 匹配零个或多个完整 segment；通配符只能作为完整 segment，不得写成 `foo*`、`**bar`；query/fragment 若被 pattern 提供则按规范化后的完整字符串精确匹配，不支持通配；
+- `operation_patterns[]` 与 `capability_ids[]` 的元素只允许精确值或末尾 `.*` 前缀形式。`document.read` 精确匹配自身，`document.*` 匹配 `document.` 开头且至少还有一个字符的值；禁止中间通配和 regex；
+- 任一匹配数组为空数组或字段缺省，表示该维度“不限制”，不是“匹配为空集合”；
+- `exclude_patterns[]` 在 include 匹配后应用，任何 exclude 命中都使整条规则不匹配，优先于 include；
+- `side_effect_max` 按 `S0 < S1 < S2 < S3 < S4 < S5` 作为 ceiling：Action 等级小于等于 ceiling 才匹配；字段缺省表示不限制。
+
+### 2.2 Condition v1
+
+第一版 `condition` 只允许以下字段，字段之间为逻辑 AND：
+
+```text
+time_window?: {
+  timezone: <IANA time-zone identifier>,
+  weekdays: [monday | tuesday | wednesday | thursday | friday | saturday | sunday, ...],
+  local_start: "HH:MM:SS",
+  local_end: "HH:MM:SS"
+}
+rate_limit?: {
+  count: <positive integer>,
+  window_seconds: <positive integer>,
+  key_scope: rule | actor | task | action | resource
+}
+delegation_required?: boolean
+local_presence_required?: boolean
+```
+
+- `weekdays` 不能为空且不得重复；时间按指定 IANA timezone 的本地日历计算；`local_start < local_end` 表示同日半开区间 `[start, end)`，`local_start > local_end` 表示跨午夜区间，`local_start == local_end` 表示全天；DST 空洞/重叠由 timezone 数据库按对应 instant 转本地时间后比较，不自行猜测偏移；
+- `rate_limit` 对 `key_scope` 指定的稳定键统计在滚动 `window_seconds` 内已生效的匹配决策；`rule` 使用 rule ID，`actor` 使用 actor ID，`task` / `action` 使用对应 ID，`resource` 使用按 UTF-8 字节序升序后的规范化 `resource_refs` 以 U+001F 连接再做 SHA-256 的值；达到 `count` 后该规则 condition 不满足。缺少所选 scope 必需的 ID/resource 时返回 `unsupported_policy_condition`，不得退化为其他 scope。计数检查与消费必须原子；
+- `delegation_required = true` 要求存在覆盖当前 Action 的有效 Delegation；`false` 表示要求不存在此类 Delegation；
+- `local_presence_required = true` 要求 Kernel 有当前有效的本地 presence evidence；`false` 表示要求不存在该 evidence；
+- 出现未知 condition 字段、未知 enum、实现不支持的 condition 版本或无法加载 timezone 时，Policy evaluation 必须返回结构化错误 `unsupported_policy_condition` 并 fail closed；这不是“规则未匹配”，因此不得落入 Default Allow。
+
+### 2.3 Specificity 与确定性排序
+
+对每条已匹配规则计算以下 specificity tuple，按字典序降序比较：
+
+```text
+(
+  constrained_dimension_count,
+  exact_dimension_count,
+  literal_uri_component_count,
+  negative_single_segment_glob_count,
+  negative_multi_segment_glob_count,
+  condition_constraint_count
+)
+```
+
+计算算法：
+
+1. `constrained_dimension_count`：Actor kind/source、EntryPoint、`auth_level_min`、ContentOrigin kind/source、resource、capability、operation、`side_effect_max`、Delegation、每个 v1 condition 字段中，凡非空且实际限制匹配的维度各计 1；同一维度的数组有多少备选值都只计 1；
+2. 对 URI、capability、operation 这类 OR 数组，只选择**本次实际命中的最具体备选 pattern**参与计分；先按下述局部 tuple 取字典序最大值，再计入总 tuple。数组增加未命中的备选值不得提高 specificity；
+3. `exact_dimension_count`：Actor/EntryPoint/枚举/布尔/ceiling 等精确受限维度各计 1；命中的 capability/operation 为精确值而非 `.*` 时各计 1；命中的 URI pattern 完全无 glob 时各计 1；
+4. `literal_uri_component_count`：所选命中 URI pattern 的 literal path segment 总数，scheme 与 authority 各作为一个 literal component 计入；
+5. `negative_single_segment_glob_count = -N`，其中 `N` 是所选 URI pattern 中 `*` segment 总数加上命中的 capability/operation `.*` 前缀 pattern 数；越少单段/前缀通配越具体；
+6. `negative_multi_segment_glob_count = -N`，其中 `N` 是所选 URI pattern 中 `**` segment 总数；越少 `**` 越具体；
+7. `condition_constraint_count`：`time_window` 整体计 1，`rate_limit`、`delegation_required`、`local_presence_required` 各计 1；
+8. URI 备选的局部 tuple 为 `(无glob时1否则0, literal_component_count, -single_glob_count, -multi_glob_count)`；capability/operation 备选的局部 tuple 为 `(精确值时1否则0, literal_prefix_codepoint_count)`。若局部 tuple 仍相同，按 pattern UTF-8 字节序升序选择，仅用于确定性，不增加分数。
+
+所有数组先去重；其原始序列化顺序和未命中备选不得影响结果。`exclude_patterns[]` 只排除匹配，不增加 specificity。规则最终排序键为：`priority` 降序、specificity tuple 降序、effect 权重 `deny > confirm > allow`、`revision` 降序、最后 `rule.id` 按 UTF-8 字节序升序。最后的 ID tie-breaker 只在前四项完全相等时保证稳定结果，**不得改变或覆盖 priority、specificity、effect、revision 的语义**。
+
+不存在匹配 PolicyRule 时，结果必须为 `allow`。推荐确认模板只是可安装或引用的规则模板，默认不启用，S0-S5 也不能隐式导出 confirm 或 deny。
 
 模型可提供风险说明、匹配候选和自然语言到结构化规则的草案，但不能生成最终 decision 或绕开 Kernel 规则解析器。用户和 Companion 均可用自然语言创建、修改、撤销 Policy Rule、Exploration Scope、Delegation 与 Trigger；解析结果先作为版本化候选，并作为一次 Policy mutation Action 进入同一 Default Allow 规则模型。第一版未配置额外 mutation 限制时，该 Action 默认 `allow`；用户可按 actor、entry point、ContentOrigin 或对象类型增加 `confirm`/`deny` 规则。每次 mutation 必须审计 actor、entry point、authentication evidence（如有）、ContentOrigin、旧/新 revision、匹配规则和 authority；`policy_mutation_authority` 是为后续认证和细粒度治理预留的判定上下文，不代表第一版已有唯一 Owner。
 

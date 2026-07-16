@@ -1,12 +1,12 @@
-# Companion Architecture Specification v3
+# Shittim Architecture Specification v3
 
-Companion 是可直接编码的长期个人 AI 系统规范。它由稳定可信核心、可治理策略与可持续生长的能力组成：核心不会被 Agent 自改；Memory、Learned Style、Self Preferences、Skill、Trigger、Delegation、受治理配置、模型/Provider 路由、Extension 及恢复知识可以在 Policy 约束内持续迭代。
+**Shittim** 是本项目与产品品牌；**Companion** 是系统中与用户长期交互的 AI 角色概念，不是仓库或产品的临时名称。Shittim 是可直接编码的长期个人 AI 系统规范，由稳定可信核心、可治理策略与可持续生长的能力组成：核心不会被 Agent 自改；Memory、Learned Style、Self Preferences、Skill、Trigger、Delegation、受治理配置、模型/Provider 路由、Extension 及恢复知识可以在 Policy 约束内持续迭代。
 
 ## 权威性与阅读顺序
 
 1. `AGENT.md` 是宪法：全局不变量、可信核心边界、依赖方向与编码规则。
 2. `specs/*.md` 是各领域的唯一规范事实源；同一字段、枚举、状态机不得在其他文档复制定义。
-3. `adr/`（创建后）记录未被规范覆盖的局部且已实施决策；ADR 状态为 proposed/accepted/superseded。
+3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。
 4. 源码、Schema 与测试必须实现本规范，不能反向改变规范。
 
 `PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。
@@ -22,6 +22,14 @@ Companion 是可直接编码的长期个人 AI 系统规范。它由稳定可信
 - [`specs/IMPLEMENTATION_CONTRACTS.md`](specs/IMPLEMENTATION_CONTRACTS.md)：版本化对象、Kernel Control Protocol 与编码契约。
 - [`specs/CONFORMANCE.md`](specs/CONFORMANCE.md)：必须自动化的验收测试。
 - [`specs/REFERENCES.md`](specs/REFERENCES.md)：直接依赖、可选 Provider 与仅参考项目的边界。
+
+## 文档与决策入口
+
+- [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
+- [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前仅规范、代码未开始。
+- [`docs/sdk/README.md`](docs/sdk/README.md)：SDK 文档入口；当前无可发布 SDK。
+- [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 
 ## 实现目标
 

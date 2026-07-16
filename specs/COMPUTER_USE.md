@@ -447,7 +447,7 @@ Computer Use 必须服从全局 Stop Fence / Emergency Stop：
 - 停止后不得发起新的输入或 privileged desktop 副作用；
 - 进行中的可取消输入应取消；不可安全中断的动作标记恢复待查；
 - 停止不依赖模型合作；
-- Fence 解除前，Execute Gate 必须失败；
+- Fence 激活期间 Execute Gate 必须失败；第一版 Fence 持久保持且没有解除 API，未来解除只能由独立恢复契约定义；
 - 与用户接管、lease 闭合、审计记录一致。
 
 Stop Fence 的权威状态在 Kernel；Provider 只执行取消/停止指令。
