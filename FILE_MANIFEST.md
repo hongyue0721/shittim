@@ -2,7 +2,7 @@
 
 > 非规范元数据。完整列出当前工作树全部 Markdown；行数以 UTF-8 文本 `wc -l` 等价结果为准。修改文档后必须重新生成本清单。
 
-- `FILE_MANIFEST.md` — 36 lines
+- `FILE_MANIFEST.md` — 37 lines
 - `AGENT.md` — 32 lines
 - `PROJECT_OVERVIEW.md` — 296 lines
 - `README.md` — 40 lines
@@ -11,15 +11,16 @@
 - `adr/0003-kcp本地传输.md` — 32 lines
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
-- `docs/IMPLEMENTATION_MATRIX.md` — 43 lines
-- `docs/PROGRESS.md` — 136 lines
-- `docs/api/README.md` — 32 lines
+- `docs/IMPLEMENTATION_MATRIX.md` — 44 lines
+- `docs/PROGRESS.md` — 141 lines
+- `docs/api/README.md` — 33 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 116 lines
 - `docs/api/domain-task.md` — 116 lines
 - `docs/api/error-catalog.md` — 48 lines
 - `docs/api/event-catalog.md` — 30 lines
 - `docs/api/kernel-control-protocol.md` — 76 lines
+- `docs/api/kernel-kcp.md` — 32 lines
 - `docs/api/kernel-sqlite.md` — 143 lines
 - `docs/api/schema-generation.md` — 78 lines
 - `docs/api/task-repository-contract.md` — 72 lines

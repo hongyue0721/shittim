@@ -1,6 +1,6 @@
 # Error Catalog
 
-> 状态：Schema 已有；`system.ping` / `task.create` / `task.get` typed handler 的稳定映射合同已闭合但尚未实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录) 与 [§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping)。
+> 状态：Schema 与 `system.ping` / `task.create` / `task.get` typed handler 的稳定映射均已实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录) 与 [§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping)。
 
 ## Preflight 与 typed handler 分界
 

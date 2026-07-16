@@ -11,13 +11,13 @@
 | PermissionDecision | 已定义 | Schema + 生成类型 | `domain-policy` 生成非持久 draft/binding/canonical input | decision mapping、default allow、RFC 8785 key params | ID/evaluated_at/decision revision/policy set revision/最终 context hash 由未来 agentd 持久层拥有 |
 | AuditRecord | 已定义：任务创建固定 producer、外发状态/manifest refs、PD/policy context、权威 rollback projection、provider/model 分工及同事务失败回滚 | AuditRecord v1 + 2 个 wrapper 示例 + 生成 Rust 类型 | `kernel-sqlite` 不可变 canonical JSON Store；task.create 固定 producer 已实现 | canonical/immutable/contract invalid/rollback/读取重验；task.create 固定字段同事务测试 | PD 字段相等、rollback/provider 仍待对应 repository |
 | Event/SQLite Outbox | 已消歧；sequence 首条已提交为 0、后续连续 +1、单次 append 失败自回滚且不占号 | EventEnvelope + 3 payload；task.created 示例 sequence=0 | `kernel-sqlite` 文件 migration、内部 savepoint 原子 sequence/position、cursor、at-least-once delivery storage；task.create 同事务生产唯一 task.created | 多聚合/多连接竞争/忽略 append 错误仍不留空洞/payload mismatch/cursor/重启前后 at-least-once；task.create 完整 Envelope/payload 断言 | 无 Publisher 循环、retention 或 claim lease；Task list/update 未实现 |
-| KCP Envelope | 已定义；三方法 typed handler 的 payload/envelope 最终校验边界已闭合 | command/query/response/error | Command/Query/Event typed decode；无 handler | auth/protocol/错配/ok-error；三方法 handler 矩阵待实现 | Response 根据原请求方法使用独立 response Schema；raw preflight 不在 typed handler |
-| KCP 首批八方法 | Catalog 已定义；仅 system.ping/task.create/task.get typed handler 合同闭合 | 8 组 request/response Schema + task.create hash fixture | `kernel-sqlite` 已实现 task.create/get repository；无 handler/server | 三方法 fake backend/clock/IDs、deadline pre/post、error mapping、payload/envelope Schema 已列 Conformance 要求，待编码 | 不新增 Schema；不实现 Event/Stop/list；Delegation 非 null 固定失败；list cursor 未拍板 |
-| KCP typed application handler | 三方法可直接编码 | 复用现有 Envelope/ping/create/get response/error Schema | 未实现；backend/clock/ID 高阶 port 已定义 | 未实现；要求 Created/Replayed/get/notfound、post-commit intent、每项 Store 映射 | 只能库级不可连接；raw preflight与全 Catalog关闭前禁止 server、禁止 method_unavailable |
+| KCP Envelope | 已定义；三方法 typed handler 的 payload/envelope 最终校验边界已闭合 | command/query/response/error | Command/Query/Event typed decode；`kernel-kcp` 三方法 handler | auth/protocol/错配/ok-error；方法 payload与最终 envelope fault injection | Response 根据原请求方法使用独立 response Schema；raw preflight 不在 typed handler |
+| KCP 首批八方法 | Catalog 已定义；仅 system.ping/task.create/task.get typed handler 合同闭合 | 8 组 request/response Schema + task.create hash fixture | `kernel-sqlite` task.create/get repository；`kernel-kcp` 三方法 handler；无八方法 dispatcher/server | fake backend/clock/IDs、deadline pre/post、error mapping、SQLite create/get/replay | 不实现 Event/Stop/list；Delegation 非 null 固定失败；list cursor 未拍板 |
+| KCP typed application handler | 三方法已实现 | 复用现有 Envelope/ping/create/get response/error Schema | `kernel-kcp`：typed handlers、ports、response/contract failure、SQLite adapter；Schema validator 内置不可替换 | 25 项 crate 测试；Created/Replayed/get/notfound、三方法 deadline/非法时间矩阵、intent↔Outbox/Audit/Task/Scope/Origin、Store code exhaustive mapping、真实 SQLite | 只能库级不可连接；私有 fault seam 不进入 public API；raw preflight与全 Catalog关闭前禁止 server |
 | 首批三个事件 | 已定义 | 3 个 payload Schema | 尚无发布器 | 类型与 payload 错配测试 | 点号小写 |
 | KCP 本地传输 | ADR accepted；受 typed-only 阶段门约束 | 不适用 | 未开始 | 未开始 | Unix Socket / Windows Named Pipe；本批不拍 path/frame 新事实、不允许可连接 server |
 | Schema 生成链 | ADR accepted | 41 个 source + manifest；task.create executable fixture 不新增 Schema | schema-tool + kernel-contracts | meta/$ref/drift/JCS + task.create receipt/idempotency hash | 当前只生成 Rust |
-| Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task、domain-policy、kernel-sqlite | fmt/clippy/workspace test | rustc/cargo 1.97.0；SQLite bundled |
+| Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task、domain-policy、kernel-sqlite、kernel-kcp | fmt/clippy/workspace test | rustc/cargo 1.97.0；SQLite bundled |
 | TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 未开始 | 未开始 | Node 24.18.0 已可用 |
 | Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 将使用 Tauri/React/AntD，蓝白配色 |
 | Extension SDK | 规范已有 | 未开始 | 未开始 | 未开始 | 当前无可安装 SDK 包 |
@@ -36,6 +36,7 @@
 - [domain-task API](api/domain-task.md)
 - [domain-policy API](api/domain-policy.md)
 - [kernel-sqlite API](api/kernel-sqlite.md)
+- [kernel-kcp typed handler](api/kernel-kcp.md)
 - [Task repository 创建契约](api/task-repository-contract.md)
 - [AuditRecord v1](api/audit-record.md)
 - [Schema 生成](api/schema-generation.md)

@@ -36,4 +36,4 @@ Shittim 将包含 Rust Kernel、TypeScript/Pi runtime、Tauri 桌面端、Schema
 
 - Rust 与 Schema 工作不依赖 Node。
 - Node 相关脚手架、依赖安装与前端构建在使用 24.18.0 后方可开始；当前仍无 TypeScript workspace。
-- Rust workspace 成员目前为 `kernel-contracts`、`schema-tool`、`domain-task`、`domain-policy` 与 `kernel-sqlite`；仍无 `agentd`。
+- Rust workspace 成员目前为 `kernel-contracts`、`schema-tool`、`domain-task`、`domain-policy`、`kernel-sqlite` 与 `kernel-kcp`；仍无 `agentd`。

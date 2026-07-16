@@ -1,10 +1,10 @@
 # Shittim 实现进度
 
-> 状态日期：`kernel-sqlite` 文件持久化基座通过独立验收后。
+> 状态日期：`kernel-kcp` 三方法 typed application handler 通过独立验收后。
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机、`domain-policy` 纯领域 matcher，以及 `kernel-sqlite` migration、AuditRecord、Event Outbox、rate limit 与 Task create/get repository。`system.ping` / `task.create` / `task.get` 的 typed application handler 合同已经闭合，可作为下一小功能直接编码；Rust handler 尚未实现。当前仍没有 Task 更新/list、Action/PermissionDecision repository、raw KCP preflight、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `system.ping` / `task.create` / `task.get` typed application handler。当前仍没有 Task 更新/list、Action/PermissionDecision repository、raw KCP preflight/全 Catalog dispatcher、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
 
 `domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
@@ -80,12 +80,16 @@
 - [x] 固定 Created/Replayed 均返回当前 Task；Created 同时返回可信绑定的 committed Event ID，只有 Created 产生 durable Outbox 的 post-commit Publisher wake-up intent，通知失败不回滚、不声明 delivered。
 - [x] 固定三个方法按 backend/`StoreErrorCode` 的 KCP code、safe message、details=null、retryable 映射，不匹配错误 message。
 - [x] 增加完整 fake backend/clock/ID、deadline pre/post、Created/Replayed/get/notfound、每项错误与 payload/envelope Schema 的 Conformance 矩阵。
+- [x] 新增 `rust/crates/kernel-kcp`，只接收 generated typed envelope；实现三个 handler、闭集 ports、稳定 response/error 与 `HandlerContractFailure`，不提供 raw JSON/frame/dispatcher/server。
+- [x] 实现 `SqliteTaskBackend`，在 `with_write_transaction` 中复用现有 repository；当前 `StoreErrorCode` 无 wildcard 穷举映射。Created 的 operation Event UUID 由 repository append/verify + 外层 commit 证明，真实文件 SQLite 测试通过公开 Store API 绑定 intent、Outbox、Audit、Task、Scope 与 Origin，replay 不新增事实。
+- [x] 公共 `handle_*` 固定内置 generated Schema response 门；validator fault seam 只存在于 crate 私有 unit test，不是 public API/feature/SDK。
+- [x] `kernel-kcp` 共 25 项测试（3 个 unit + 22 个 integration）。
+- [x] 新增 [`api/kernel-kcp.md`](api/kernel-kcp.md)。
 
 ## 未完成
 
 - [ ] 实现 Task 更新/list、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性；Task create/get 与 task creation Audit/Event canonical 一致性已实现。
 - [ ] 为其它 Command 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已持久化。
-- [ ] 实现 `system.ping` / `task.create` / `task.get` 库级 typed application handler 与 fake-port conformance 测试；不得同时实现 raw preflight 或 server。
 - [ ] 为 raw JSON/frame/preflight 和全 Catalog 方法可用性补齐独立合同；关闭前不得提供可连接 KCP server，也不新增 `method_unavailable`。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理（本批三方法合同不等于八方法可用）。
@@ -96,7 +100,7 @@
 
 ## 当前阻塞
 
-- 三方法 typed handler 的编码合同已关闭；当前直接下一步是库级 handler 与 fake ports。raw preflight、全 Catalog 可用性和 server 生命周期仍未关闭，禁止越过阶段门。
+- 三方法 typed handler 已完成；raw preflight、全 Catalog 可用性和 server 生命周期仍未关闭，禁止越过阶段门。
 - `task.create` repository 已完成；Delegation authority 正向路径仍未实现，任何非 null Delegation 固定返回 `delegation_not_found`。
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
@@ -106,9 +110,9 @@
 
 ## 下一步
 
-1. 实现 `system.ping` / `task.create` / `task.get` 不可连接的库级 typed handler，严格按 §5.10 使用 fake backend/clock/IDs 完成 Conformance；不实现 server。
+1. 单独闭合 raw KCP preflight 与全 Catalog 可用性；仍不先启动 server。
 2. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
-3. 单独闭合 raw KCP preflight 与全 Catalog 可用性，再实现本地传输、Task/Event 纵切与 Publisher 循环。
+3. raw/dispatcher 合同闭合后，再实现本地传输、Task/Event 纵切与 Publisher 循环。
 4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
@@ -121,7 +125,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`kernel-sqlite` 39 项测试。workspace 总数以本次 `cargo test --workspace` 实际输出为准。
+全部通过；`kernel-kcp` 25 项测试。workspace 总数以本次 `cargo test --workspace` 实际输出为准。
 
 ## 事实来源
 
@@ -132,5 +136,6 @@ git diff --check
 - Schema：[`api/schema-generation.md`](api/schema-generation.md)
 - 状态机 API：[`api/domain-task.md`](api/domain-task.md)
 - Policy matcher API：[`api/domain-policy.md`](api/domain-policy.md)
+- Typed handler API：[`api/kernel-kcp.md`](api/kernel-kcp.md)
 - Task repository 契约：[`api/task-repository-contract.md`](api/task-repository-contract.md)
 - SQLite API：[`api/kernel-sqlite.md`](api/kernel-sqlite.md)

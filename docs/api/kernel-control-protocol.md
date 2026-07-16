@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：Envelope/Schema 与三个方法的 typed application handler 合同已闭合，但 Rust handler 尚未实现，仍无可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)，其中三个方法的实现边界见 [§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)。
+> 状态：Envelope/Schema 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现，仍无 raw preflight、全 Catalog dispatcher 或可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)，其中三个方法的实现边界见 [§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)。
 
 ## 定位
 
@@ -36,7 +36,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已由 `kernel-sqlite` repository 实现规范化、receipt/idempotency hash 与 Task/Scope/Origin/Audit/Event 单事务物化；`system.ping` / `task.create` / `task.get` 的下一步 typed handler 合同已经闭合，但代码与 server 均未实现，详见 [Task repository 创建与读取契约](task-repository-contract.md)。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
+完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已由 `kernel-sqlite` repository 实现规范化、receipt/idempotency hash 与 Task/Scope/Origin/Audit/Event 单事务物化；`kernel-kcp` 已实现 `system.ping` / `task.create` / `task.get` typed handler 与 SQLite adapter，详见 [`kernel-kcp.md`](kernel-kcp.md) 和 [Task repository 创建与读取契约](task-repository-contract.md)。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
 
 ## 三方法 typed handler 边界
 
@@ -51,7 +51,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 
 ## 实现阶段门
 
-下一小功能只能是不可连接的库级 typed handler 与 fake-port conformance 测试。raw preflight 与全 Catalog 可用性合同关闭前，不得启动 server，也不新增 `method_unavailable`。
+当前已完成阶段门允许的不可连接 typed handler。下一批仍须单独闭合 raw preflight 与全 Catalog 可用性；在此之前不得启动 server，也不新增 `method_unavailable`。
 
 
 ## Cursor
@@ -60,7 +60,7 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 
 ## 当前不可用项
 
-- 没有 typed application handler Rust 实现；
+- 已有三个 typed application handler Rust 实现，但只接收 typed envelope；
 - 没有 raw JSON/frame/preflight 与全 Catalog dispatcher；
 - 没有 Socket/Pipe server；
 - 没有可运行的 agentd 或方法处理实现；
@@ -73,4 +73,4 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 - KCP Envelope 与八方法 request/response JSON Schema：`schemas/source/kcp/`；
 - 生成的 Rust 类型、manifest catalog，以及 Command/Query/Event 的 typed envelope decode 与运行时校验：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）；
 - Response Envelope 只按 `status = ok | error` 校验。它不携带原始方法 discriminator，因此不生成方法级 typed envelope；handler/客户端必须根据原请求方法用对应 response Schema 校验成功 `payload`，再校验通用 Response Envelope；
-- 这不表示 KCP handler 或 server 已可用。
+- 这表示三个 typed handler 已可供未来组合根调用，不表示 KCP server 已可连接。
