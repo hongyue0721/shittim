@@ -1,18 +1,26 @@
 # Error Catalog
 
-> 状态：Schema 与 `system.ping` / `task.create` / `task.get` typed handler 的稳定映射均已实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录) 与 [§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping)。
+> 状态：Schema 与 `system.ping` / `task.create` / `task.get` typed handler 的稳定映射均已实现；Value preflight 的精确分类与固定消息已规范化但 Rust 尚未实现。机器错误码与固定字段的唯一事实源见 [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-首批错误目录)、[§5.10.5](../../specs/IMPLEMENTATION_CONTRACTS.md#5105-稳定-kcp-error-mapping) 与 [§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)。
 
-## Preflight 与 typed handler 分界
+## Value preflight 与 typed handler 分界
 
-raw JSON/frame 层在 Envelope Schema、payload Schema、protocol/auth/method/schema 版本或 typed decode 失败时，可以返回：
+Value preflight 只接收已经解析的 `serde_json::Value`。request ID 不可关联时返回本地 `PreflightLocalRejection`，不发送 wire response。可关联时严格按固定优先级检查 family/protocol/auth/method/根 payload version，再执行完整 Schema 与 generated typed decode。
 
-- `invalid_request`
-- `unsupported_protocol_version`
-- `unsupported_schema_version`
-- `unsupported_method`
-- `unsupported_auth_schema`
+五类 wire error 固定为：
 
-三个 typed application handler 的输入已经通过这些门，因此不得在 handler 内返回 `invalid_request`，也不新增 `method_unavailable`。
+| code | 固定 message | details | retryable |
+|---|---|---|---:|
+| `invalid_request` | `request is invalid` | null | false |
+| `unsupported_protocol_version` | `protocol version is not supported` | null | false |
+| `unsupported_schema_version` | `payload schema version is not supported` | null | false |
+| `unsupported_method` | `method is not supported` | null | false |
+| `unsupported_auth_schema` | `authentication schema is not supported` | null | false |
+
+错误类型缺失通常是 `invalid_request`；只有确认是 string/integer 后的不支持值进入 `unsupported_*`。根 `payload.schema_version` integer 非 1 才是 `unsupported_schema_version`；嵌套版本或普通字段失败是 `invalid_request`。跨 family 方法名是 `unsupported_method`。
+
+最终 error response 必须通过不可替换 generated Response Schema。catalog/schema/generated mapping 的内部不一致返回本地 ContractFailure；实现禁止按错误 message 猜分类。
+
+三个 typed application handler 的正常 dispatcher 输入已经通过 preflight、完整 Schema、typed decode 与 registration narrow，因此不得在 handler 内返回 `invalid_request`；现有公共 `handle_*` 的错误直调仍是本地 InputMethodMismatch。五个合法但未注册的方法返回本地不可序列化 `KnownCatalogMethodNotImplemented`，也不新增 `method_unavailable`。
 
 ## 三方法稳定映射
 

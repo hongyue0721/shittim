@@ -1,12 +1,14 @@
 # kernel-kcp typed application handler
 
-`kernel-kcp` 是一个**不可连接**的 Rust 库级 application handler crate。它只接收 `kernel-contracts` 已完成 Schema preflight 与 typed decode 的 envelope，并实现：
+> 相关下一层合同：[`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。该 Value preflight/registration/dispatcher 尚未有 Rust 实现。
+
+`kernel-kcp` 当前实现是一个**不可连接**的 Rust 库级 application handler crate。它只接收 `kernel-contracts` 已完成 Schema preflight 与 typed decode 的 envelope；未来 §5.11 dispatcher 会在调用前再完成三方法 registration narrow。当前公共 `handle_*` 仍以本地 `InputMethodMismatch` 防御错误调用，并实现：
 
 - `system.ping`；
 - `task.create`；
 - `task.get`。
 
-它不接受 raw JSON 或 transport frame，不提供 dispatcher、Socket、Named Pipe、server、`agentd`、Event/Stop 或 `task.list`。
+它当前不接受 `serde_json::Value` 或 transport frame，也不提供 preflight、registration narrow、dispatcher、Socket、Named Pipe、server、`agentd`、Event/Stop 或 `task.list` handler。§5.11 已定义未来不可连接 dispatcher 必须如何调用本 crate 的三个公共 handler。
 
 ## 边界
 

@@ -1,10 +1,10 @@
 # Shittim 实现进度
 
-> 状态日期：`kernel-kcp` 三方法 typed application handler 通过独立验收后。
+> 状态日期：KCP `serde_json::Value` preflight + 三方法注册式 dispatcher 合同闭合后（仅规范/测试锚点，Rust 未实现）。
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `system.ping` / `task.create` / `task.get` typed application handler。当前仍没有 Task 更新/list、Action/PermissionDecision repository、raw KCP preflight/全 Catalog dispatcher、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `system.ping` / `task.create` / `task.get` typed application handler。本批进一步闭合了 `serde_json::Value` preflight、全八方法 typed Accepted、三方法 registration narrow 与 typed dispatcher 的规范/Conformance/API 合同，但没有新增 Rust 实现。当前仍没有 Task 更新/list、Action/PermissionDecision repository、Value preflight/dispatcher Rust、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
 
 `domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
@@ -72,7 +72,7 @@
 
 ### KCP typed application handler 合同
 
-- [x] 闭合 `system.ping` / `task.create` / `task.get` 的 typed validated input 边界；raw JSON/frame/preflight 留待独立批次。
+- [x] 闭合 `system.ping` / `task.create` / `task.get` 的 typed validated input 边界；当时未包含 Value preflight，现已由后续 §5.11 合同单独闭合。
 - [x] 固定成功 payload 方法级 Schema 门、最终 Response Envelope Schema 门、request_id 原样与 ok/error 互斥。
 - [x] 固定可注入 `KernelClock`、UUID/opaque ID generator 和闭集 `BackendError` 高阶 Task backend；SQLite adapter 穷举 `StoreErrorCode`，复用 `with_write_transaction` + 现有 repository，不暴露 transaction/SQL。
 - [x] 固定 deadline RFC 3339 UTC instant 比较与两次读取：入口先检查；create 事务不可中途取消，commit 后到期返回 `deadline_exceeded` 但事实保留并以同一 idempotency key 恢复。
@@ -86,11 +86,26 @@
 - [x] `kernel-kcp` 共 25 项测试（3 个 unit + 22 个 integration）。
 - [x] 新增 [`api/kernel-kcp.md`](api/kernel-kcp.md)。
 
+### KCP Value preflight 与注册式 dispatcher 合同
+
+- [x] 固定唯一输入为调用方已解析的 `serde_json::Value`；bytes/UTF-8/JSON parse/frame/clock/backend/ID 明确不在本层。
+- [x] 固定判定优先级：request_id response eligibility > message_kind/family > protocol > auth > family method > 根 payload.schema_version > 完整 Schema/generated typed decode。
+- [x] 固定可关联规则：顶层合法 UUID string 原样进入错误响应；非 object 或不可关联 request_id 本地拒绝且不发 wire response。
+- [x] 固定五类 preflight code/message，`details=null`、`retryable=false`；根 payload version 与嵌套/普通字段错误严格分离。
+- [x] method 按 generated Command/Query Catalog 判定，跨 family 名称为 `unsupported_method`；八方法合法请求均先成为 typed Accepted。
+- [x] 固定分步 API `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`，禁止一站式全 Catalog 执行入口。
+- [x] 三方法 narrow 为 `RegisteredRequest`；其余五个完整 decode 后返回不可序列化的本地 `KnownCatalogMethodNotImplemented`，不是 KCP error。
+- [x] 固定 caller invalid 与 catalog/schema/generated mapping 内部失败的结构化分类要求，禁止按错误 message 猜测。
+- [x] 固定 preflight error response 的不可替换 generated Schema 门与 crate-private fault seam。
+- [x] dispatcher 只复用现有 clock/ID/backend ports 路由 ping/create/get，不创造平行接口、不重复 Schema/deadline，并无损透传 `HandlerResult` 与 intents；五方法缺 handler 前继续禁止 server。
+- [x] 新增 [`api/kcp-preflight-dispatcher.md`](api/kcp-preflight-dispatcher.md)；本批未修改 Schema 或 Rust。
+
 ## 未完成
 
 - [ ] 实现 Task 更新/list、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性；Task create/get 与 task creation Audit/Event canonical 一致性已实现。
 - [ ] 为其它 Command 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已持久化。
-- [ ] 为 raw JSON/frame/preflight 和全 Catalog 方法可用性补齐独立合同；关闭前不得提供可连接 KCP server，也不新增 `method_unavailable`。
+- [ ] 按 §5.11 实现 `serde_json::Value` preflight、`kernel-contracts` 结构化错误来源分类、全八方法 typed Accepted、三方法 registration narrow 与 dispatcher；不得加入 bytes/frame/server，也不得增加一站式 `process_value`。
+- [ ] 为五个已知未注册方法实现正式 handler；完成前 `KnownCatalogMethodNotImplemented` 只作为本地注册完整性结果，server 阶段门保持关闭。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理（本批三方法合同不等于八方法可用）。
 - [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
@@ -100,7 +115,7 @@
 
 ## 当前阻塞
 
-- 三方法 typed handler 已完成；raw preflight、全 Catalog 可用性和 server 生命周期仍未关闭，禁止越过阶段门。
+- Value preflight/registration/dispatcher 的规范与测试矩阵已闭合，但 Rust 尚未实现；五个 Catalog 方法也没有 handler，因此 server 生命周期仍被硬性阻塞。
 - `task.create` repository 已完成；Delegation authority 正向路径仍未实现，任何非 null Delegation 固定返回 `delegation_not_found`。
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
@@ -110,10 +125,11 @@
 
 ## 下一步
 
-1. 单独闭合 raw KCP preflight 与全 Catalog 可用性；仍不先启动 server。
+1. 按 §5.11 实现不可连接的 Value preflight、结构化 contract error 分类、registration narrow 与三方法 dispatcher，并完成新增 Conformance 矩阵。
 2. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
-3. raw/dispatcher 合同闭合后，再实现本地传输、Task/Event 纵切与 Publisher 循环。
-4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
+3. 为剩余五个 Catalog 方法逐个提供正式 handler；八方法 registration 完整后再关闭 server 阶段门。
+4. 随后实现本地传输、Task/Event 纵切与 Publisher 循环。
+5. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
 
@@ -136,6 +152,7 @@ git diff --check
 - Schema：[`api/schema-generation.md`](api/schema-generation.md)
 - 状态机 API：[`api/domain-task.md`](api/domain-task.md)
 - Policy matcher API：[`api/domain-policy.md`](api/domain-policy.md)
+- Value preflight/dispatcher 合同：[`api/kcp-preflight-dispatcher.md`](api/kcp-preflight-dispatcher.md)
 - Typed handler API：[`api/kernel-kcp.md`](api/kernel-kcp.md)
 - Task repository 契约：[`api/task-repository-contract.md`](api/task-repository-contract.md)
 - SQLite API：[`api/kernel-sqlite.md`](api/kernel-sqlite.md)

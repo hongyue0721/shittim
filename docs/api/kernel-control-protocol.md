@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：Envelope/Schema 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现，仍无 raw preflight、全 Catalog dispatcher 或可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)，其中三个方法的实现边界见 [§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)。
+> 状态：Envelope/Schema 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现；`serde_json::Value` preflight + 三方法注册式 dispatcher 合同已在 [§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher) 闭合，但 Rust 尚未实现，仍无可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -38,9 +38,17 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 
 完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已由 `kernel-sqlite` repository 实现规范化、receipt/idempotency hash 与 Task/Scope/Origin/Audit/Event 单事务物化；`kernel-kcp` 已实现 `system.ping` / `task.create` / `task.get` typed handler 与 SQLite adapter，详见 [`kernel-kcp.md`](kernel-kcp.md) 和 [Task repository 创建与读取契约](task-repository-contract.md)。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
 
+## Value preflight 与 registration 合同
+
+- 输入只接受调用方已经解析的 `serde_json::Value`，不接 bytes/UTF-8/JSON parse/frame。
+- 固定优先级为 request_id 可关联性、message family、protocol、auth、family method、根 payload schema version、完整 Schema/generated decode。
+- request ID 不可关联时本地拒绝且不发响应；可关联的五类 preflight error 使用固定安全 message、`details=null`、`retryable=false`，并经过不可替换 Response Schema 门。
+- 八方法合法请求都必须先成为 generated typed Accepted；三方法 narrow 为 `RegisteredRequest`，其余五个得到本地不可序列化 `KnownCatalogMethodNotImplemented`，不是 wire error。
+- 公开调用必须分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`；详见 [`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。当前这些 Rust API 尚未实现。
+
 ## 三方法 typed handler 边界
 
-- 输入已通过对应 Envelope Schema、方法 payload Schema 与 typed decode；raw JSON、frame、protocol/auth/method/schema preflight 不在此层，`invalid_request` 不由 typed handler 产生。
+- 输入已通过对应 Envelope Schema、方法 payload Schema 与 typed decode；正常 dispatcher 路径还会先 narrow 为 `RegisteredRequest`。现有公共 `handle_*` 对错误 family/variant 返回本地 InputMethodMismatch；`serde_json::Value` preflight、bytes/frame、protocol/auth/method/schema 分类不在 handler 内，`invalid_request` 不由 typed handler 产生。
 - 输出 payload 先按原方法 response Schema 校验，再将最终成功/错误 Response Envelope 按通用 Schema 校验。
 - 响应固定 `protocol_version=1.0`、`message_kind=response`、request ID 原样；success/error 互斥。Response 无 method discriminator，调用方依原请求方法校验成功 payload。
 - `KernelClock`、`KernelIdGenerator` 与闭集 `BackendError` 的 Task backend 可注入；backend 只暴露 create/get 高阶操作，不暴露 SQLite transaction 或 SQL。SQLite adapter 必须逐项把 `StoreErrorCode` 转成公开 backend 分类或 Internal，禁止消息匹配。
@@ -51,7 +59,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 
 ## 实现阶段门
 
-当前已完成阶段门允许的不可连接 typed handler。下一批仍须单独闭合 raw preflight 与全 Catalog 可用性；在此之前不得启动 server，也不新增 `method_unavailable`。
+当前三方法 typed handler 阶段门已完成，Value preflight/registration/dispatcher 合同也已闭合，但对应 Rust 尚未实现。即使实现后，五个 Catalog 方法仍缺正式 handler；在八方法 registration 完整、bytes/frame/transport/server 生命周期关闭前不得启动 server，也不新增 `method_unavailable`。
 
 
 ## Cursor
@@ -60,10 +68,11 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 
 ## 当前不可用项
 
-- 已有三个 typed application handler Rust 实现，但只接收 typed envelope；
-- 没有 raw JSON/frame/preflight 与全 Catalog dispatcher；
+- 已有三个 typed application handler Rust 实现，公共 API 只接收 typed envelope；未来正常 dispatcher 路径会先 narrow 为 registered request；
+- Value preflight/registration/dispatcher 只有合同与测试锚点，没有 Rust 实现；
+- 其余五个 Catalog 方法没有正式 handler；
 - 没有 Socket/Pipe server；
-- 没有可运行的 agentd 或方法处理实现；
+- 没有可运行的 `agentd` 组合根；
 - 没有 TypeScript client 包；
 - 没有认证扩展；
 - 没有 TCP/HTTP/JSON-RPC KCP endpoint。
@@ -73,4 +82,4 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 - KCP Envelope 与八方法 request/response JSON Schema：`schemas/source/kcp/`；
 - 生成的 Rust 类型、manifest catalog，以及 Command/Query/Event 的 typed envelope decode 与运行时校验：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）；
 - Response Envelope 只按 `status = ok | error` 校验。它不携带原始方法 discriminator，因此不生成方法级 typed envelope；handler/客户端必须根据原请求方法用对应 response Schema 校验成功 `payload`，再校验通用 Response Envelope；
-- 这表示三个 typed handler 已可供未来组合根调用，不表示 KCP server 已可连接。
+- 这表示三个 typed handler 已可供未来 dispatcher 调用；不表示 Value preflight、八方法 dispatcher 或 KCP server 已可用。

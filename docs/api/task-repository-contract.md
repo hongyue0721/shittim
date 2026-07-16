@@ -1,6 +1,6 @@
 # Task Repository 创建与读取契约
 
-> 状态：`kernel-sqlite` create/get repository 与 `kernel-kcp` 的 `system.ping` / `task.create` / `task.get` typed handler 均已实现；raw preflight 与 server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
+> 状态：`kernel-sqlite` create/get repository 与 `kernel-kcp` 的 `system.ping` / `task.create` / `task.get` typed handler 均已实现；Value preflight/registration/dispatcher 只有合同，server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)、[§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
 
 ## 范围
 
@@ -67,6 +67,6 @@ Kernel 上层先用第一次 `KernelClock` 读取同时完成入口 deadline 检
 ## 未实现
 
 - Delegation authority 正向查询；非 null Delegation 固定失败；
-- `task.create` / `task.get` raw preflight、dispatcher 与 server；
+- `task.create` / `task.get` Value preflight、registration、dispatcher 与 server；
 - Task 更新、`task.list` cursor/查询；
 - Action、PermissionDecision repository。
