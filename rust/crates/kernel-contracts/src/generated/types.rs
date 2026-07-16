@@ -62,6 +62,7 @@ pub struct ActionRequestRecoveryMeta {
     pub recovery_attempt_refs: Vec<String>,
     pub recovery_attempted: bool,
     pub recovery_decision_candidate_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub unknown_side_effect_at: Option<String>,
 }
 
@@ -69,6 +70,7 @@ pub struct ActionRequestRecoveryMeta {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActionRequestRollbackPolicy {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_rollback_on: Option<Vec<String>>,
     pub compensatable: bool,
     pub compensation_action_ref: Option<String>,
@@ -283,8 +285,11 @@ impl<'de> Deserialize<'de> for ApprovalRecordSchemaVersion { fn deserialize<D>(d
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalRecordTarget {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub action_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_step_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
 }
 
@@ -1036,6 +1041,7 @@ impl KcpResponseEnvelopeStatus {
 #[serde(deny_unknown_fields)]
 pub struct PermissionDecision {
     pub action_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_type: Option<PermissionDecisionApprovalType>,
     pub binding: PermissionDecisionBinding,
     pub decision: PermissionDecisionDecision,
@@ -1132,6 +1138,7 @@ pub struct PolicyRule {
     pub action_match: PolicyRuleActionMatch,
     pub actor_match: PolicyRuleActorMatch,
     pub condition: PolicyRuleCondition,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub confirmation_mode: Option<PolicyRuleConfirmationMode>,
     pub content_origin_match: PolicyRuleContentOriginMatch,
     pub created_at: String,
@@ -1157,6 +1164,7 @@ pub struct PolicyRule {
 pub struct PolicyRuleActionMatch {
     pub capability_ids: Vec<String>,
     pub operation_patterns: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub side_effect_max: Option<SideEffectClass>,
 }
 
@@ -1164,9 +1172,13 @@ pub struct PolicyRuleActionMatch {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyRuleActorMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_level_min: Option<PolicyRuleActorMatchAuthLevelMin>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub entry_point: Option<EntryPoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<PolicyRuleActorMatchKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source_patterns: Option<Vec<String>>,
 }
 
@@ -1228,9 +1240,13 @@ impl PolicyRuleActorMatchKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyRuleCondition {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub delegation_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_presence_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_limit: Option<PolicyRuleConditionRateLimit>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub time_window: Option<PolicyRuleConditionTimeWindow>,
 }
 
@@ -1341,7 +1357,9 @@ impl PolicyRuleConfirmationMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyRuleContentOriginMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub kinds: Option<Vec<PolicyRuleContentOriginMatchKindsItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source_patterns: Option<Vec<String>>,
 }
 
@@ -2162,7 +2180,9 @@ pub struct TaskSpec {
 #[serde(deny_unknown_fields)]
 pub struct TaskSpecFailedRecoveryMeta {
     pub attempted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_attempt_at: Option<String>,
     pub recovery_attempt_refs: Vec<String>,
 }

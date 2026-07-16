@@ -218,6 +218,154 @@ fn check_passes_on_clean_tree() {
 }
 
 #[test]
+fn envelope_field_ref_validation_siblings_fail_closed() {
+    let temp = temporary_repo("envelope-ref-validation-sibling");
+    let envelope_path = temp.join("schemas/source/kcp/command_envelope.v1.json");
+    let mut envelope = read_json(&envelope_path);
+    envelope["properties"]["actor"] = serde_json::json!({
+        "$ref": "https://schemas.shittim.local/v1/common/actor.json",
+        "description": "allowed annotation",
+        "minLength": 1
+    });
+    write_json(&envelope_path, &envelope);
+
+    assert_generate_fails(&temp, "$ref siblings with validation or shape semantics");
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn ref_validation_siblings_fail_closed_instead_of_being_ignored() {
+    let temp = temporary_repo("ref-validation-sibling");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut actor = read_json(&actor_path);
+    actor["properties"]["source"] = serde_json::json!({
+        "$ref": "https://schemas.shittim.local/v1/common/actor.json",
+        "minLength": 1
+    });
+    write_json(&actor_path, &actor);
+
+    assert_generate_fails(&temp, "$ref siblings with validation or shape semantics");
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn optional_non_null_fields_emit_skip_serializing_if() {
+    let temp = temporary_repo("optional-non-null-serde");
+    let schema_id = "https://schemas.shittim.local/v1/kcp/test_optional_nullability.json";
+    let schema_source = "schemas/source/kcp/test_optional_nullability.v1.json";
+    write_json(
+        &temp.join(schema_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": schema_id,
+            "title": "TestOptionalNullability",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "required_nullable", "required_present"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "required_present": {"type": "string"},
+                "required_nullable": {"type": ["string", "null"]},
+                "optional_non_null": {"type": "string"},
+                "optional_nullable": {"type": ["string", "null"]},
+                "optional_non_null_enum": {
+                    "type": "string",
+                    "enum": ["alpha", "beta"]
+                },
+                "optional_non_null_object": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "nested_optional_non_null": {"type": "string"}
+                    }
+                }
+            }
+        }),
+    );
+
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("manifest schemas")
+        .push(serde_json::json!({
+            "id": schema_id,
+            "title": "TestOptionalNullability",
+            "version": 1,
+            "source": schema_source,
+            "domain": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "generate failed: {stdout}\n{stderr}");
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("read generated types");
+
+    assert!(
+        types.contains("pub struct TestOptionalNullability"),
+        "missing generated struct"
+    );
+    assert!(
+        types.contains(
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null: Option<String>,"
+        ),
+        "optional non-null string must omit None: {types}"
+    );
+    assert!(
+        types.contains(
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_enum: Option<TestOptionalNullabilityOptionalNonNullEnum>,"
+        ),
+        "optional non-null enum must omit None"
+    );
+    assert!(
+        types.contains(
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_object: Option<TestOptionalNullabilityOptionalNonNullObject>,"
+        ),
+        "optional non-null object must omit None"
+    );
+    assert!(
+        types.contains(
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub nested_optional_non_null: Option<String>,"
+        ),
+        "nested optional non-null must omit None"
+    );
+    assert!(
+        types.contains("pub optional_nullable: Option<String>,"),
+        "optional nullable field must remain Option"
+    );
+    assert!(
+        !types.contains("skip_serializing_if = \"Option::is_none\"\n    pub optional_nullable")
+            && !types.lines().collect::<Vec<_>>().windows(2).any(|window| {
+                window[0].contains("skip_serializing_if")
+                    && window[1].contains("pub optional_nullable")
+            }),
+        "optional nullable must NOT skip (None stays explicit null)"
+    );
+    assert!(
+        types.contains("pub required_nullable: Option<String>,"),
+        "required nullable field must remain Option"
+    );
+    assert!(
+        !types.lines().collect::<Vec<_>>().windows(2).any(|window| {
+            window[0].contains("skip_serializing_if") && window[1].contains("pub required_nullable")
+        }),
+        "required nullable must NOT skip (None stays explicit null)"
+    );
+    assert!(
+        types.contains("pub required_present: String,"),
+        "required non-null must not be Option"
+    );
+
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
 fn validate_example_actor() {
     let (c, o, e) = run_tool(&[
         "validate",

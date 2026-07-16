@@ -16,7 +16,7 @@
 | KCP typed application handler / dispatcher | §5.10/§5.11 三步 API、注册集合与无损路由已实现 | 复用现有 Envelope/ping/create/get response/error Schema | private-state `TypedCatalogRequest`/`RegisteredRequest`、borrowing `TypedDispatcher`、handlers/ports/SQLite adapter | handler、unknown-schema/final-response fault seam、dispatcher clock/response/ContractFailure/Created intent；`kernel-kcp` 40 tests | 只能库级不可连接；五方法正式 handler 前禁止 server |
 | 首批三个事件 | 已定义 | 3 个 payload Schema | 尚无发布器 | 类型与 payload 错配测试 | 点号小写 |
 | KCP 本地传输 | ADR accepted；受 typed-only 阶段门约束 | 不适用 | 未开始 | 未开始 | Unix Socket / Windows Named Pipe；本批不拍 path/frame 新事实、不允许可连接 server |
-| Schema 生成链 | ADR accepted | 41 个 source + manifest；task.create executable fixture 不新增 Schema | schema-tool + kernel-contracts | meta/$ref/drift/JCS + task.create receipt/idempotency hash | 当前只生成 Rust |
+| Schema 生成链 | ADR accepted | 41 个 source + manifest；task.create executable fixture 不新增 Schema | schema-tool + kernel-contracts；optional/non-null 生成 serde omission | meta/$ref/drift/JCS + task.create receipt/idempotency hash + optional omission/required-null contract tests | 当前只生成 Rust；Approval target exactly-one 仍未由 Schema 强制 |
 | Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task、domain-policy、kernel-sqlite、kernel-kcp | fmt/clippy/workspace test | rustc/cargo 1.97.0；SQLite bundled |
 | TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 未开始 | 未开始 | Node 24.18.0 已可用 |
 | Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 将使用 Tauri/React/AntD，蓝白配色 |

@@ -1,10 +1,17 @@
 //! Contract-level validation tests for first-batch schemas.
 
 use kernel_contracts::{
-    sha256_canonical, validate_json, ContractError, ContractFailureClassification,
-    ContractFailureStage, EventPayload, KcpCommandEnvelopeProtocolVersion, KcpCommandPayload,
-    NullOnly, SchemaCatalog, TypedEventEnvelope, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope,
-    EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
+    sha256_canonical, validate_json, Actor, ActorAuthenticationLevel, ActorKind,
+    ActorSchemaVersion, ApprovalRecord, ApprovalRecordApprovalType, ApprovalRecordDecision,
+    ApprovalRecordSchemaVersion, ApprovalRecordTarget, ContractError,
+    ContractFailureClassification, ContractFailureStage, EntryPoint, EventPayload,
+    KcpCommandEnvelopeProtocolVersion, KcpCommandPayload, NullOnly, PermissionDecision,
+    PermissionDecisionBinding, PermissionDecisionDecision, PermissionDecisionSchemaVersion,
+    PolicyRule, PolicyRuleActionMatch, PolicyRuleActorMatch, PolicyRuleCondition,
+    PolicyRuleConfirmationMode, PolicyRuleContentOriginMatch, PolicyRuleCreatedBy,
+    PolicyRuleEffect, PolicyRuleResourceMatch, PolicyRuleSchemaVersion, PolicyRuleSource,
+    PolicyRuleUpdatedBy, SchemaCatalog, TypedEventEnvelope, TypedKcpCommandEnvelope,
+    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
 };
 use serde_json::{json, Value};
 
@@ -13,6 +20,9 @@ const ACTOR_ID: &str = "https://schemas.shittim.local/v1/common/actor.json";
 const ENTRY_POINT_ID: &str = "https://schemas.shittim.local/v1/common/entry_point.json";
 const TASK_STATUS_ID: &str = "https://schemas.shittim.local/v1/common/task_status.json";
 const POLICY_RULE_ID: &str = "https://schemas.shittim.local/v1/policy/policy_rule.json";
+const PERMISSION_DECISION_ID: &str =
+    "https://schemas.shittim.local/v1/policy/permission_decision.json";
+const APPROVAL_RECORD_ID: &str = "https://schemas.shittim.local/v1/policy/approval_record.json";
 const COMMAND_ID: &str = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
 const QUERY_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
 const RESPONSE_ID: &str = "https://schemas.shittim.local/v1/kcp/response_envelope.json";
@@ -380,6 +390,108 @@ fn policy_deny_forbids_confirmation_mode() {
 fn policy_confirm_with_mode_is_valid() {
     let rule = sample_policy_rule("confirm");
     validate_json(POLICY_RULE_ID, &rule).expect("confirm+mode ok");
+}
+
+#[test]
+fn policy_allow_and_deny_omit_confirmation_mode_on_serialize_and_validate() {
+    for effect in [PolicyRuleEffect::Allow, PolicyRuleEffect::Deny] {
+        let rule = sample_policy_rule_typed(effect);
+        assert!(rule.confirmation_mode.is_none());
+        let value = serde_json::to_value(&rule).expect("serialize PolicyRule");
+        assert!(
+            !value
+                .as_object()
+                .expect("object")
+                .contains_key("confirmation_mode"),
+            "{effect:?} must omit confirmation_mode, got {value}"
+        );
+        // Nested optional non-null match/condition members must also omit, not emit null.
+        assert_eq!(value["actor_match"], json!({}));
+        assert_eq!(value["content_origin_match"], json!({}));
+        assert_eq!(value["condition"], json!({}));
+        assert_eq!(
+            value["action_match"],
+            json!({"capability_ids": [], "operation_patterns": []})
+        );
+        validate_json(POLICY_RULE_ID, &value).expect("omit confirmation_mode must validate");
+    }
+}
+
+#[test]
+fn policy_allow_explicit_null_confirmation_mode_fails_schema() {
+    let mut rule = sample_policy_rule("allow");
+    rule.as_object_mut()
+        .expect("obj")
+        .insert("confirmation_mode".into(), Value::Null);
+    let err = validate_json(POLICY_RULE_ID, &rule).expect_err("null mode forbidden on allow");
+    assert!(!err.to_string().is_empty());
+}
+
+#[test]
+fn permission_decision_omits_approval_type_when_none_and_keeps_required_nulls() {
+    let decision = sample_permission_decision_typed();
+    assert!(decision.approval_type.is_none());
+    let value = serde_json::to_value(&decision).expect("serialize PermissionDecision");
+    let object = value.as_object().expect("object");
+    assert!(
+        !object.contains_key("approval_type"),
+        "optional non-null approval_type must be omitted, got {value}"
+    );
+    assert_eq!(object.get("matched_rule_ref"), Some(&Value::Null));
+    assert_eq!(object.get("expires_at"), Some(&Value::Null));
+    assert_eq!(object.get("lease_ref"), Some(&Value::Null));
+    validate_json(PERMISSION_DECISION_ID, &value).expect("omitted approval_type must validate");
+}
+
+#[test]
+fn permission_decision_explicit_null_approval_type_fails_schema() {
+    let decision = sample_permission_decision_typed();
+    let mut value = serde_json::to_value(&decision).expect("serialize");
+    value
+        .as_object_mut()
+        .expect("obj")
+        .insert("approval_type".into(), Value::Null);
+    let err = validate_json(PERMISSION_DECISION_ID, &value)
+        .expect_err("null approval_type is not allowed by Schema");
+    assert!(!err.to_string().is_empty());
+}
+
+#[test]
+fn approval_target_omits_none_members_but_exactly_one_is_not_schema_enforced() {
+    let record = sample_approval_record_typed();
+    let value = serde_json::to_value(&record).expect("serialize ApprovalRecord");
+    assert_eq!(value["target"], json!({}));
+    // Omission of all target members is currently Schema-valid because target is an open
+    // optional-object without minProperties/oneOf exclusivity. Exactly-one remains a known
+    // gap; this test must not claim it is solved.
+    validate_json(APPROVAL_RECORD_ID, &value).expect("empty target object currently validates");
+
+    let multi = ApprovalRecord {
+        target: ApprovalRecordTarget {
+            action_id: Some("11111111-1111-4111-8111-111111111111".into()),
+            task_id: Some("22222222-2222-4222-8222-222222222222".into()),
+            plan_step_id: None,
+        },
+        ..record
+    };
+    let multi_value = serde_json::to_value(&multi).expect("serialize multi-target");
+    assert_eq!(
+        multi_value["target"],
+        json!({
+            "action_id": "11111111-1111-4111-8111-111111111111",
+            "task_id": "22222222-2222-4222-8222-222222222222"
+        })
+    );
+    assert!(
+        !multi_value["target"]
+            .as_object()
+            .expect("target")
+            .contains_key("plan_step_id"),
+        "None target member must be omitted, not null"
+    );
+    // Multi-target is also currently Schema-valid; exclusivity is still open.
+    validate_json(APPROVAL_RECORD_ID, &multi_value)
+        .expect("multi-target currently validates; exactly-one is unresolved");
 }
 
 #[test]
@@ -896,4 +1008,115 @@ fn sample_stop_activate_command() -> Value {
             "origin_ref": null
         }
     })
+}
+
+fn sample_actor_typed() -> Actor {
+    Actor {
+        authentication_level: ActorAuthenticationLevel::Unauthenticated,
+        confidence: None,
+        id: "actor-local-user-1".into(),
+        kind: ActorKind::KnownUser,
+        revision: 1,
+        schema_version: ActorSchemaVersion,
+        source: "actor-source://local/desktop".into(),
+    }
+}
+
+fn sample_policy_rule_typed(effect: PolicyRuleEffect) -> PolicyRule {
+    let creator = sample_actor_typed();
+    PolicyRule {
+        action_match: PolicyRuleActionMatch {
+            capability_ids: vec![],
+            operation_patterns: vec![],
+            side_effect_max: None,
+        },
+        actor_match: PolicyRuleActorMatch {
+            auth_level_min: None,
+            entry_point: None,
+            kind: None,
+            source_patterns: None,
+        },
+        condition: PolicyRuleCondition {
+            delegation_required: None,
+            local_presence_required: None,
+            rate_limit: None,
+            time_window: None,
+        },
+        confirmation_mode: (effect == PolicyRuleEffect::Confirm)
+            .then_some(PolicyRuleConfirmationMode::Generic),
+        content_origin_match: PolicyRuleContentOriginMatch {
+            kinds: None,
+            source_patterns: None,
+        },
+        created_at: "2026-07-16T12:00:00Z".into(),
+        created_by: PolicyRuleCreatedBy {
+            actor: creator.clone(),
+            entry_point: EntryPoint::LocalDesktop,
+        },
+        description: "d".into(),
+        effect,
+        enabled: true,
+        expires_at: None,
+        id: "rule-1".into(),
+        name: "rule".into(),
+        priority: 1,
+        resource_match: PolicyRuleResourceMatch {
+            exclude_patterns: vec![],
+            scope_patterns: vec![],
+        },
+        revision: 1,
+        schema_version: PolicyRuleSchemaVersion,
+        source: PolicyRuleSource::UserDefined,
+        updated_at: "2026-07-16T12:00:00Z".into(),
+        updated_by: PolicyRuleUpdatedBy {
+            actor: creator,
+            entry_point: EntryPoint::LocalDesktop,
+        },
+    }
+}
+
+fn sample_permission_decision_typed() -> PermissionDecision {
+    PermissionDecision {
+        action_id: "11111111-1111-4111-8111-111111111111".into(),
+        approval_type: None,
+        binding: PermissionDecisionBinding {
+            action_id: "11111111-1111-4111-8111-111111111111".into(),
+            key_params_hash: "a".repeat(64),
+            plan_version: 0,
+            resource_refs: vec![],
+        },
+        decision: PermissionDecisionDecision::Allow,
+        decision_revision: 1,
+        evaluated_at: "2026-07-16T12:00:00Z".into(),
+        evaluation_context_hash: "b".repeat(64),
+        expires_at: None,
+        granted_scopes: vec![],
+        id: "33333333-3333-4333-8333-333333333333".into(),
+        lease_ref: None,
+        matched_rule_ref: None,
+        policy_set_revision: 0,
+        reason_codes: vec!["default_allow".into()],
+        schema_version: PermissionDecisionSchemaVersion,
+    }
+}
+
+fn sample_approval_record_typed() -> ApprovalRecord {
+    ApprovalRecord {
+        actor: sample_actor_typed(),
+        approval_type: ApprovalRecordApprovalType::UserConfirm,
+        created_at: "2026-07-16T12:00:00Z".into(),
+        decision: ApprovalRecordDecision::Deferred,
+        entry_point: EntryPoint::LocalDesktop,
+        evidence_refs: vec![],
+        expires_at: "2026-07-16T13:00:00Z".into(),
+        id: "44444444-4444-4444-8444-444444444444".into(),
+        resolved_at: None,
+        schema_version: ApprovalRecordSchemaVersion,
+        supersedes_ref: None,
+        target: ApprovalRecordTarget {
+            action_id: None,
+            plan_step_id: None,
+            task_id: None,
+        },
+    }
 }

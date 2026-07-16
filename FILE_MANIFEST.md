@@ -12,7 +12,7 @@
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 45 lines
-- `docs/PROGRESS.md` — 155 lines
+- `docs/PROGRESS.md` — 156 lines
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 116 lines
@@ -23,7 +23,7 @@
 - `docs/api/kernel-control-protocol.md` — 84 lines
 - `docs/api/kernel-kcp.md` — 53 lines
 - `docs/api/kernel-sqlite.md` — 143 lines
-- `docs/api/schema-generation.md` — 80 lines
+- `docs/api/schema-generation.md` — 88 lines
 - `docs/api/task-repository-contract.md` — 72 lines
 - `docs/sdk/README.md` — 33 lines
 - `docs/sdk/extension-sdk.md` — 35 lines

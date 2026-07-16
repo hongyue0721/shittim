@@ -35,6 +35,11 @@ struct StructField {
     rust_name: String,
     ty: RustType,
     required: bool,
+    /// Whether the Schema property type itself accepts JSON null.
+    ///
+    /// Optional non-null fields serialize with omission (`skip_serializing_if`), while
+    /// nullable fields keep explicit `null` so required-nullable contracts stay intact.
+    allows_null: bool,
 }
 
 #[derive(Debug, Default)]
@@ -242,6 +247,7 @@ fn emit_struct_from_schema(
         fields.push(StructField {
             rust_name: to_snake_case(&json_name),
             required: required.contains(&json_name),
+            allows_null: schema_allows_null(registry, schema_id, property)?,
             ty: schema_to_type(registry, collector, schema_id, property, &hint)?,
             json_name,
         });
@@ -271,6 +277,10 @@ fn schema_to_type(
         ));
     }
     validate_supported_schema_node(schema, base_id)?;
+
+    if schema.get("$ref").is_some() {
+        ensure_ref_has_only_annotation_siblings(schema, base_id)?;
+    }
 
     if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
         let (resolved_id, resolved_schema) = resolve_ref(registry, base_id, reference)?;
@@ -521,8 +531,17 @@ fn render_struct(type_name: &str, schema_id: &str, fields: &[StructField]) -> St
                 other => RustType::Option(Box::new(other)),
             };
         }
+        let mut serde_attrs = Vec::new();
         if field.rust_name != field.json_name {
-            body.push_str(&format!("    #[serde(rename = {:?})]\n", field.json_name));
+            serde_attrs.push(format!("rename = {:?}", field.json_name));
+        }
+        // required=false && allows_null=false => omit None; do not invent null on the wire.
+        // required nullable and optional nullable keep explicit null (no skip).
+        if !field.required && !field.allows_null {
+            serde_attrs.push("skip_serializing_if = \"Option::is_none\"".to_string());
+        }
+        if !serde_attrs.is_empty() {
+            body.push_str(&format!("    #[serde({})]\n", serde_attrs.join(", ")));
         }
         let rendered = render_type_ref(&ty);
         body.push_str(&format!("    pub {}: {},\n", field.rust_name, rendered));
@@ -952,6 +971,9 @@ fn typed_wire_type(
     schema: &Value,
     field_name: &str,
 ) -> Result<String> {
+    if schema.get("$ref").is_some() {
+        ensure_ref_has_only_annotation_siblings(schema, base_id)?;
+    }
     if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
         let (resolved_id, resolved) = resolve_ref(registry, base_id, reference)?;
         if reference.contains('#') {
@@ -1256,6 +1278,91 @@ fn is_object_schema(schema: &Value) -> bool {
 
 fn is_null_type(schema: &Value) -> bool {
     schema.get("type").and_then(Value::as_str) == Some("null")
+}
+
+fn ensure_ref_has_only_annotation_siblings(schema: &Value, location: &str) -> Result<()> {
+    let object = schema.as_object().ok_or_else(|| {
+        unsupported(
+            "$ref",
+            location,
+            "$ref node must be an object in restricted codegen",
+        )
+    })?;
+    const ALLOWED_REF_KEYS: &[&str] = &["$ref", "title", "description"];
+    if let Some(keyword) = object
+        .keys()
+        .find(|keyword| !ALLOWED_REF_KEYS.contains(&keyword.as_str()))
+    {
+        return Err(unsupported(
+            keyword,
+            location,
+            "$ref siblings with validation or shape semantics are not supported; compose them in an explicit source Schema instead",
+        ));
+    }
+    Ok(())
+}
+
+/// Derive whether a property Schema accepts JSON `null` under the restricted codegen surface.
+///
+/// Fail closed when the shape is outside the supported nullability forms: generation must not
+/// guess between omission and explicit null.
+fn schema_allows_null(registry: &SchemaRegistry, base_id: &str, schema: &Value) -> Result<bool> {
+    if schema == &Value::Bool(true) {
+        // `true` accepts every JSON value, including null.
+        return Ok(true);
+    }
+    if schema == &Value::Bool(false) {
+        return Ok(false);
+    }
+
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        ensure_ref_has_only_annotation_siblings(schema, base_id)?;
+        let (resolved_id, resolved_schema) = resolve_ref(registry, base_id, reference)?;
+        return schema_allows_null(registry, &resolved_id, &resolved_schema);
+    }
+
+    if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
+        // Restricted codegen only accepts nullable oneOf with exactly [null, T].
+        // Mirror that surface: nullability is true iff one branch is the null type.
+        // Ambiguous or unsupported oneOf is rejected by schema_to_type separately.
+        return Ok(variants.iter().any(is_null_type));
+    }
+
+    if is_nullable_string_enum(schema) {
+        return Ok(true);
+    }
+    if is_string_enum(schema) {
+        return Ok(false);
+    }
+
+    if let Some(value) = schema.get("const") {
+        return Ok(value.is_null());
+    }
+
+    match schema.get("type") {
+        Some(Value::String(kind)) => Ok(kind == "null"),
+        Some(Value::Array(kinds)) => {
+            if kinds.iter().any(|value| !value.is_string()) {
+                return Err(unsupported(
+                    "type",
+                    base_id,
+                    "type union contains a non-string member; cannot derive nullability",
+                ));
+            }
+            Ok(kinds.iter().any(|value| value.as_str() == Some("null")))
+        }
+        None if schema.get("properties").is_some() => Ok(false),
+        None => Err(unsupported(
+            "type",
+            base_id,
+            "cannot derive nullability without type/$ref/enum/const/oneOf",
+        )),
+        Some(other) => Err(unsupported(
+            "type",
+            base_id,
+            &format!("unsupported type form for nullability: {other}"),
+        )),
+    }
 }
 
 fn required_set(schema: &Value) -> BTreeSet<String> {

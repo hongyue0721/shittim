@@ -24,6 +24,7 @@
 - [x] 创建 41 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
 - [x] 实现 `schema-tool generate/check/validate/canonicalize`。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
+- [x] optional/non-null 字段由 Schema 元数据生成 `skip_serializing_if = "Option::is_none"`；required-nullable 仍输出显式 `null`；optional-nullable 保持 `None -> null` 不改 wire。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
 - [x] 拍板 `task.create` repository 四项阻塞：规范化后的完整 payload receipt hash、精确幂等等价 projection、TaskScope/ContentOrigin 初值、固定 `task.creation_recorded` producer 与 `task.created` 上层 ID 边界；新增独立复合 hash fixture，并由 Rust 契约测试和 schema-tool 实际 CLI 双路径共同验证。
@@ -96,7 +97,7 @@
 - [x] `narrow_to_registered` 对 generated payload enum 穷举，无 wildcard：三 registered + 五不可序列化 Known enum。
 - [x] 实现 borrowing `TypedDispatcher<C,G,B>`，直接调用三个 public `handle_*`，不增加平行 ports、不重复 deadline/Schema、不改写 `HandlerResult` 或 intent。
 - [x] 增加 static negative Serialize assertions、八方法合法 Value、priority/field/cross-family/root/nested version、known malformed/valid、固定 error response、private unknown-schema/final-response fault seam、dispatcher response/ContractFailure/Created intent 与 clock 路由测试。
-- [x] `kernel-contracts` 48 项测试；`schema-tool` 11 项测试；`kernel-kcp` 40 项测试（6 unit + 34 integration）。
+- [x] `kernel-contracts` 53 项测试；`schema-tool` 14 项测试；`kernel-kcp` 40 项测试（6 unit + 34 integration）。
 - [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
 
 ## 未完成
@@ -138,7 +139,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；workspace 共 215 项测试，`kernel-contracts` 48、`schema-tool` 11、`kernel-kcp` 40。
+全部通过；workspace 共 223 项测试，`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 40。
 
 ## 事实来源
 
