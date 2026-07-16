@@ -74,7 +74,7 @@ fn migration_is_idempotent_and_connection_pragmas_are_verified() {
     assert_eq!(journal.to_ascii_lowercase(), "wal");
     assert_eq!(foreign_keys, 1);
     assert_eq!(busy_timeout, 2_000);
-    assert_eq!(migration_count, 1);
+    assert_eq!(migration_count, 2);
 }
 
 #[test]
@@ -104,12 +104,18 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             row.get(0)
         })
         .expect("migration count");
-    assert_eq!(migration_count, 1);
+    assert_eq!(migration_count, 2);
     for table in [
         "aggregate_event_sequences",
         "outbox",
         "audit_records",
         "policy_rate_limit_consumptions",
+        "content_origins",
+        "content_origin_parent_refs",
+        "task_scopes",
+        "task_scope_source_refs",
+        "tasks",
+        "task_create_idempotency",
     ] {
         let count: i64 = connection
             .query_row(
@@ -119,6 +125,59 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             )
             .expect("table count");
         assert_eq!(count, 1, "missing table {table}");
+    }
+}
+
+#[test]
+fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
+    let database = TestDatabase::new();
+    let connection = database.raw();
+    migration::create_v1_database_for_test(&connection).expect("create v1 database");
+    let audit = valid_audit("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
+    crate::audit::insert_audit(&connection, &audit).expect("v1 audit");
+    let event = task_created_event(50, "v1-task");
+    let expected_event = crate::outbox::append_event(&connection, event).expect("v1 event");
+    drop(connection);
+
+    let store = database.open();
+    assert_eq!(
+        store.get_audit(&audit.id).expect("upgraded audit"),
+        Some(audit)
+    );
+    assert_eq!(
+        store
+            .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+            .expect("upgraded outbox"),
+        vec![expected_event]
+    );
+    let connection = database.raw();
+    let versions: Vec<i64> = {
+        let mut statement = connection
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .expect("versions statement");
+        statement
+            .query_map([], |row| row.get(0))
+            .expect("version rows")
+            .collect::<Result<_, _>>()
+            .expect("versions")
+    };
+    assert_eq!(versions, [1, 2]);
+    for table in [
+        "content_origins",
+        "content_origin_parent_refs",
+        "task_scopes",
+        "task_scope_source_refs",
+        "tasks",
+        "task_create_idempotency",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table count");
+        assert_eq!(count, 1, "missing upgraded table {table}");
     }
 }
 
@@ -216,7 +275,7 @@ fn migration_checksum_drift_and_too_new_are_rejected() {
         .raw()
         .execute(
             "INSERT INTO schema_migrations(version, name, checksum, applied_at) \
-             VALUES (2, 'future', ?1, '2026-01-01T00:00:00Z')",
+             VALUES (3, 'future', ?1, '2026-01-01T00:00:00Z')",
             ["a".repeat(64)],
         )
         .expect("insert future migration");

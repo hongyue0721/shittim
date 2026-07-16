@@ -4,9 +4,9 @@
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机、`domain-policy` 纯领域 matcher，以及 `kernel-sqlite` 文件 migration、不可变 AuditRecord、原子 Event Outbox、cursor/delivery 与 transaction-bound RateLimitPort。当前仍没有 Task/Action/PermissionDecision repository、KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task` 纯领域 Task/Action 状态机、`domain-policy` 纯领域 matcher，以及 `kernel-sqlite` migration、AuditRecord、Event Outbox、rate limit 与 Task create/get repository。当前仍没有 Task 更新/list、Action/PermissionDecision repository、KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
 
-`domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 只拥有本批明确的 SQLite 基座，不伪造尚无权威表的跨对象一致性。
+`domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
 ## 已完成
 
@@ -66,13 +66,14 @@
 - [x] 实现十进制 cursor、严格 `>` 分页、历史读取、未投递重复读取/重启后重投的 at-least-once 语义与第一次 `delivered_at` 不可覆盖。
 - [x] 写事务对 closure panic 安全：panic 前写入回滚，释放连接 mutex guard 后恢复原 payload，后续同 store 可继续读写且锁不 poison。
 - [x] 实现只能从 `WriteTransaction` 获取的生产 `RateLimitPort`；preview 不消费，winner-only 在同一 `BEGIN IMMEDIATE` 中重新计数并插入。
-- [x] 使用真实临时文件与多 `SqliteStore` 验证 migration、Audit、Outbox 并发/回滚、panic、delivery、rate-limit 边界/隔离/竞争和 matcher winner-only；`kernel-sqlite` 共 24 项测试。
+- [x] 新增 migration 0002 与 Task create/get repository：canonical Task/TaskScope/ContentOrigin 单源、generated-column FK/index、关系 ordinal 镜像、幂等 replay/conflict、固定 Audit/Event 和严格 fail-closed 读取；不实现 list/update/KCP。
+- [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；`kernel-sqlite` 共 39 项测试。
 - [x] 新增 [`api/kernel-sqlite.md`](api/kernel-sqlite.md)。
 
 ## 未完成
 
-- [ ] 实现 Task/TaskScope/ContentOrigin/idempotency、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider、Task creation canonical 子事实跨对象一致性；这些必须复用现有 `WriteTransaction`。`task.create` 契约已拍板，Policy URI 单项 normalizer 已公开可复用，但没有表、migration 或 repository 实现。
-- [ ] 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已定义，尚未持久化。
+- [ ] 实现 Task 更新/list、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性；Task create/get 与 task creation Audit/Event canonical 一致性已实现。
+- [ ] 为其它 Command 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已持久化。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理。
 - [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
@@ -82,7 +83,7 @@
 
 ## 当前阻塞
 
-- `task.create` repository 的四项规范阻塞已关闭：receipt hash、idempotency projection、TaskScope/ContentOrigin 初值、固定 Audit/Event producer 均有精确契约和 fixture。实现仍未开始；当前没有 Task/Scope/Origin/idempotency 表，非 null Delegation 正向路径仍因 authority repository 缺失而固定返回 `delegation_not_found`。
+- `task.create` repository 已完成；当前阻塞转为 KCP handler/server 与 Delegation authority 正向路径。非 null Delegation 仍固定返回 `delegation_not_found`。
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于上述四项阻塞。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
@@ -91,7 +92,7 @@
 
 ## 下一步
 
-1. 按 [`api/task-repository-contract.md`](api/task-repository-contract.md) 在 `kernel-sqlite::WriteTransaction` 上实现 Task/TaskScope/ContentOrigin/idempotency repository 与固定 Task creation Audit/Event producer；实现前单独拍板 Task list cursor。
+1. 实现 `task.create` / `task.get` KCP 本地 handler/server，并保持 `task.list` cursor 未拍板、未实现。
 2. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
 3. 实现 KCP 本地传输和 Task 创建/查询/Event 轮询纵切，随后接入 Publisher 循环。
 4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
@@ -106,7 +107,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；`domain-task` 47 项测试，`domain-policy` 30 项测试，`kernel-contracts` 45 项测试（5 unit + 40 contract），`schema-tool` 11 项测试，`kernel-sqlite` 24 项测试，当前 workspace 共 157 项测试。
+全部通过；`kernel-sqlite` 39 项测试。workspace 总数以本次 `cargo test --workspace` 实际输出为准。
 
 ## 事实来源
 

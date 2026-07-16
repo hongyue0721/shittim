@@ -30,6 +30,18 @@ pub enum StoreErrorCode {
     SerializationFailed,
     /// A generated JSON contract rejected the record.
     ContractInvalid,
+    /// A generated TaskScope URI pattern is invalid.
+    InvalidScopePattern,
+    /// The same task.create idempotency scope contains a different business projection.
+    IdempotencyConflict,
+    /// Delegation lookup is not implemented or the referenced delegation does not exist.
+    DelegationNotFound,
+    /// The requested parent Task does not exist.
+    ParentTaskNotFound,
+    /// A requested parent ContentOrigin does not exist.
+    ParentOriginNotFound,
+    /// Stored canonical JSON or its relational projection is invalid.
+    StoredDataInvalid,
     /// A cursor, position, or page limit is invalid.
     InvalidCursor,
     /// The requested immutable record does not exist.
@@ -54,6 +66,12 @@ impl StoreErrorCode {
             Self::ConstraintViolation => "constraint_violation",
             Self::SerializationFailed => "serialization_failed",
             Self::ContractInvalid => "contract_invalid",
+            Self::InvalidScopePattern => "invalid_scope_pattern",
+            Self::IdempotencyConflict => "idempotency_conflict",
+            Self::DelegationNotFound => "delegation_not_found",
+            Self::ParentTaskNotFound => "parent_task_not_found",
+            Self::ParentOriginNotFound => "parent_origin_not_found",
+            Self::StoredDataInvalid => "stored_data_invalid",
             Self::InvalidCursor => "invalid_cursor",
             Self::NotFound => "not_found",
             Self::InternalStoreError => "internal_store_error",
@@ -116,6 +134,12 @@ fn safe_message(code: StoreErrorCode) -> &'static str {
         StoreErrorCode::ConstraintViolation => "SQLite constraint was violated",
         StoreErrorCode::SerializationFailed => "record serialization failed",
         StoreErrorCode::ContractInvalid => "record violates its JSON contract",
+        StoreErrorCode::InvalidScopePattern => "task scope contains an invalid URI pattern",
+        StoreErrorCode::IdempotencyConflict => "idempotency key was used for different task facts",
+        StoreErrorCode::DelegationNotFound => "delegation was not found",
+        StoreErrorCode::ParentTaskNotFound => "parent task was not found",
+        StoreErrorCode::ParentOriginNotFound => "parent content origin was not found",
+        StoreErrorCode::StoredDataInvalid => "stored repository data failed integrity validation",
         StoreErrorCode::InvalidCursor => "cursor, position, or page limit is invalid",
         StoreErrorCode::NotFound => "record was not found",
         StoreErrorCode::InternalStoreError => "internal SQLite store error",

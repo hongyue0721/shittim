@@ -1,10 +1,10 @@
-# Task Repository 创建契约
+# Task Repository 创建与读取契约
 
-> 状态：规范已拍板，repository 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
+> 状态：`kernel-sqlite` create/get repository 已实现；KCP handler/server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
 
 ## 范围
 
-下一笔 `kernel-sqlite` Task repository 必须实现 `task.create` 的本地事务物化与读取基础，但本仓库当前仍没有这些表、migration 或 API。不得把本文当作已实现能力。
+本批 `kernel-sqlite` 已实现 `task.create` 的本地事务物化，以及 Task、TaskScope、ContentOrigin 的严格读取基础。它仍不是 KCP handler，也不实现 `task.list`。
 
 ## 输入规范化
 
@@ -14,7 +14,7 @@
 - `payload.task_scope.resource_patterns[]`；
 - `payload.task_scope.exclusions[]`。
 
-使用 `domain-policy::{normalize_uri, normalize_uri_pattern}` 公开单项 API：`source_uri` 调用 `normalize_uri`，两个 pattern 数组由 repository 按输入顺序逐项调用 `normalize_uri_pattern`。该复用表面已经实现并使用同一 Policy parser/normalizer；数组顺序和重复项仍由 repository 保留，API 不排序、不去重、不聚合错误。Task repository 本身仍未实现。
+使用 `domain-policy::{normalize_uri, normalize_uri_pattern}` 公开单项 API：`source_uri` 调用 `normalize_uri`，两个 pattern 数组由 repository 按输入顺序逐项调用 `normalize_uri_pattern`。数组顺序和重复项由 repository 保留，API 不排序、不去重、不聚合错误。该路径已由 fixture 与 repository 测试覆盖。
 
 ## 两个 canonical hash
 
@@ -48,10 +48,18 @@ Kernel 上层先显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event UU
 
 `task.list` cursor 继续保持 opaque。具体编码和分页键技术选择必须在 repository 实现前通过 ADR 或 API 契约单独拍板。
 
+## 已实现范围
+
+- migration 0002 的 ContentOrigin、parent refs、TaskScope、source refs、TaskSpec 与 task.create idempotency 表；
+- `WriteTransaction::create_task` 内部 SAVEPOINT；
+- `SqliteStore::{get_task,get_task_scope,get_content_origin}` 严格读取；
+- canonical JSON 单一事实、generated column FK/index 投影、关系数组逐项镜像校验；
+- 同 scope 同 projection replay、不同 projection conflict；
+- 固定 `task.creation_recorded` 与唯一 `task.created` 同事务生产。
+
 ## 未实现
 
-- Task/TaskScope/ContentOrigin/idempotency 表和 migration；
-- Task repository Rust API；
-- Delegation authority 正向查询；
-- `task.create` KCP handler；
-- Task list cursor 编码。
+- Delegation authority 正向查询；非 null Delegation 固定失败；
+- `task.create` / `task.get` KCP handler 与 server；
+- Task 更新、`task.list` cursor/查询；
+- Action、PermissionDecision repository。

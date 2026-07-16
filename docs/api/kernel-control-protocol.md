@@ -36,7 +36,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已拍板只规范化 origin URI 和 TaskScope URI patterns，使用完整规范化 payload 计算 receipt hash，并使用精确 Envelope 业务投影计算幂等 hash；物化 Task/Scope/Origin/Audit/Event 的初值与单事务关系见 [Task repository 创建契约](task-repository-contract.md)。这些契约尚无 repository 或 handler 实现。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
+完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已由 `kernel-sqlite` repository 实现规范化、receipt/idempotency hash 与 Task/Scope/Origin/Audit/Event 单事务物化；KCP handler/server 尚未实现，详见 [Task repository 创建与读取契约](task-repository-contract.md)。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
 
 ## Cursor
 

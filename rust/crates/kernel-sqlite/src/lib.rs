@@ -1,9 +1,9 @@
 //! File-backed SQLite persistence base for the Kernel.
 //!
 //! This crate owns migrations, immutable AuditRecord JSON, atomic Event Outbox allocation,
-//! publisher storage operations, and transaction-bound policy rate-limit consumption. It does not
-//! implement Task/Action/PermissionDecision repositories, KCP, `agentd`, networking, or a
-//! Publisher loop.
+//! publisher storage operations, transaction-bound policy rate-limit consumption, and the Task
+//! create/get repository. It does not implement Task update/list, Action/PermissionDecision
+//! repositories, KCP, `agentd`, networking, or a Publisher loop.
 
 #![deny(missing_docs)]
 
@@ -13,6 +13,7 @@ mod error;
 mod migration;
 mod outbox;
 mod rate_limit;
+mod task;
 
 pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
@@ -20,9 +21,12 @@ pub use outbox::{
     MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit, PendingEvent,
 };
 pub use rate_limit::TransactionRateLimitPort;
+pub use task::{
+    CreateTaskResult, TaskCreateAllocation, TaskCreateCommand, TaskCreateEnvelopeFacts,
+};
 
 use chrono::{DateTime, Utc};
-use kernel_contracts::AuditRecord;
+use kernel_contracts::{AuditRecord, ContentOrigin, TaskScope, TaskSpec};
 use rusqlite::Connection;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
@@ -106,6 +110,24 @@ impl SqliteStore {
     pub fn get_audit(&self, id: &str) -> Result<Option<AuditRecord>, StoreError> {
         let connection = self.lock_connection()?;
         audit::get_audit(&connection, id)
+    }
+
+    /// Reads a Task and validates its ContentOrigin/TaskScope relation closure.
+    pub fn get_task(&self, id: &str) -> Result<Option<TaskSpec>, StoreError> {
+        let connection = self.lock_connection()?;
+        task::get_task(&connection, id)
+    }
+
+    /// Reads a TaskScope and validates ordered source mirrors and its owning Task.
+    pub fn get_task_scope(&self, id: &str) -> Result<Option<TaskScope>, StoreError> {
+        let connection = self.lock_connection()?;
+        task::get_task_scope(&connection, id)
+    }
+
+    /// Reads a ContentOrigin and validates ordered parent mirrors and parent existence.
+    pub fn get_content_origin(&self, id: &str) -> Result<Option<ContentOrigin>, StoreError> {
+        let connection = self.lock_connection()?;
+        task::get_content_origin(&connection, id)
     }
 
     /// Reads all historical Outbox rows strictly after a cursor.
@@ -199,5 +221,7 @@ fn unhealthy_store_error() -> StoreError {
     )
 }
 
+#[cfg(test)]
+mod task_tests;
 #[cfg(test)]
 mod tests;

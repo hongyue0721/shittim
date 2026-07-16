@@ -757,10 +757,12 @@ dependencies = [
  "domain-policy",
  "kernel-contracts",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]

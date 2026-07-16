@@ -11,11 +11,18 @@ struct Migration {
     sql: &'static str,
 }
 
-const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial",
-    sql: include_str!("../migrations/0001_initial.sql"),
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial",
+        sql: include_str!("../migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "task_repository",
+        sql: include_str!("../migrations/0002_task_repository.sql"),
+    },
+];
 
 pub(crate) fn apply_migrations(connection: &Connection) -> Result<(), StoreError> {
     ensure_migration_table(connection)?;
@@ -67,18 +74,28 @@ fn verify_applied(connection: &Connection) -> Result<(), StoreError> {
             ))
         })
         .map_err(|error| StoreError::sqlite(error, StoreErrorCode::MigrationFailed))?;
-    for row in rows {
-        let (version, name, checksum) =
-            row.map_err(|error| StoreError::sqlite(error, StoreErrorCode::MigrationFailed))?;
-        let Some(expected) = MIGRATIONS
-            .iter()
-            .find(|migration| migration.version == version)
-        else {
+    let applied = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::MigrationFailed))?;
+    if applied.len() > MIGRATIONS.len() {
+        return Err(StoreError::new(
+            StoreErrorCode::MigrationDrift,
+            "database migration ledger is not a binary prefix",
+        ));
+    }
+    for (index, (version, name, checksum)) in applied.into_iter().enumerate() {
+        let expected = MIGRATIONS.get(index).ok_or_else(|| {
+            StoreError::new(
+                StoreErrorCode::MigrationDrift,
+                "database migration ledger is not a binary prefix",
+            )
+        })?;
+        if version != expected.version {
             return Err(StoreError::new(
                 StoreErrorCode::MigrationDrift,
-                "database contains an unknown migration version",
+                "database migration ledger is not a continuous prefix",
             ));
-        };
+        }
         if name != expected.name || checksum != checksum_hex(expected.sql) {
             return Err(StoreError::new(
                 StoreErrorCode::MigrationDrift,
@@ -138,6 +155,12 @@ fn apply_one(connection: &Connection, migration: Migration) -> Result<(), StoreE
 
 fn checksum_hex(sql: &str) -> String {
     format!("{:x}", Sha256::digest(sql.as_bytes()))
+}
+
+#[cfg(test)]
+pub(crate) fn create_v1_database_for_test(connection: &Connection) -> Result<(), StoreError> {
+    ensure_migration_table(connection)?;
+    apply_one(connection, MIGRATIONS[0])
 }
 
 #[cfg(test)]
