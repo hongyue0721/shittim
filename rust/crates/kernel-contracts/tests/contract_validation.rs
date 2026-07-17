@@ -1,7 +1,7 @@
 //! Contract-level validation tests for first-batch schemas.
 
 use kernel_contracts::{
-    sha256_canonical, validate_json, Actor, ActorAuthenticationLevel, ActorKind,
+    sha256_canonical, validate_json, ActionStatus, Actor, ActorAuthenticationLevel, ActorKind,
     ActorSchemaVersion, ApprovalRecord, ApprovalRecordApprovalType, ApprovalRecordDecision,
     ApprovalRecordSchemaVersion, ApprovalRecordTarget, ContractError,
     ContractFailureClassification, ContractFailureStage, EntryPoint, EventPayload,
@@ -10,8 +10,10 @@ use kernel_contracts::{
     PolicyRule, PolicyRuleActionMatch, PolicyRuleActorMatch, PolicyRuleCondition,
     PolicyRuleConfirmationMode, PolicyRuleContentOriginMatch, PolicyRuleCreatedBy,
     PolicyRuleEffect, PolicyRuleResourceMatch, PolicyRuleSchemaVersion, PolicyRuleSource,
-    PolicyRuleUpdatedBy, SchemaCatalog, TypedEventEnvelope, TypedKcpCommandEnvelope,
-    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
+    PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest, TaskListRequestParentFilter,
+    TaskListRequestParentFilterMode, TaskListRequestProposer, TaskListRequestSchemaVersion,
+    TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope, EVENT_V1_TYPES,
+    KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
 };
 use serde_json::{json, Value};
 
@@ -1119,4 +1121,70 @@ fn sample_approval_record_typed() -> ApprovalRecord {
             task_id: None,
         },
     }
+}
+
+#[test]
+fn generated_string_enum_all_public_api_and_roundtrip() {
+    // Representative public API only — do not hand-list full Task/Action catalogs here.
+    assert!(!TaskStatus::ALL.is_empty());
+    assert!(!ActionStatus::ALL.is_empty());
+    assert_eq!(TaskStatus::ALL[0].as_str(), "candidate");
+    assert_eq!(ActionStatus::ALL[0].as_str(), "pending");
+
+    for status in TaskStatus::ALL {
+        let value = serde_json::to_value(status).expect("serialize TaskStatus");
+        assert_eq!(value, Value::String(status.as_str().to_owned()));
+        let roundtrip: TaskStatus = serde_json::from_value(value).expect("deserialize TaskStatus");
+        assert_eq!(roundtrip, *status);
+    }
+    for status in ActionStatus::ALL {
+        let value = serde_json::to_value(status).expect("serialize ActionStatus");
+        assert_eq!(value, Value::String(status.as_str().to_owned()));
+        let roundtrip: ActionStatus =
+            serde_json::from_value(value).expect("deserialize ActionStatus");
+        assert_eq!(roundtrip, *status);
+    }
+
+    assert_eq!(
+        TaskListRequestProposer::ALL,
+        &[
+            TaskListRequestProposer::User,
+            TaskListRequestProposer::Companion,
+            TaskListRequestProposer::System,
+        ]
+    );
+    assert!(
+        TaskListRequestProposer::ALL
+            .iter()
+            .all(|member| member.as_str() != "null"),
+        "nullable enum ALL must not contain null"
+    );
+
+    let with_none = TaskListRequest {
+        created_after: None,
+        cursor: None,
+        limit: 10,
+        parent_filter: TaskListRequestParentFilter {
+            mode: TaskListRequestParentFilterMode::Any,
+            task_id: None,
+        },
+        proposer: None,
+        schema_version: TaskListRequestSchemaVersion,
+        statuses: vec![TaskStatus::Candidate],
+    };
+    let value = serde_json::to_value(&with_none).expect("serialize TaskListRequest");
+    assert_eq!(value["proposer"], Value::Null);
+    let roundtrip: TaskListRequest =
+        serde_json::from_value(value).expect("deserialize TaskListRequest");
+    assert_eq!(roundtrip.proposer, None);
+
+    let with_user = TaskListRequest {
+        proposer: Some(TaskListRequestProposer::User),
+        ..with_none.clone()
+    };
+    let value = serde_json::to_value(&with_user).expect("serialize with proposer");
+    assert_eq!(value["proposer"], Value::String("user".into()));
+    let roundtrip: TaskListRequest =
+        serde_json::from_value(value).expect("deserialize with proposer");
+    assert_eq!(roundtrip.proposer, Some(TaskListRequestProposer::User));
 }

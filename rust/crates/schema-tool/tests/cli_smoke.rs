@@ -1368,3 +1368,281 @@ fn response_envelope_remains_untyped() {
     assert!(!typed.contains("TypedKcpResponseEnvelope"));
     assert!(typed.contains("TypedKcpCommandEnvelope"));
 }
+
+#[test]
+fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
+    let temp = temporary_repo("string-enum-order");
+    let schema_id = "https://schemas.shittim.local/v1/kcp/test_string_enum_order.json";
+    let source = "schemas/source/kcp/test_string_enum_order.v1.json";
+    write_json(
+        &temp.join(source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": schema_id,
+            "title": "TestStringEnumOrder",
+            "type": "string",
+            "enum": ["zeta", "alpha", "middle"]
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("manifest schemas")
+        .push(serde_json::json!({
+            "id": schema_id,
+            "title": "TestStringEnumOrder",
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": null
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "generate failed: {stdout}\n{stderr}");
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("types");
+
+    let enum_idx = types
+        .find("pub enum TestStringEnumOrder")
+        .expect("enum declaration");
+    let enum_block = &types[enum_idx..];
+    let zeta = enum_block.find("Zeta").expect("Zeta variant");
+    let alpha = enum_block.find("Alpha").expect("Alpha variant");
+    let middle = enum_block.find("Middle").expect("Middle variant");
+    assert!(
+        zeta < alpha && alpha < middle,
+        "variants must keep schema order zeta/alpha/middle: {enum_block}"
+    );
+
+    let all_idx = types.find("impl TestStringEnumOrder").expect("impl block");
+    let impl_block = &types[all_idx..];
+    let all_start = impl_block
+        .find("pub const ALL: &'static [Self] = &[")
+        .expect("ALL const");
+    let all_end = impl_block[all_start..].find("];").expect("ALL end");
+    let all_block = &impl_block[all_start..all_start + all_end];
+    let all_zeta = all_block.find("Self::Zeta").expect("ALL Zeta");
+    let all_alpha = all_block.find("Self::Alpha").expect("ALL Alpha");
+    let all_middle = all_block.find("Self::Middle").expect("ALL Middle");
+    assert!(
+        all_zeta < all_alpha && all_alpha < all_middle,
+        "ALL must keep schema order: {all_block}"
+    );
+
+    let as_str_start = impl_block.find("pub fn as_str").expect("as_str");
+    let as_str_block = &impl_block[as_str_start..];
+    let wire_zeta = as_str_block.find("\"zeta\"").expect("wire zeta");
+    let wire_alpha = as_str_block.find("\"alpha\"").expect("wire alpha");
+    let wire_middle = as_str_block.find("\"middle\"").expect("wire middle");
+    assert!(
+        wire_zeta < wire_alpha && wire_alpha < wire_middle,
+        "as_str must keep schema order: {as_str_block}"
+    );
+
+    assert!(
+        types.contains("fn test_string_enum_order_string_enum_contract"),
+        "auto contract test must be projected for the synthetic enum"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
+    let temp = temporary_repo("string-enum-wire-collision");
+    let schema_id = "https://schemas.shittim.local/v1/kcp/test_string_enum_collision.json";
+    let source = "schemas/source/kcp/test_string_enum_collision.v1.json";
+    write_json(
+        &temp.join(source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": schema_id,
+            "title": "TestStringEnumCollision",
+            "type": "string",
+            "enum": ["a-b", "a_b"]
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("manifest schemas")
+        .push(serde_json::json!({
+            "id": schema_id,
+            "title": "TestStringEnumCollision",
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": null
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0, "generate must fail on wire collision: {stdout}");
+    let lower = stderr.to_ascii_lowercase();
+    assert!(
+        lower.contains("collision") || lower.contains("variant"),
+        "expected collision wording: {stderr}"
+    );
+    assert!(
+        stderr.contains("TestStringEnumCollision") || stderr.contains(schema_id),
+        "error must include type identity: {stderr}"
+    );
+    assert!(
+        stderr.contains("a-b") && stderr.contains("a_b"),
+        "error must include both wire values: {stderr}"
+    );
+    assert!(
+        stderr.contains("AB") || lower.contains("variant"),
+        "error must include mapped variant: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
+    let temp = temporary_repo("nullable-string-enum-all");
+    let schema_id = "https://schemas.shittim.local/v1/kcp/test_nullable_string_enum.json";
+    let source = "schemas/source/kcp/test_nullable_string_enum.v1.json";
+    write_json(
+        &temp.join(source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": schema_id,
+            "title": "TestNullableStringEnum",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "proposer"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "proposer": {
+                    "type": ["string", "null"],
+                    "enum": ["user", "companion", "system", null]
+                }
+            }
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("manifest schemas")
+        .push(serde_json::json!({
+            "id": schema_id,
+            "title": "TestNullableStringEnum",
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "generate failed: {stdout}\n{stderr}");
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("types");
+
+    assert!(
+        types.contains("pub proposer: Option<TestNullableStringEnumProposer>"),
+        "nullable enum field must stay Option: {types}"
+    );
+    let enum_idx = types
+        .find("pub enum TestNullableStringEnumProposer")
+        .expect("proposer enum");
+    let enum_end = types[enum_idx..].find("\n}\n").expect("enum end");
+    let enum_block = &types[enum_idx..enum_idx + enum_end];
+    assert!(
+        !enum_block.lines().any(|line| {
+            let trimmed = line.trim();
+            trimmed == "Null,"
+                || trimmed == "Null"
+                || trimmed.contains("rename = \"null\"")
+                || trimmed.contains("=> \"null\"")
+        }),
+        "string enum variants must exclude null: {enum_block}"
+    );
+
+    let impl_idx = types
+        .find("impl TestNullableStringEnumProposer")
+        .expect("impl");
+    let impl_slice = &types[impl_idx..];
+    let all_start = impl_slice
+        .find("pub const ALL: &'static [Self] = &[")
+        .expect("ALL");
+    let all_end = impl_slice[all_start..].find("];").expect("ALL end");
+    let all_block = &impl_slice[all_start..all_start + all_end];
+    assert!(all_block.contains("Self::User"));
+    assert!(all_block.contains("Self::Companion"));
+    assert!(all_block.contains("Self::System"));
+    assert!(
+        !all_block.to_ascii_lowercase().contains("null"),
+        "ALL must exclude null: {all_block}"
+    );
+    // required nullable Option must NOT skip-serialize None
+    assert!(
+        !types.lines().collect::<Vec<_>>().windows(2).any(|window| {
+            window[0].contains("skip_serializing_if") && window[1].contains("pub proposer")
+        }),
+        "required nullable proposer must serialize None as explicit null"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn temporary_task_status_variant_is_appended_to_generated_all_without_renderer_change() {
+    let temp = temporary_repo("task-status-append-variant");
+    let status_path = temp.join("schemas/source/common/task_status.v1.json");
+    let mut status = read_json(&status_path);
+    status["enum"]
+        .as_array_mut()
+        .expect("task_status enum")
+        .push(serde_json::json!("awaiting_external"));
+    write_json(&status_path, &status);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "generate failed: {stdout}\n{stderr}");
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("types");
+    let task_impl = types
+        .split("impl TaskStatus")
+        .nth(1)
+        .expect("TaskStatus impl");
+    let all_start = task_impl
+        .find("pub const ALL: &'static [Self] = &[")
+        .expect("ALL");
+    let all_end = task_impl[all_start..].find("];").expect("ALL end");
+    let all_block = &task_impl[all_start..all_start + all_end];
+    assert!(
+        all_block.trim_end().ends_with("Self::AwaitingExternal,")
+            || all_block.contains("Self::AwaitingExternal"),
+        "new variant must appear in ALL: {all_block}"
+    );
+    // Must be last among ALL members.
+    let last_self = all_block.rfind("Self::").expect("last Self");
+    assert!(
+        all_block[last_self..].starts_with("Self::AwaitingExternal"),
+        "appended schema variant must be ALL tail: {all_block}"
+    );
+    assert!(
+        types.contains("Self::AwaitingExternal => \"awaiting_external\""),
+        "as_str must include appended wire"
+    );
+    assert!(
+        types.contains("#[serde(rename = \"awaiting_external\")]\n    AwaitingExternal,"),
+        "variant must be generated"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}

@@ -2,6 +2,10 @@
 //!
 //! Generated Rust types live in [`generated`]. They are produced by `schema-tool`
 //! from `schemas/source` and must not be hand-edited.
+//!
+//! Generated string enums expose `pub const ALL: &'static [Self]` in Schema
+//! declaration order (shared with variants/`as_str`). Nullable enums filter
+//! `null` from `ALL`; JSON null remains `Option::None` at use sites.
 
 pub mod canonical;
 pub mod error;

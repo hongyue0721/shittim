@@ -26,6 +26,7 @@
 - [x] 实现 `schema-tool generate/check/validate/canonicalize`。
 - [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> TargetPlan/TargetSchemaSet -> TargetContractGraph(ContractTypeId=$id+严格 RFC6901 Pointer) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；`manifest.id_base` 权威 namespace（canonical absolute http(s)+trailing `/`+组件归属；default-port/dot-segment 非 canonical，double-slash/percent path 按 Url 序列化语义）；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；envelope 唯一分析（0 payload ref => untyped；≥1 双射，mixed branch fail）；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；当前 41 无环输出与 HEAD byte-identical；TS renderer 仍未实现（声明即整体 fail，无部分写）。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
+- [x] string enum 生成 declaration-order `pub const ALL: &'static [Self]`（通用 `ProjectedShape::StringEnum` 路径；与 variants/`as_str` 共用有序 mapping；const 不生成 ALL；nullable 过滤 null）；`types.rs` 自动 `string_enum_contracts` 覆盖全部 string enum；**domain-task 手写 `TASK_STATUS_CATALOG`/`ACTION_STATUS_CATALOG` 仍未删除（下一 commit）**。
 - [x] optional/non-null 字段由 Schema 元数据生成 `skip_serializing_if = "Option::is_none"`；required-nullable 仍输出显式 `null`；optional-nullable 保持 `None -> null` 不改 wire。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。

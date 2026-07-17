@@ -119,6 +119,21 @@ pub enum ActionStatus {
 }
 
 impl ActionStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Pending,
+        Self::Approved,
+        Self::Leased,
+        Self::InFlight,
+        Self::Completed,
+        Self::Failed,
+        Self::UnknownSideEffect,
+        Self::RollingBack,
+        Self::RolledBack,
+        Self::RollbackFailed,
+        Self::Cancelled,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
@@ -163,6 +178,14 @@ pub enum ActorAuthenticationLevel {
 }
 
 impl ActorAuthenticationLevel {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Unauthenticated,
+        Self::Asserted,
+        Self::PlatformVerified,
+        Self::SystemAuthenticated,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Unauthenticated => "unauthenticated",
@@ -191,6 +214,16 @@ pub enum ActorKind {
 }
 
 impl ActorKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Owner,
+        Self::KnownUser,
+        Self::Guest,
+        Self::Companion,
+        Self::System,
+        Self::Extension,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Owner => "owner",
@@ -243,6 +276,15 @@ pub enum ApprovalRecordApprovalType {
 }
 
 impl ApprovalRecordApprovalType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserConfirm,
+        Self::LocalConfirm,
+        Self::SystemAuth,
+        Self::Delegation,
+        Self::Implicit,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserConfirm => "user_confirm",
@@ -266,6 +308,13 @@ pub enum ApprovalRecordDecision {
 }
 
 impl ApprovalRecordDecision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Approved,
+        Self::Denied,
+        Self::Deferred,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Approved => "approved",
@@ -351,6 +400,17 @@ pub enum AuditRecordAuditType {
 }
 
 impl AuditRecordAuditType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreationRecorded,
+        Self::CommandAccepted,
+        Self::PermissionEvaluated,
+        Self::KernelInvariantBlocked,
+        Self::EventPublished,
+        Self::RecoveryRecorded,
+        Self::ConfigChanged,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TaskCreationRecorded => "task.creation_recorded",
@@ -376,6 +436,13 @@ pub enum AuditRecordExternalContentStatus {
 }
 
 impl AuditRecordExternalContentStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::NotSent,
+        Self::Sent,
+        Self::Unknown,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NotSent => "not_sent",
@@ -399,6 +466,14 @@ pub enum AuditRecordLevel {
 }
 
 impl AuditRecordLevel {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserActivity,
+        Self::Operational,
+        Self::Security,
+        Self::Debug,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserActivity => "user_activity",
@@ -425,6 +500,15 @@ pub enum AuditRecordOutcome {
 }
 
 impl AuditRecordOutcome {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Succeeded,
+        Self::Failed,
+        Self::Blocked,
+        Self::Deferred,
+        Self::Observed,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Succeeded => "succeeded",
@@ -459,6 +543,13 @@ pub enum AuditRecordRollbackCapability {
 }
 
 impl AuditRecordRollbackCapability {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Compensatable,
+        Self::NotCompensatable,
+        Self::Unknown,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Compensatable => "compensatable",
@@ -496,6 +587,13 @@ pub enum AuditRecordTaskCreationContextProposer {
 }
 
 impl AuditRecordTaskCreationContextProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -529,6 +627,12 @@ pub enum CausationRefKind {
 }
 
 impl CausationRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::CommandRequest,
+        Self::Event,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CommandRequest => "command_request",
@@ -576,6 +680,14 @@ pub enum ContentOriginCarrierRefKind {
 }
 
 impl ContentOriginCarrierRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::CommandRequest,
+        Self::Task,
+        Self::Artifact,
+        Self::Event,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::CommandRequest => "command_request",
@@ -621,6 +733,20 @@ pub enum ContentOriginKind {
 }
 
 impl ContentOriginKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserInput => "user_input",
@@ -661,6 +787,15 @@ pub enum ContentOriginProducerRefKind {
 }
 
 impl ContentOriginProducerRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Actor,
+        Self::Model,
+        Self::Extension,
+        Self::Provider,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Actor => "actor",
@@ -700,6 +835,18 @@ pub enum EntryPoint {
 }
 
 impl EntryPoint {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::LocalDesktop,
+        Self::LocalIpcClient,
+        Self::AgentRuntime,
+        Self::PersonalRemoteChannel,
+        Self::GroupChannel,
+        Self::WebApi,
+        Self::ExtensionOriginatedEvent,
+        Self::SystemInternal,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::LocalDesktop => "local_desktop",
@@ -758,6 +905,13 @@ pub enum EventEnvelopeType {
 }
 
 impl EventEnvelopeType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreated,
+        Self::TaskStateChanged,
+        Self::StopFenceActivated,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TaskCreated => "task.created",
@@ -820,6 +974,13 @@ pub enum EventSubscribeRequestEventTypesItem {
 }
 
 impl EventSubscribeRequestEventTypesItem {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreated,
+        Self::TaskStateChanged,
+        Self::StopFenceActivated,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TaskCreated => "task.created",
@@ -879,6 +1040,12 @@ pub enum KcpCommandEnvelopeCommandType {
 }
 
 impl KcpCommandEnvelopeCommandType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreate,
+        Self::StopActivate,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::TaskCreate => "task.create",
@@ -980,6 +1147,16 @@ pub enum KcpQueryEnvelopeQueryType {
 }
 
 impl KcpQueryEnvelopeQueryType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::SystemPing,
+        Self::TaskGet,
+        Self::TaskList,
+        Self::EventSubscribe,
+        Self::EventPoll,
+        Self::StopStatus,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::SystemPing => "system.ping",
@@ -1028,6 +1205,12 @@ pub enum KcpResponseEnvelopeStatus {
 }
 
 impl KcpResponseEnvelopeStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Ok,
+        Self::Error,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ok => "ok",
@@ -1074,6 +1257,15 @@ pub enum PermissionDecisionApprovalType {
 }
 
 impl PermissionDecisionApprovalType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Implicit,
+        Self::UserConfirm,
+        Self::LocalConfirm,
+        Self::SystemAuth,
+        Self::Delegation,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Implicit => "implicit",
@@ -1113,6 +1305,16 @@ pub enum PermissionDecisionDecision {
 }
 
 impl PermissionDecisionDecision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Allow,
+        Self::Deny,
+        Self::RequireConfirmation,
+        Self::RequireLocalConfirmation,
+        Self::RequireSystemAuthentication,
+        Self::RequirePlanRevision,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Allow => "allow",
@@ -1196,6 +1398,14 @@ pub enum PolicyRuleActorMatchAuthLevelMin {
 }
 
 impl PolicyRuleActorMatchAuthLevelMin {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Unauthenticated,
+        Self::Asserted,
+        Self::PlatformVerified,
+        Self::SystemAuthenticated,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Unauthenticated => "unauthenticated",
@@ -1224,6 +1434,16 @@ pub enum PolicyRuleActorMatchKind {
 }
 
 impl PolicyRuleActorMatchKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Owner,
+        Self::KnownUser,
+        Self::Guest,
+        Self::Companion,
+        Self::System,
+        Self::Extension,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Owner => "owner",
@@ -1275,6 +1495,15 @@ pub enum PolicyRuleConditionRateLimitKeyScope {
 }
 
 impl PolicyRuleConditionRateLimitKeyScope {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Rule,
+        Self::Actor,
+        Self::Task,
+        Self::Action,
+        Self::Resource,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Rule => "rule",
@@ -1316,6 +1545,17 @@ pub enum PolicyRuleConditionTimeWindowWeekdaysItem {
 }
 
 impl PolicyRuleConditionTimeWindowWeekdaysItem {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Monday,
+        Self::Tuesday,
+        Self::Wednesday,
+        Self::Thursday,
+        Self::Friday,
+        Self::Saturday,
+        Self::Sunday,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Monday => "monday",
@@ -1343,6 +1583,14 @@ pub enum PolicyRuleConfirmationMode {
 }
 
 impl PolicyRuleConfirmationMode {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Generic,
+        Self::Local,
+        Self::SystemAuthentication,
+        Self::PlanRevision,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Generic => "generic",
@@ -1389,6 +1637,20 @@ pub enum PolicyRuleContentOriginMatchKindsItem {
 }
 
 impl PolicyRuleContentOriginMatchKindsItem {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserInput => "user_input",
@@ -1425,6 +1687,13 @@ pub enum PolicyRuleEffect {
 }
 
 impl PolicyRuleEffect {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Allow,
+        Self::Confirm,
+        Self::Deny,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Allow => "allow",
@@ -1460,6 +1729,13 @@ pub enum PolicyRuleSource {
 }
 
 impl PolicyRuleSource {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserDefined,
+        Self::CompanionGenerated,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserDefined => "user_defined",
@@ -1511,6 +1787,15 @@ pub enum RecoveryAttemptRefOutcome {
 }
 
 impl RecoveryAttemptRefOutcome {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::InProgress,
+        Self::Recovered,
+        Self::NotRecovered,
+        Self::Inconclusive,
+        Self::Cancelled,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InProgress => "in_progress",
@@ -1566,6 +1851,16 @@ pub enum RecoveryDecisionCandidateCandidateKind {
 }
 
 impl RecoveryDecisionCandidateCandidateKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::VerifyExternalState,
+        Self::RetryOriginal,
+        Self::Compensate,
+        Self::ContinueTask,
+        Self::StopTask,
+        Self::MarkFailed,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::VerifyExternalState => "verify_external_state",
@@ -1608,6 +1903,14 @@ pub enum RecoveryDecisionCandidateStatus {
 }
 
 impl RecoveryDecisionCandidateStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Proposed,
+        Self::Selected,
+        Self::Rejected,
+        Self::Expired,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Proposed => "proposed",
@@ -1632,6 +1935,14 @@ pub enum RecoveryDecisionCandidateTrigger {
 }
 
 impl RecoveryDecisionCandidateTrigger {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UnknownSideEffect,
+        Self::Failed,
+        Self::CancelWithCommittedEffect,
+        Self::CompensationUnknown,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UnknownSideEffect => "unknown_side_effect",
@@ -1660,6 +1971,16 @@ pub enum SideEffectClass {
 }
 
 impl SideEffectClass {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::S0,
+        Self::S1,
+        Self::S2,
+        Self::S3,
+        Self::S4,
+        Self::S5,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::S0 => "S0",
@@ -1851,6 +2172,20 @@ pub enum TaskCreateRequestOriginKind {
 }
 
 impl TaskCreateRequestOriginKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::UserInput => "user_input",
@@ -1891,6 +2226,15 @@ pub enum TaskCreateRequestOriginProducerRefKind {
 }
 
 impl TaskCreateRequestOriginProducerRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Actor,
+        Self::Model,
+        Self::Extension,
+        Self::Provider,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Actor => "actor",
@@ -1920,6 +2264,13 @@ pub enum TaskCreateRequestProposer {
 }
 
 impl TaskCreateRequestProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -1991,6 +2342,13 @@ pub enum TaskCreatedPayloadProposer {
 }
 
 impl TaskCreatedPayloadProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -2067,6 +2425,13 @@ pub enum TaskListRequestParentFilterMode {
 }
 
 impl TaskListRequestParentFilterMode {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Any,
+        Self::Root,
+        Self::Exact,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Any => "any",
@@ -2088,6 +2453,13 @@ pub enum TaskListRequestProposer {
 }
 
 impl TaskListRequestProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -2199,6 +2571,13 @@ pub enum TaskSpecProposer {
 }
 
 impl TaskSpecProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::User => "user",
@@ -2267,6 +2646,24 @@ pub enum TaskStatus {
 }
 
 impl TaskStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Candidate,
+        Self::AwaitingApproval,
+        Self::Planned,
+        Self::Rejected,
+        Self::Running,
+        Self::WaitingUser,
+        Self::Paused,
+        Self::PartiallyCompleted,
+        Self::Succeeded,
+        Self::Failed,
+        Self::Cancelled,
+        Self::RollingBack,
+        Self::RolledBack,
+        Self::Archived,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Candidate => "candidate",
@@ -2336,6 +2733,15 @@ pub enum VerificationResultObservationsItemCheckType {
 }
 
 impl VerificationResultObservationsItemCheckType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::ReturnCode,
+        Self::ResourceState,
+        Self::SnapshotDiff,
+        Self::ExternalQuery,
+        Self::UserConfirm,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ReturnCode => "return_code",
@@ -2359,6 +2765,13 @@ pub enum VerificationResultOutcome {
 }
 
 impl VerificationResultOutcome {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::VerifiedOk,
+        Self::VerifiedFailed,
+        Self::Inconclusive,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::VerifiedOk => "verified_ok",
@@ -2382,6 +2795,14 @@ pub enum VerificationResultRecommendation {
 }
 
 impl VerificationResultRecommendation {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Complete,
+        Self::Retry,
+        Self::Rollback,
+        Self::PolicyDecisionRequired,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Complete => "complete",
@@ -2397,3 +2818,744 @@ impl VerificationResultRecommendation {
 pub struct VerificationResultSchemaVersion;
 impl Serialize for VerificationResultSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for VerificationResultSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+#[cfg(test)]
+mod string_enum_contracts {
+    use super::*;
+    use serde_json::Value;
+    use std::collections::BTreeSet;
+
+    fn assert_string_enum_contract<T, F>(
+        all: &'static [T],
+        expected_wires: &[&str],
+        as_str: F,
+    ) where
+        T: Copy + PartialEq + std::fmt::Debug + Serialize + for<'de> Deserialize<'de>,
+        F: Fn(T) -> &'static str,
+    {
+        assert_eq!(
+            all.len(),
+            expected_wires.len(),
+            "ALL length must match schema enum declaration order"
+        );
+        let mut seen = BTreeSet::new();
+        for (index, member) in all.iter().copied().enumerate() {
+            let wire = as_str(member);
+            assert_eq!(
+                wire,
+                expected_wires[index],
+                "ALL/as_str order must follow schema declaration"
+            );
+            assert!(seen.insert(wire), "as_str wire must be unique: {wire}");
+            let value = serde_json::to_value(member).expect("serialize string enum");
+            assert_eq!(value, Value::String(wire.to_owned()));
+            let roundtrip: T =
+                serde_json::from_value(value).expect("deserialize string enum");
+            assert_eq!(roundtrip, member);
+        }
+    }
+
+    #[test]
+    fn action_status_string_enum_contract() {
+        assert_string_enum_contract(
+            ActionStatus::ALL,
+            &[
+                "pending",
+                "approved",
+                "leased",
+                "in_flight",
+                "completed",
+                "failed",
+                "unknown_side_effect",
+                "rolling_back",
+                "rolled_back",
+                "rollback_failed",
+                "cancelled",
+            ],
+            ActionStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn actor_authentication_level_string_enum_contract() {
+        assert_string_enum_contract(
+            ActorAuthenticationLevel::ALL,
+            &[
+                "unauthenticated",
+                "asserted",
+                "platform_verified",
+                "system_authenticated",
+            ],
+            ActorAuthenticationLevel::as_str,
+        );
+    }
+
+    #[test]
+    fn actor_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ActorKind::ALL,
+            &[
+                "owner",
+                "known_user",
+                "guest",
+                "companion",
+                "system",
+                "extension",
+            ],
+            ActorKind::as_str,
+        );
+    }
+
+    #[test]
+    fn approval_record_approval_type_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalRecordApprovalType::ALL,
+            &[
+                "user_confirm",
+                "local_confirm",
+                "system_auth",
+                "delegation",
+                "implicit",
+            ],
+            ApprovalRecordApprovalType::as_str,
+        );
+    }
+
+    #[test]
+    fn approval_record_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalRecordDecision::ALL,
+            &[
+                "approved",
+                "denied",
+                "deferred",
+            ],
+            ApprovalRecordDecision::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_audit_type_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordAuditType::ALL,
+            &[
+                "task.creation_recorded",
+                "command.accepted",
+                "permission.evaluated",
+                "kernel.invariant_blocked",
+                "event.published",
+                "recovery.recorded",
+                "config.changed",
+            ],
+            AuditRecordAuditType::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_external_content_status_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordExternalContentStatus::ALL,
+            &[
+                "not_sent",
+                "sent",
+                "unknown",
+            ],
+            AuditRecordExternalContentStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_level_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordLevel::ALL,
+            &[
+                "user_activity",
+                "operational",
+                "security",
+                "debug",
+            ],
+            AuditRecordLevel::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_outcome_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordOutcome::ALL,
+            &[
+                "succeeded",
+                "failed",
+                "blocked",
+                "deferred",
+                "observed",
+            ],
+            AuditRecordOutcome::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_rollback_capability_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordRollbackCapability::ALL,
+            &[
+                "compensatable",
+                "not_compensatable",
+                "unknown",
+            ],
+            AuditRecordRollbackCapability::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_task_creation_context_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordTaskCreationContextProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            AuditRecordTaskCreationContextProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn causation_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            CausationRefKind::ALL,
+            &[
+                "command_request",
+                "event",
+            ],
+            CausationRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_carrier_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginCarrierRefKind::ALL,
+            &[
+                "command_request",
+                "task",
+                "artifact",
+                "event",
+            ],
+            ContentOriginCarrierRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginKind::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            ContentOriginKind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_producer_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginProducerRefKind::ALL,
+            &[
+                "actor",
+                "model",
+                "extension",
+                "provider",
+                "system",
+            ],
+            ContentOriginProducerRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn entry_point_string_enum_contract() {
+        assert_string_enum_contract(
+            EntryPoint::ALL,
+            &[
+                "local_desktop",
+                "local_ipc_client",
+                "agent_runtime",
+                "personal_remote_channel",
+                "group_channel",
+                "web_api",
+                "extension_originated_event",
+                "system_internal",
+            ],
+            EntryPoint::as_str,
+        );
+    }
+
+    #[test]
+    fn event_envelope_type_string_enum_contract() {
+        assert_string_enum_contract(
+            EventEnvelopeType::ALL,
+            &[
+                "task.created",
+                "task.state_changed",
+                "stop_fence.activated",
+            ],
+            EventEnvelopeType::as_str,
+        );
+    }
+
+    #[test]
+    fn event_subscribe_request_event_types_item_string_enum_contract() {
+        assert_string_enum_contract(
+            EventSubscribeRequestEventTypesItem::ALL,
+            &[
+                "task.created",
+                "task.state_changed",
+                "stop_fence.activated",
+            ],
+            EventSubscribeRequestEventTypesItem::as_str,
+        );
+    }
+
+    #[test]
+    fn kcp_command_envelope_command_type_string_enum_contract() {
+        assert_string_enum_contract(
+            KcpCommandEnvelopeCommandType::ALL,
+            &[
+                "task.create",
+                "stop.activate",
+            ],
+            KcpCommandEnvelopeCommandType::as_str,
+        );
+    }
+
+    #[test]
+    fn kcp_query_envelope_query_type_string_enum_contract() {
+        assert_string_enum_contract(
+            KcpQueryEnvelopeQueryType::ALL,
+            &[
+                "system.ping",
+                "task.get",
+                "task.list",
+                "event.subscribe",
+                "event.poll",
+                "stop.status",
+            ],
+            KcpQueryEnvelopeQueryType::as_str,
+        );
+    }
+
+    #[test]
+    fn kcp_response_envelope_status_string_enum_contract() {
+        assert_string_enum_contract(
+            KcpResponseEnvelopeStatus::ALL,
+            &[
+                "ok",
+                "error",
+            ],
+            KcpResponseEnvelopeStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn permission_decision_approval_type_string_enum_contract() {
+        assert_string_enum_contract(
+            PermissionDecisionApprovalType::ALL,
+            &[
+                "implicit",
+                "user_confirm",
+                "local_confirm",
+                "system_auth",
+                "delegation",
+            ],
+            PermissionDecisionApprovalType::as_str,
+        );
+    }
+
+    #[test]
+    fn permission_decision_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            PermissionDecisionDecision::ALL,
+            &[
+                "allow",
+                "deny",
+                "require_confirmation",
+                "require_local_confirmation",
+                "require_system_authentication",
+                "require_plan_revision",
+            ],
+            PermissionDecisionDecision::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_actor_match_auth_level_min_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleActorMatchAuthLevelMin::ALL,
+            &[
+                "unauthenticated",
+                "asserted",
+                "platform_verified",
+                "system_authenticated",
+            ],
+            PolicyRuleActorMatchAuthLevelMin::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_actor_match_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleActorMatchKind::ALL,
+            &[
+                "owner",
+                "known_user",
+                "guest",
+                "companion",
+                "system",
+                "extension",
+            ],
+            PolicyRuleActorMatchKind::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_condition_rate_limit_key_scope_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleConditionRateLimitKeyScope::ALL,
+            &[
+                "rule",
+                "actor",
+                "task",
+                "action",
+                "resource",
+            ],
+            PolicyRuleConditionRateLimitKeyScope::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_condition_time_window_weekdays_item_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleConditionTimeWindowWeekdaysItem::ALL,
+            &[
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ],
+            PolicyRuleConditionTimeWindowWeekdaysItem::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_confirmation_mode_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleConfirmationMode::ALL,
+            &[
+                "generic",
+                "local",
+                "system_authentication",
+                "plan_revision",
+            ],
+            PolicyRuleConfirmationMode::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_content_origin_match_kinds_item_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleContentOriginMatchKindsItem::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            PolicyRuleContentOriginMatchKindsItem::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_effect_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleEffect::ALL,
+            &[
+                "allow",
+                "confirm",
+                "deny",
+            ],
+            PolicyRuleEffect::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_source_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleSource::ALL,
+            &[
+                "user_defined",
+                "companion_generated",
+                "system",
+            ],
+            PolicyRuleSource::as_str,
+        );
+    }
+
+    #[test]
+    fn recovery_attempt_ref_outcome_string_enum_contract() {
+        assert_string_enum_contract(
+            RecoveryAttemptRefOutcome::ALL,
+            &[
+                "in_progress",
+                "recovered",
+                "not_recovered",
+                "inconclusive",
+                "cancelled",
+            ],
+            RecoveryAttemptRefOutcome::as_str,
+        );
+    }
+
+    #[test]
+    fn recovery_decision_candidate_candidate_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            RecoveryDecisionCandidateCandidateKind::ALL,
+            &[
+                "verify_external_state",
+                "retry_original",
+                "compensate",
+                "continue_task",
+                "stop_task",
+                "mark_failed",
+            ],
+            RecoveryDecisionCandidateCandidateKind::as_str,
+        );
+    }
+
+    #[test]
+    fn recovery_decision_candidate_status_string_enum_contract() {
+        assert_string_enum_contract(
+            RecoveryDecisionCandidateStatus::ALL,
+            &[
+                "proposed",
+                "selected",
+                "rejected",
+                "expired",
+            ],
+            RecoveryDecisionCandidateStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn recovery_decision_candidate_trigger_string_enum_contract() {
+        assert_string_enum_contract(
+            RecoveryDecisionCandidateTrigger::ALL,
+            &[
+                "unknown_side_effect",
+                "failed",
+                "cancel_with_committed_effect",
+                "compensation_unknown",
+            ],
+            RecoveryDecisionCandidateTrigger::as_str,
+        );
+    }
+
+    #[test]
+    fn side_effect_class_string_enum_contract() {
+        assert_string_enum_contract(
+            SideEffectClass::ALL,
+            &[
+                "S0",
+                "S1",
+                "S2",
+                "S3",
+                "S4",
+                "S5",
+            ],
+            SideEffectClass::as_str,
+        );
+    }
+
+    #[test]
+    fn task_create_request_origin_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskCreateRequestOriginKind::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            TaskCreateRequestOriginKind::as_str,
+        );
+    }
+
+    #[test]
+    fn task_create_request_origin_producer_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskCreateRequestOriginProducerRefKind::ALL,
+            &[
+                "actor",
+                "model",
+                "extension",
+                "provider",
+                "system",
+            ],
+            TaskCreateRequestOriginProducerRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn task_create_request_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskCreateRequestProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            TaskCreateRequestProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn task_created_payload_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskCreatedPayloadProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            TaskCreatedPayloadProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn task_list_request_parent_filter_mode_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskListRequestParentFilterMode::ALL,
+            &[
+                "any",
+                "root",
+                "exact",
+            ],
+            TaskListRequestParentFilterMode::as_str,
+        );
+    }
+
+    #[test]
+    fn task_list_request_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskListRequestProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            TaskListRequestProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn task_spec_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskSpecProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            TaskSpecProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn task_status_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskStatus::ALL,
+            &[
+                "candidate",
+                "awaiting_approval",
+                "planned",
+                "rejected",
+                "running",
+                "waiting_user",
+                "paused",
+                "partially_completed",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "rolling_back",
+                "rolled_back",
+                "archived",
+            ],
+            TaskStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn verification_result_observations_item_check_type_string_enum_contract() {
+        assert_string_enum_contract(
+            VerificationResultObservationsItemCheckType::ALL,
+            &[
+                "return_code",
+                "resource_state",
+                "snapshot_diff",
+                "external_query",
+                "user_confirm",
+            ],
+            VerificationResultObservationsItemCheckType::as_str,
+        );
+    }
+
+    #[test]
+    fn verification_result_outcome_string_enum_contract() {
+        assert_string_enum_contract(
+            VerificationResultOutcome::ALL,
+            &[
+                "verified_ok",
+                "verified_failed",
+                "inconclusive",
+            ],
+            VerificationResultOutcome::as_str,
+        );
+    }
+
+    #[test]
+    fn verification_result_recommendation_string_enum_contract() {
+        assert_string_enum_contract(
+            VerificationResultRecommendation::ALL,
+            &[
+                "complete",
+                "retry",
+                "rollback",
+                "policy_decision_required",
+            ],
+            VerificationResultRecommendation::as_str,
+        );
+    }
+
+}

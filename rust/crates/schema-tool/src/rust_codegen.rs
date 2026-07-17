@@ -733,7 +733,7 @@ fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
                 let variant = rust_enum_variant(value);
                 if let Some(previous) = variants.insert(variant.clone(), value.clone()) {
                     return Err(SchemaToolError::msg(format!(
-                        "Rust enum variant collision in `{}` ({}): values {previous:?} and {value:?} both map to `{variant}`",
+                        "Rust enum variant collision in type `{}` ({}): wire values {previous:?} and {value:?} both map to variant `{variant}`",
                         decl.rust_name,
                         decl.id.display()
                     ))
@@ -764,7 +764,11 @@ pub fn render_types_module_from_projection(projection: &RustProjection) -> Resul
     out.push_str(render_null_only());
     out.push('\n');
 
+    let mut string_enums: Vec<(String, Vec<String>)> = Vec::new();
     for decl in &projection.decls {
+        if let ProjectedShape::StringEnum { values } = &decl.shape {
+            string_enums.push((decl.rust_name.clone(), values.clone()));
+        }
         let body = render_projected_decl(decl, &projection.names)?;
         out.push_str(&body);
         if !body.ends_with('\n') {
@@ -772,6 +776,7 @@ pub fn render_types_module_from_projection(projection: &RustProjection) -> Resul
         }
         out.push('\n');
     }
+    out.push_str(&render_string_enum_contract_tests(&string_enums));
     Ok(out)
 }
 
@@ -982,29 +987,69 @@ fn render_const_type(name: &str, schema_id: &str, value: &ConstJson) -> String {
 }
 
 fn render_string_enum(type_name: &str, schema_id: &str, values: &[String]) -> String {
+    // One ordered mapping drives variants, ALL, and as_str so declaration order is shared.
+    let mapping: Vec<(&str, String)> = values
+        .iter()
+        .map(|value| (value.as_str(), rust_enum_variant(value)))
+        .collect();
+
     let mut body = format!(
         "/// Generated string enum from `{schema_id}`\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]\npub enum {type_name} {{\n"
     );
-    for value in values {
+    for (wire, variant) in &mapping {
         body.push_str(&format!(
-            "    #[serde(rename = {:?})]\n    {},\n",
-            value,
-            rust_enum_variant(value)
+            "    #[serde(rename = {wire:?})]\n    {variant},\n"
         ));
     }
     body.push_str("}\n");
-    body.push_str(&format!(
-        "\nimpl {type_name} {{\n    pub fn as_str(self) -> &'static str {{\n        match self {{\n"
-    ));
-    for value in values {
-        body.push_str(&format!(
-            "            Self::{} => {:?},\n",
-            rust_enum_variant(value),
-            value
-        ));
+
+    body.push_str(&format!("\nimpl {type_name} {{\n"));
+    body.push_str(
+        "    /// Schema enum declaration-order closed set (null filtered at use-site Option).\n",
+    );
+    body.push_str("    pub const ALL: &'static [Self] = &[\n");
+    for (_, variant) in &mapping {
+        body.push_str(&format!("        Self::{variant},\n"));
+    }
+    body.push_str("    ];\n\n");
+    body.push_str("    pub fn as_str(self) -> &'static str {\n        match self {\n");
+    for (wire, variant) in &mapping {
+        body.push_str(&format!("            Self::{variant} => {wire:?},\n"));
     }
     body.push_str("        }\n    }\n}\n");
     body
+}
+
+/// Auto-generated contract tests covering every projected string enum.
+///
+/// Shared helper avoids per-enum boilerplate; projection emits one call site each.
+fn render_string_enum_contract_tests(enums: &[(String, Vec<String>)]) -> String {
+    if enums.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from(
+        "#[cfg(test)]\nmod string_enum_contracts {\n    use super::*;\n    use serde_json::Value;\n    use std::collections::BTreeSet;\n\n",
+    );
+    out.push_str(
+        "    fn assert_string_enum_contract<T, F>(\n        all: &'static [T],\n        expected_wires: &[&str],\n        as_str: F,\n    ) where\n        T: Copy + PartialEq + std::fmt::Debug + Serialize + for<'de> Deserialize<'de>,\n        F: Fn(T) -> &'static str,\n    {\n        assert_eq!(\n            all.len(),\n            expected_wires.len(),\n            \"ALL length must match schema enum declaration order\"\n        );\n        let mut seen = BTreeSet::new();\n        for (index, member) in all.iter().copied().enumerate() {\n            let wire = as_str(member);\n            assert_eq!(\n                wire,\n                expected_wires[index],\n                \"ALL/as_str order must follow schema declaration\"\n            );\n            assert!(seen.insert(wire), \"as_str wire must be unique: {wire}\");\n            let value = serde_json::to_value(member).expect(\"serialize string enum\");\n            assert_eq!(value, Value::String(wire.to_owned()));\n            let roundtrip: T =\n                serde_json::from_value(value).expect(\"deserialize string enum\");\n            assert_eq!(roundtrip, member);\n        }\n    }\n\n",
+    );
+
+    for (type_name, values) in enums {
+        let test_fn = format!("{}_string_enum_contract", to_snake_case(type_name));
+        out.push_str(&format!("    #[test]\n    fn {test_fn}() {{\n"));
+        out.push_str(&format!(
+            "        assert_string_enum_contract(\n            {type_name}::ALL,\n            &[\n"
+        ));
+        for value in values {
+            out.push_str(&format!("                {value:?},\n"));
+        }
+        out.push_str(&format!(
+            "            ],\n            {type_name}::as_str,\n        );\n    }}\n\n"
+        ));
+    }
+    out.push_str("}\n");
+    out
 }
 
 fn render_null_only() -> &'static str {

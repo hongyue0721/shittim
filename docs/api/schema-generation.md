@@ -21,7 +21,7 @@
 | 生成目标模型 | `GenerationTarget` + `TargetPlan` | `rust` / `typescript`；非空、无重复、canonical order；每 target 独立 roots/closure（外部 `$ref`、local fragment 递归、envelope payload）；未知值 serde 失败；**无** `GenerationTarget::ALL` 闭集硬编码 |
 | Artifact 规划 | `codegen` `ArtifactPlan::try_new` | 唯一构造入口：校验 roots/path/duplicate/component-safe/planned prefixes；字段全部 private，只读 getters `artifacts`/`roots`/`planned_prefixes`；`GeneratedArtifact` 字段 private，经 `new` + getters，最终 path 由 `try_new` 验证；`plan_artifacts` 必须走它；拒绝 `generated_evil` 前缀伪装、absolute、traversal、duplicate、outside root；unplanned empty/nonempty dir、missing/extra、symlink fail closed；先全部成功再写 |
 | Rust projection | `RustProjection` / `project_rust` | 公开 API 只保留 `project_rust`、`render_types_module_from_projection`、`render_typed_module_from_projection`、`render_catalog_module`；禁止 graph 级 convenience re-project；`plan`/`render_rust_artifacts`/`lower_and_render_rust` 只 project 一次；catalog 直接读 graph |
-| 生成类型 | `generated/types.rs` | struct/enum、const 单值类型、`NullOnly`；递归 SCC 对 direct Named 插入 `Box`，Array 不 box；optional 递归钉死 `Option<Box<T>>`（禁止 `Box<Option` / 仅因递归的 `Vec<Box`） |
+| 生成类型 | `generated/types.rs` | struct/enum、const 单值类型、`NullOnly`；**string enum** 统一生成 `pub const ALL: &'static [Self]`（Schema declaration order 闭集，与 variants/`as_str` 共用同一有序 mapping；string const 不生成 ALL；nullable enum 过滤 null，null 仍由 `Option` 表达）；自动 `#[cfg(test)] mod string_enum_contracts` 覆盖全部 string enum（长度/顺序/`as_str` 唯一/serde roundtrip，共享 helper，无手写类型目录）；递归 SCC 对 direct Named 插入 `Box`，Array 不 box；optional 递归钉死 `Option<Box<T>>`（禁止 `Box<Option` / 仅因递归的 `Vec<Box`） |
 | 生成目录 | `generated/catalog.rs` | 由 manifest 生成的 embedded schema 与方法/事件闭集（不经 projection） |
 | Typed decode | `generated/typed.rs` | 从 envelope discriminator enum 与 `allOf if/then payload.$ref` 一一映射自动派生；**与 types 共用同一 `RustProjection`**，无平行 `project_envelope_field_type`；`decode` 先 Schema validation，再调用有明确前置条件的 `decode_after_validation` |
 | JCS 向量 | `schemas/examples/jcs/`、`schemas/fixtures/kcp/task_create_normalized_hash.v1.json` | RFC 8785 示例、UTF-16 排序及 task.create receipt/idempotency 复合 hash fixture |
@@ -64,6 +64,9 @@ cargo run --manifest-path rust/Cargo.toml -p schema-tool -- --repo-root "$PWD" \
 ### 生成形状
 
 - 支持：`object`、`properties`、`required`、`array/items`、string `enum`、string/integer/boolean/null `const`、`$ref`、单一非 null 类型与 `null` 的联合、nullable `oneOf: [null, T]`。
+- **String enum 闭集 `ALL`**（已完成）：在通用 `ProjectedShape::StringEnum` 路径生成 `pub const ALL: &'static [Self]`，顺序严格为 Schema enum declaration order；variants / `ALL` / `as_str` 共用 renderer-local 有序 mapping，禁止按字典序重排，也不硬编码 `TaskStatus`/`ActionStatus`/schema id。string const 不生成 `ALL`。nullable string enum 在 lowering 已过滤 `null`，`ALL` 只含非 null 成员，字段仍是 `Option<Enum>`，`None` 序列化为显式 `null`。wire→variant 碰撞 fail closed，错误含 type/wire/variant。
+- **自动合同测试**：`types.rs` 尾部 `#[cfg(test)] mod string_enum_contracts` 按 projection 为每个 string enum 生成调用；共享 `assert_string_enum_contract` 验证 ALL 长度/顺序、`as_str` 唯一、serde `to_value` 等于 wire string、`from_value` roundtrip。**不**手写类型目录。
+- **domain-task 手写 catalog 仍未删除**（下一 commit）：`domain-task` 的 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG` 仍存在；本批只交付生成侧 `ALL`，不改 catalog/typed/mod，也不替换 domain-task 消费点。
 - Serde omission 由 Schema 元数据确定性推导，不手改 generated：
   - `required=false` 且属性类型不允许 `null` → `Option<T>` + `#[serde(skip_serializing_if = "Option::is_none")]`，`None` 省略字段；
   - `required=true` 且允许 `null` → `Option<T>` 且**不** skip，`None` 仍输出显式 `null`；
