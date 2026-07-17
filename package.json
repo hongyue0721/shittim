@@ -1,0 +1,12 @@
+{
+  "name": "shittim",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": "24.18.0",
+    "pnpm": "11.3.0"
+  },
+  "scripts": {
+    "check:toolchain": "node scripts/check-node-toolchain.mjs"
+  }
+}

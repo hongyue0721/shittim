@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `serde_json::Value` preflight、全八方法 typed Accepted、三方法 registration/dispatcher 和 `system.ping` / `task.create` / `task.get` typed application handler。当前仍没有 Task 更新/list、Action/PermissionDecision repository、可连接 KCP server、`agentd`、TypeScript workspace、桌面客户端、Publisher 循环或 Provider。
+已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `serde_json::Value` preflight、全八方法 typed Accepted、三方法 registration/dispatcher 和 `system.ping` / `task.create` / `task.get` typed application handler。根目录已落地**零依赖** Node 24.18.0 / pnpm 11.3.0 工作区基座（`package.json`、`pnpm-workspace.yaml`、`.npmrc`、`.node-version`、`pnpm-lock.yaml`、`scripts/check-node-toolchain.mjs`），**没有** `ts/*` 包、deps、TS 生成物或 SDK/client。当前仍没有 Task 更新/list、Action/PermissionDecision repository、可连接 KCP server、`agentd`、TypeScript 业务包、桌面客户端、Publisher 循环或 Provider。
 
 `domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
@@ -17,6 +17,7 @@
 - [x] 明确 `owner` 只是未认证预留标签；`stop.activate` 是首批 Emergency Stop 入口。
 - [x] 接受工作区、Schema 生成和 KCP 本地传输 ADR。
 - [x] 添加 Apache-2.0 根许可证。
+- [x] 落地零依赖 Node/pnpm 根工作区基座：`packageManager pnpm@11.3.0`、`engines` exact `node 24.18.0` / `pnpm 11.3.0`、`pnpm-workspace.yaml` 声明 `ts/*`（不创建占位包）、`.npmrc engine-strict=true`、`.node-version 24.18.0`、零依赖 `pnpm-lock.yaml`，以及 `pnpm run check:toolchain`（`scripts/check-node-toolchain.mjs`）。smoke 硬校验当前 Node 进程和 PATH 中实际 `pnpm --version`；pnpm 11 的 engine warning 不冒充硬门。实际 Node 入口为 `~/.local/share/pnpm/node`；Corepack 不可用。
 
 ### Schema 与 Rust 契约
 
@@ -108,7 +109,7 @@
 - [ ] 为五个已知未注册方法实现正式 handler；完成前 `KnownCatalogMethodNotImplemented` 只作为本地注册完整性结果，server 阶段门保持关闭。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理（本批三方法合同不等于八方法可用）。
-- [ ] 创建 TypeScript workspace、SDK client 与 Pi `agent-runtime`。
+- [ ] 在已有根工作区基座上创建 `ts/*` 包、SDK client 与 Pi `agent-runtime`（当前仅有零依赖根基座，无 TS 包/生成/SDK）。
 - [ ] 创建 Tauri/React/Ant Design 蓝白桌面客户端。
 - [ ] 实现 Extension SDK、Provider、Memory、Initiative、Computer Use 与 Broker。
 - [ ] 完成 `specs/CONFORMANCE.md` 全量自动化测试。
@@ -120,7 +121,7 @@
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
-- Node 24 LTS 已可用（24.18.0，pnpm user runtime），TypeScript 工具链不再受版本阻塞。
+- Node 24.18.0 / pnpm 11.3.0 根基座已落地；默认 PATH 仍可能是 Node 26.x，必须显式使用 `~/.local/share/pnpm` 入口。尚无 `ts/*` 包与 Schema→TS/SDK。
 - 真实模型 Provider、远程 Channel、跨平台 Provider 与 Privilege Broker 仍需要后续真实环境和用户选择；当前没有伪造支持。
 
 ## 下一步
@@ -128,19 +129,21 @@
 1. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
 2. 为剩余五个 Catalog 方法逐个提供正式 handler；八方法 registration 完整后再关闭 server 阶段门。
 3. 随后实现本地传输、Task/Event 纵切与 Publisher 循环。
-4. 再建立 TypeScript client/SDK 和 Ant Design 桌面端。
+4. 再在根基座上建立 TypeScript 包、client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
 
 ```text
-cargo fmt --manifest-path rust/Cargo.toml --all -- --check
-cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
-cargo test --manifest-path rust/Cargo.toml --workspace
+export PATH="$HOME/.local/share/pnpm:$PATH"
+pnpm run check:toolchain
+pnpm install --frozen-lockfile
+pnpm install --no-frozen-lockfile
+# 二次 no-frozen 后 pnpm-lock.yaml 内容 hash 应稳定
 ./scripts/check-schema.sh
 git diff --check
 ```
 
-全部通过；workspace 共 247 项测试，`domain-policy` 48（含 TaskScope containment 18）、`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 46。
+Node/pnpm 基座：`check:toolchain` 通过；frozen install 通过；二次 no-frozen lockfile hash 稳定。用默认 PATH 的 Node 26 直接 `node scripts/check-node-toolchain.mjs` 应失败（Node 版本不符）。Rust/Schema 全量仍以 `./scripts/check-schema.sh` 为准。
 
 ## 事实来源
 

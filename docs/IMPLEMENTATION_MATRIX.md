@@ -18,7 +18,7 @@
 | KCP 本地传输 | ADR accepted；受 typed-only 阶段门约束 | 不适用 | 未开始 | 未开始 | Unix Socket / Windows Named Pipe；本批不拍 path/frame 新事实、不允许可连接 server |
 | Schema 生成链 | ADR accepted | 41 个 source + manifest；task.create executable fixture 不新增 Schema | schema-tool + kernel-contracts；optional/non-null 生成 serde omission | meta/$ref/drift/JCS + task.create receipt/idempotency hash + optional omission/required-null contract tests | 当前只生成 Rust；Approval target exactly-one 仍未由 Schema 强制 |
 | Rust workspace | ADR accepted | 不适用 | kernel-contracts、schema-tool、domain-task、domain-policy、kernel-sqlite、kernel-kcp | fmt/clippy/workspace test | rustc/cargo 1.97.0；SQLite bundled |
-| TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 未开始 | 未开始 | Node 24.18.0 已可用 |
+| TypeScript workspace | ADR accepted | 尚无 TS 生成物 | 仅根零依赖基座（`package.json` / `pnpm-workspace.yaml` / lockfile / `check:toolchain`）；无 `ts/*` 包 | `pnpm run check:toolchain` | Node exact 24.18.0、pnpm exact 11.3.0；入口 `~/.local/share/pnpm/node`；Corepack 不可用；无 deps/SDK/client |
 | Desktop client | 方向已定义 | 未开始 | 未开始 | 未开始 | 将使用 Tauri/React/AntD，蓝白配色 |
 | Extension SDK | 规范已有 | 未开始 | 未开始 | 未开始 | 当前无可安装 SDK 包 |
 | Provider/平台能力 | 仅接口边界 | 未开始 | 未开始 | 未开始 | 不伪造支持 |

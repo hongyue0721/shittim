@@ -2,17 +2,17 @@
 
 > 非规范元数据。完整列出当前工作树全部 Markdown；行数以 UTF-8 文本 `wc -l` 等价结果为准。修改文档后必须重新生成本清单。
 
-- `FILE_MANIFEST.md` — 38 lines
 - `AGENT.md` — 32 lines
+- `FILE_MANIFEST.md` — 38 lines
 - `PROJECT_OVERVIEW.md` — 296 lines
 - `README.md` — 40 lines
-- `adr/0001-shittim工作区与工具链.md` — 39 lines
+- `adr/0001-shittim工作区与工具链.md` — 44 lines
 - `adr/0002-schema生成与兼容策略.md` — 51 lines
 - `adr/0003-kcp本地传输.md` — 32 lines
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 45 lines
-- `docs/PROGRESS.md` — 157 lines
+- `docs/PROGRESS.md` — 160 lines
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 149 lines
