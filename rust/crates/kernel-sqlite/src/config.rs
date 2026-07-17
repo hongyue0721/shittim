@@ -96,6 +96,8 @@ pub(crate) fn configure_connection(
     Ok(())
 }
 
+/// Non-business write exception (ADR-0004): journal-mode setup during open, not a public business
+/// write API under the store transaction surface.
 pub(crate) fn initialize_wal(
     connection: &Connection,
     busy_timeout: Duration,

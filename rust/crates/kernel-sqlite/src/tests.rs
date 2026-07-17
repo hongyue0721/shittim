@@ -17,9 +17,10 @@ use rusqlite::Connection;
 use serde_json::json;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::sync::{Arc, Barrier};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(2);
@@ -136,7 +137,9 @@ fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
     let audit = valid_audit("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
     crate::audit::insert_audit(&connection, &audit).expect("v1 audit");
     let event = task_created_event(50, "v1-task");
-    let expected_event = crate::outbox::append_event(&connection, event).expect("v1 event");
+    let expected_event =
+        crate::outbox::append_event(&WriteTransaction::from_connection(&connection), event)
+            .expect("v1 event");
     drop(connection);
 
     let store = database.open();
@@ -725,6 +728,232 @@ fn delivered_marking_retains_first_time_and_history() {
             .expect("not found"),
         MarkDeliveredResult::NotFound
     );
+}
+
+#[test]
+fn mark_delivered_helper_err_rolls_back_and_public_retry_marks() {
+    let database = TestDatabase::new();
+    let store = database.open();
+    let record = store
+        .with_write_transaction(|transaction| {
+            transaction.append_event(task_created_event(1, "task-a"))
+        })
+        .expect("event");
+    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
+        .expect("position type");
+    let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 7).unwrap();
+
+    let error = store
+        .with_write_transaction(|transaction| {
+            let marked = outbox::mark_delivered(transaction, position, delivered_at)?;
+            assert_eq!(marked, MarkDeliveredResult::Marked);
+            Err::<MarkDeliveredResult, _>(StoreError::new(
+                StoreErrorCode::NotFound,
+                "force mark_delivered helper rollback",
+            ))
+        })
+        .expect_err("outer err must roll back mark");
+    assert_eq!(error.code, StoreErrorCode::NotFound);
+    assert_eq!(
+        store
+            .read_undelivered(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+            .expect("still undelivered")
+            .len(),
+        1
+    );
+    assert_eq!(
+        store.mark_delivered(position, delivered_at).expect("retry"),
+        MarkDeliveredResult::Marked
+    );
+    let history = store
+        .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("history");
+    assert_eq!(history[0].delivered_at, Some(delivered_at));
+}
+
+#[test]
+fn mark_delivered_helper_panic_rolls_back_and_store_remains_healthy() {
+    let database = TestDatabase::new();
+    let store = database.open();
+    let record = store
+        .with_write_transaction(|transaction| {
+            transaction.append_event(task_created_event(1, "task-a"))
+        })
+        .expect("event");
+    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
+        .expect("position type");
+    let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 8).unwrap();
+
+    let panicked = catch_unwind(AssertUnwindSafe(|| {
+        let _ = store.with_write_transaction(|transaction| -> Result<(), StoreError> {
+            let marked = outbox::mark_delivered(transaction, position, delivered_at)?;
+            assert_eq!(marked, MarkDeliveredResult::Marked);
+            panic!("panic after mark_delivered helper");
+        });
+    }));
+    assert!(panicked.is_err());
+    assert_eq!(
+        store
+            .read_undelivered(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+            .expect("still undelivered after panic")
+            .len(),
+        1
+    );
+    assert_eq!(
+        store
+            .mark_delivered(position, delivered_at)
+            .expect("retry after panic"),
+        MarkDeliveredResult::Marked
+    );
+    let history = store
+        .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("history after panic retry");
+    assert_eq!(history[0].delivered_at, Some(delivered_at));
+}
+
+#[test]
+fn unhealthy_store_public_mark_fail_closed_and_peer_store_unchanged() {
+    let database = TestDatabase::new();
+    let store = database.open();
+    let peer = database.open();
+    let record = store
+        .with_write_transaction(|transaction| {
+            transaction.append_event(task_created_event(1, "task-a"))
+        })
+        .expect("event");
+    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
+        .expect("position type");
+    let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 9).unwrap();
+
+    store.mark_unhealthy_for_test();
+    let error = store
+        .mark_delivered(position, delivered_at)
+        .expect_err("unhealthy store must fail closed");
+    assert_eq!(error.code, StoreErrorCode::InternalStoreError);
+    assert!(peer
+        .read_undelivered(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("peer undelivered")
+        .iter()
+        .any(|row| row.envelope.outbox_position == record.envelope.outbox_position));
+    let history = peer
+        .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("peer history");
+    assert_eq!(history[0].delivered_at, None);
+}
+
+#[test]
+fn mark_delivered_writer_contention_maps_busy_and_retries_after_release() {
+    let database = TestDatabase::new();
+    let holder = database.open();
+    let contender = database.open();
+    let record = holder
+        .with_write_transaction(|transaction| {
+            transaction.append_event(task_created_event(1, "task-a"))
+        })
+        .expect("event");
+    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
+        .expect("position type");
+    let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 11).unwrap();
+
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let holder_handle = thread::spawn(move || {
+        holder
+            .with_write_transaction(|_| {
+                ready_tx.send(()).expect("signal ready");
+                release_rx
+                    .recv_timeout(Duration::from_secs(10))
+                    .expect("release");
+                Ok(())
+            })
+            .expect("holder transaction")
+    });
+    ready_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("holder ready");
+    let busy = contender
+        .mark_delivered(position, delivered_at)
+        .expect_err("contended mark must map busy");
+    assert_eq!(busy.code, StoreErrorCode::SqliteBusy);
+    release_tx.send(()).expect("release holder");
+    holder_handle.join().expect("holder join");
+    assert_eq!(
+        contender
+            .mark_delivered(position, delivered_at)
+            .expect("retry after release"),
+        MarkDeliveredResult::Marked
+    );
+}
+
+#[test]
+fn concurrent_mark_delivered_exact_one_marked_and_winner_timestamp() {
+    let database = TestDatabase::new();
+    database.open();
+    let bootstrap = database.open();
+    let record = bootstrap
+        .with_write_transaction(|transaction| {
+            transaction.append_event(task_created_event(1, "shared-task"))
+        })
+        .expect("event");
+    drop(bootstrap);
+    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
+        .expect("position type");
+    let first = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 1).unwrap();
+    let second = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 2).unwrap();
+    let barrier = Arc::new(Barrier::new(3));
+    let mut handles = Vec::new();
+    for delivered_at in [first, second] {
+        let path = database.path.clone();
+        let config = database.config;
+        let barrier = Arc::clone(&barrier);
+        handles.push(thread::spawn(move || {
+            let store = SqliteStore::open(path, config).expect("thread store");
+            barrier.wait();
+            let started = Instant::now();
+            loop {
+                match store.mark_delivered(position, delivered_at) {
+                    Ok(result) => return (result, delivered_at),
+                    Err(error) if error.code == StoreErrorCode::SqliteBusy => {
+                        assert!(
+                            started.elapsed() < Duration::from_secs(10),
+                            "mark contention timed out"
+                        );
+                        thread::yield_now();
+                    }
+                    Err(error) => panic!("unexpected mark error: {error:?}"),
+                }
+            }
+        }));
+    }
+    barrier.wait();
+    let results: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("join"))
+        .collect();
+    let marked: Vec<_> = results
+        .iter()
+        .filter(|(result, _)| *result == MarkDeliveredResult::Marked)
+        .collect();
+    let already: Vec<_> = results
+        .iter()
+        .filter(|(result, _)| *result == MarkDeliveredResult::AlreadyMarked)
+        .collect();
+    assert_eq!(marked.len(), 1, "exact one Marked: {results:?}");
+    assert_eq!(already.len(), 1, "exact one AlreadyMarked: {results:?}");
+    let winner_time = marked[0].1;
+    let loser_time = already[0].1;
+    assert_ne!(winner_time, loser_time);
+
+    let store = database.open();
+    let history = store
+        .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("history");
+    assert_eq!(history[0].delivered_at, Some(winner_time));
+    assert_ne!(history[0].delivered_at, Some(loser_time));
+    assert!(store
+        .read_undelivered(OutboxCursor::START, PageLimit::new(10).expect("limit"))
+        .expect("undelivered")
+        .is_empty());
 }
 
 #[test]

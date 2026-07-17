@@ -25,6 +25,8 @@ const MIGRATIONS: &[Migration] = &[
 ];
 
 pub(crate) fn apply_migrations(connection: &Connection) -> Result<(), StoreError> {
+    // Non-business write exception (ADR-0004): ledger bootstrap sits outside pending migration
+    // units and is not a public business write API surface.
     ensure_migration_table(connection)?;
     verify_applied(connection)?;
     for migration in MIGRATIONS {
@@ -119,6 +121,8 @@ fn is_applied(connection: &Connection, version: i64) -> Result<bool, StoreError>
 }
 
 fn apply_one(connection: &Connection, migration: Migration) -> Result<(), StoreError> {
+    // Non-business write exception: each pending migration is its own BEGIN IMMEDIATE unit and is
+    // not part of SqliteStore public business write APIs.
     connection
         .execute_batch("BEGIN IMMEDIATE")
         .map_err(|error| StoreError::sqlite(error, StoreErrorCode::MigrationFailed))?;

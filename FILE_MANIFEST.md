@@ -12,7 +12,7 @@
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 45 lines
-- `docs/PROGRESS.md` — 165 lines
+- `docs/PROGRESS.md` — 166 lines
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 149 lines
@@ -22,13 +22,13 @@
 - `docs/api/kcp-preflight-dispatcher.md` — 86 lines
 - `docs/api/kernel-control-protocol.md` — 84 lines
 - `docs/api/kernel-kcp.md` — 53 lines
-- `docs/api/kernel-sqlite.md` — 143 lines
+- `docs/api/kernel-sqlite.md` — 144 lines
 - `docs/api/schema-generation.md` — 123 lines
 - `docs/api/task-repository-contract.md` — 72 lines
 - `docs/sdk/README.md` — 33 lines
 - `docs/sdk/extension-sdk.md` — 35 lines
 - `specs/COMPUTER_USE.md` — 582 lines
-- `specs/CONFORMANCE.md` — 401 lines
+- `specs/CONFORMANCE.md` — 402 lines
 - `specs/CORE_ARCHITECTURE.md` — 823 lines
 - `specs/EXTENSION_SDK.md` — 619 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines

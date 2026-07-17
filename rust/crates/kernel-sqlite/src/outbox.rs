@@ -1,6 +1,6 @@
 //! Atomic Event Outbox storage and cursor types.
 
-use crate::{StoreError, StoreErrorCode};
+use crate::{StoreError, StoreErrorCode, WriteTransaction};
 use chrono::{DateTime, Utc};
 use kernel_contracts::{validate_json, CausationRef, EventEnvelopeType, TypedEventEnvelope};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -140,9 +140,10 @@ pub enum MarkDeliveredResult {
 }
 
 pub(crate) fn append_event(
-    connection: &Connection,
+    transaction: &WriteTransaction<'_>,
     event: PendingEvent,
 ) -> Result<OutboxRecord, StoreError> {
+    let connection = transaction.connection();
     prevalidate_event(&event)?;
     connection
         .execute_batch(&format!("SAVEPOINT {APPEND_EVENT_SAVEPOINT}"))
@@ -321,11 +322,17 @@ pub(crate) fn latest_position(
     value.map(OutboxPosition::new).transpose()
 }
 
+/// Conditional first-delivery mark; must run inside an active `WriteTransaction`.
+///
+/// SQL keeps a conditional `UPDATE ... delivered_at IS NULL` plus a same-transaction
+/// existence `SELECT`. Callers only observe `Marked` / `AlreadyMarked` / `NotFound` after the
+/// surrounding store transaction has successfully committed.
 pub(crate) fn mark_delivered(
-    connection: &Connection,
+    transaction: &WriteTransaction<'_>,
     position: OutboxPosition,
     delivered_at: DateTime<Utc>,
 ) -> Result<MarkDeliveredResult, StoreError> {
+    let connection = transaction.connection();
     let changed = connection
         .execute(
             "UPDATE outbox SET delivered_at = ?1 \

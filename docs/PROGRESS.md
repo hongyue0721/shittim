@@ -68,10 +68,11 @@
 - [x] 实现 `sent` 至少一个 producer/causation 支撑引用的 repository 内单记录规则；Audit 失败可与同事务其它写整体回滚。
 - [x] Outbox 使用规范化列与 payload JSON；每次 append 先预检并在内部 SAVEPOINT 中原子分配 sequence/position、插入和最终 decode，调用者忽略单次错误并继续 commit 也不留下脏行或空洞。
 - [x] 实现十进制 cursor、严格 `>` 分页、历史读取、未投递重复读取/重启后重投的 at-least-once 语义与第一次 `delivered_at` 不可覆盖。
+- [x] `mark_delivered` 完整纳入 ADR-0004 统一写事务：Store convenience 委托 `with_write_transaction`；crate-private helper 绑定 `WriteTransaction`；保留 conditional UPDATE + 同事务 exists SELECT；覆盖 helper Err/panic rollback 后重试 Marked、unhealthy fail closed、writer contention→`sqlite_busy`、双 store 争 position 恰好一 Marked/一 AlreadyMarked 且 winner 时间保留。
 - [x] 写事务对 closure panic 安全：panic 前写入回滚，释放连接 mutex guard 后恢复原 payload，后续同 store 可继续读写且锁不 poison。
 - [x] 实现只能从 `WriteTransaction` 获取的生产 `RateLimitPort`；preview 不消费，winner-only 在同一 `BEGIN IMMEDIATE` 中重新计数并插入。
 - [x] 新增 migration 0002 与 Task create/get repository：canonical Task/TaskScope/ContentOrigin 单源、generated-column FK/index、关系 ordinal 镜像、幂等 replay/conflict、固定 Audit/Event 和严格 fail-closed 读取；不实现 list/update/KCP。
-- [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；`kernel-sqlite` 共 39 项测试。
+- [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；并补齐 `mark_delivered` 事务边界/并发/fail-closed 真实文件测试；`kernel-sqlite` 共 44 项测试。
 - [x] 新增 [`api/kernel-sqlite.md`](api/kernel-sqlite.md)。
 
 ### KCP typed application handler 合同

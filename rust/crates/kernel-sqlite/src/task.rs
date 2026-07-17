@@ -130,7 +130,7 @@ impl WriteTransaction<'_> {
         self.connection()
             .execute_batch(&format!("SAVEPOINT {CREATE_TASK_SAVEPOINT}"))
             .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-        let result = create_inside_savepoint(self.connection(), &command, &prepared);
+        let result = create_inside_savepoint(self, &command, &prepared);
         finish_savepoint(self.connection(), result)
     }
 }
@@ -294,10 +294,11 @@ fn normalize_patterns(patterns: &[String]) -> Result<Vec<String>, StoreError> {
 }
 
 fn create_inside_savepoint(
-    connection: &Connection,
+    transaction: &WriteTransaction<'_>,
     command: &TaskCreateCommand,
     prepared: &PreparedCreate,
 ) -> Result<CreateTaskResult, StoreError> {
+    let connection = transaction.connection();
     if let Some(result) = replay_if_present(connection, command, prepared)? {
         return Ok(result);
     }
@@ -368,7 +369,7 @@ fn create_inside_savepoint(
     verify_creation_audit(&audit, command, &task, &origin, prepared)?;
     crate::audit::insert_audit(connection, &audit)?;
     let pending = build_event(command, &task)?;
-    let appended = crate::outbox::append_event(connection, pending.clone())?;
+    let appended = crate::outbox::append_event(transaction, pending.clone())?;
     verify_created_event(&appended, &pending, &task, prepared)?;
     validate_created_relations(connection, &task, &scope, &origin)?;
     Ok(CreateTaskResult::Created { task })

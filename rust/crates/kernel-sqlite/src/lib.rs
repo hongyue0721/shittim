@@ -42,10 +42,16 @@ pub struct SqliteStore {
 
 impl SqliteStore {
     /// Opens a file database, configures WAL/foreign keys/busy timeout, and applies migrations.
+    ///
+    /// WAL journal-mode setup and migration ledger bootstrap are infrastructure initialization,
+    /// not public business write APIs under ADR-0004's `BEGIN IMMEDIATE` business-write surface.
+    /// Pending migration application still uses its own `BEGIN IMMEDIATE` unit.
     pub fn open(path: impl AsRef<Path>, config: SqliteConfig) -> Result<Self, StoreError> {
         let path = config::validated_path(path.as_ref())?;
         let connection = config::open_connection(&path, config)?;
+        // Non-business write exception: connection/journal bootstrap before any business API.
         config::initialize_wal(&connection, config.busy_timeout)?;
+        // Non-business write exception: schema bootstrap + pending migration units.
         migration::apply_migrations(&connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
@@ -54,6 +60,10 @@ impl SqliteStore {
     }
 
     /// Runs a closure inside `BEGIN IMMEDIATE`; success commits and error or panic rolls back.
+    ///
+    /// This is the sole public business write entry for multi-statement work. Store convenience
+    /// writers such as [`Self::mark_delivered`] also delegate here so callers never observe a
+    /// committed business side effect without a successful `COMMIT`.
     ///
     /// The closure must contain database work only. External calls must happen after commit.
     pub fn with_write_transaction<T>(
@@ -157,13 +167,20 @@ impl SqliteStore {
     }
 
     /// Stores the first successful publisher completion time without overwriting it.
+    ///
+    /// Convenience API: still enters the unified `BEGIN IMMEDIATE` write-transaction boundary via
+    /// [`Self::with_write_transaction`]. Only a successful `COMMIT` can return
+    /// [`MarkDeliveredResult::Marked`], [`MarkDeliveredResult::AlreadyMarked`], or
+    /// [`MarkDeliveredResult::NotFound`]. The crate-private Outbox helper is transaction-bound and
+    /// is not exposed as `WriteTransaction::mark_delivered`.
     pub fn mark_delivered(
         &self,
         position: OutboxPosition,
         delivered_at: DateTime<Utc>,
     ) -> Result<MarkDeliveredResult, StoreError> {
-        let connection = self.lock_connection()?;
-        outbox::mark_delivered(&connection, position, delivered_at)
+        self.with_write_transaction(|transaction| {
+            outbox::mark_delivered(transaction, position, delivered_at)
+        })
     }
 
     fn lock_connection(&self) -> Result<MutexGuard<'_, Connection>, StoreError> {
@@ -185,6 +202,12 @@ impl SqliteStore {
     fn mark_unhealthy(&self) {
         self.healthy.store(false, Ordering::Release);
     }
+
+    /// Test-only fail-closed seam for unhealthy-store coverage; not a production API.
+    #[cfg(test)]
+    pub(crate) fn mark_unhealthy_for_test(&self) {
+        self.mark_unhealthy();
+    }
 }
 
 /// Restricted write surface borrowed from one active store transaction.
@@ -193,7 +216,14 @@ pub struct WriteTransaction<'connection> {
     connection: &'connection Connection,
 }
 
-impl WriteTransaction<'_> {
+impl<'connection> WriteTransaction<'connection> {
+    /// Test-only constructor for fixtures that deliberately exercise a transaction-bound helper.
+    /// Production code constructs this type only inside [`SqliteStore::with_write_transaction`].
+    #[cfg(test)]
+    pub(crate) const fn from_connection(connection: &'connection Connection) -> Self {
+        Self { connection }
+    }
+
     /// Validates, canonicalizes, and inserts an immutable AuditRecord.
     pub fn append_audit(&self, record: &AuditRecord) -> Result<(), StoreError> {
         audit::insert_audit(self.connection, record)
@@ -201,7 +231,7 @@ impl WriteTransaction<'_> {
 
     /// Allocates aggregate sequence/global position and validates the full typed EventEnvelope.
     pub fn append_event(&self, event: PendingEvent) -> Result<OutboxRecord, StoreError> {
-        outbox::append_event(self.connection, event)
+        outbox::append_event(self, event)
     }
 
     /// Borrows the production rate-limit authority bound to this transaction.
