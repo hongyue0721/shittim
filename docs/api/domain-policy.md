@@ -1,6 +1,6 @@
 # domain-policy 内部 Rust API
 
-> **非 KCP 外部 API**。本页描述 `rust/crates/domain-policy` 的纯领域 matcher。
+> **非 KCP 外部 API**。本页描述 `rust/crates/domain-policy` 的纯领域 matcher 与 TaskScope resource containment。
 >
 > 不持久化、不连接 SQLite/Tokio、不生成 UUID/时间/revision，不创建隐藏系统规则。
 > PolicyRule、Actor、ContentOrigin、EntryPoint、SideEffectClass、confirmation mode 与 PermissionDecision decision 均直接使用 `kernel-contracts` 生成类型。
@@ -10,7 +10,7 @@
 | 项 | 说明 |
 |---|---|
 | Crate | `domain-policy` |
-| 权威语义 | `SECURITY_PRIVILEGE.md` §1–4；`IMPLEMENTATION_CONTRACTS.md` §6.6–6.7 |
+| 权威语义 | `SECURITY_PRIVILEGE.md` §1–4；`IMPLEMENTATION_CONTRACTS.md` §6.6–6.7、§6.9.1 |
 | 依赖 | `kernel-contracts`、chrono/chrono-tz、url、serde、thiserror |
 | 禁止依赖 | SQLite、Tokio、KCP server、UI、Extension、`domain-task` |
 | 默认 | 无匹配规则为 `allow` / `reason_codes=["default_allow"]` / matched rule 为 null |
@@ -59,6 +59,32 @@ fn normalize_inputs(value: &str, pattern: &str) -> Result<(String, String), Poli
 - `normalize_uri_pattern(&str)`：规范化一条 URI pattern；只允许 path 中完整 segment `*` / `**`，query/fragment 仍为精确字符串，scheme/authority 不允许 glob。
 - 两者都执行 scheme/host 小写、默认端口移除、dot segments 消解、百分号十六进制大写、RFC 8089 `file:` 校验与 Windows drive 大写；反斜杠和非法 authority 均 fail closed。
 - API 故意只处理单项，不提供数组 normalizer；调用方负责保持数组顺序与重复项，并决定错误如何归属。当前 `task.create` repository 已按契约逐项调用，完整 fixture 与 repository 测试覆盖顺序、重复和 hash。
+
+## TaskScope resource containment
+
+纯边界判断，**不授权、不创建 PermissionDecision、不修改 Scope**。语义见 `IMPLEMENTATION_CONTRACTS.md` §6.9.1 与 `SECURITY_PRIVILEGE.md` §2.1。
+
+```rust
+use domain_policy::{
+    resource_refs_within_task_scope, ResourceContainmentError,
+    ResourceContainmentErrorCode, ResourceContainmentInputKind,
+};
+
+fn check(
+    resource_patterns: &[String],
+    exclusions: &[String],
+    resource_refs: &[String],
+) -> Result<bool, ResourceContainmentError> {
+    resource_refs_within_task_scope(resource_patterns, exclusions, resource_refs)
+}
+```
+
+- `resource_patterns` 空 = include 不限制；任一 exclusion 命中则该 resource 不在边界内（exclude 优先）。
+- 每个 resource 都必须满足边界；`resource_refs` 空时先完整验证 patterns，再返回 `Ok(true)`。
+- **全部输入先验证**：stored include/exclude 必须合法且已规范化（normalize 结果等于原值），否则 `InvalidScopePattern`；concrete resource 可规范化后匹配，非法则 `InvalidResourceUri`。前面的越界不得提前 `Ok(false)` 掩盖后面的非法 URI。
+- 只复用底层 URI parse/match，**不**调用 PolicyRule 的 `match_resources`（后者是规则 applicability，不是 TaskScope containment）。
+- 顺序/重复不影响布尔结果，且不修改输入数组；`*` / `**`、query/fragment 语义与 Policy URI 完全一致。
+- 错误可机读：`code`、`input_kind`、`index`，底层 `PolicyError` 经 `source()` / `policy_error()` 访问，不得只靠 message。
 
 ## Pattern 与排序
 
@@ -113,4 +139,11 @@ crate 使用 `kernel-contracts::sha256_canonical`（RFC 8785 + SHA-256）计算 
 | `canonicalization_failed` | RFC 8785 输入失败 |
 | `rate_limit_failed` | authoritative port 缺失或失败 |
 
-错误均返回 `PolicyEvaluationResult::Error`，不得转成 Default Allow。
+Policy matcher 错误均返回 `PolicyEvaluationResult::Error`，不得转成 Default Allow。
+
+TaskScope containment 另有独立错误码（不进入 PolicyEvaluationResult）：
+
+| code | 含义 |
+|---|---|
+| `invalid_scope_pattern` | stored TaskScope include/exclude 非法或未规范化 |
+| `invalid_resource_uri` | concrete resource URI 非法 |

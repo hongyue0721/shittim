@@ -12,10 +12,10 @@
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 45 lines
-- `docs/PROGRESS.md` — 156 lines
+- `docs/PROGRESS.md` — 157 lines
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
-- `docs/api/domain-policy.md` — 116 lines
+- `docs/api/domain-policy.md` — 149 lines
 - `docs/api/domain-task.md` — 116 lines
 - `docs/api/error-catalog.md` — 56 lines
 - `docs/api/event-catalog.md` — 30 lines
@@ -28,11 +28,11 @@
 - `docs/sdk/README.md` — 33 lines
 - `docs/sdk/extension-sdk.md` — 35 lines
 - `specs/COMPUTER_USE.md` — 582 lines
-- `specs/CONFORMANCE.md` — 400 lines
+- `specs/CONFORMANCE.md` — 401 lines
 - `specs/CORE_ARCHITECTURE.md` — 823 lines
 - `specs/EXTENSION_SDK.md` — 619 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 1485 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 1498 lines
 - `specs/MODEL_RUNTIME.md` — 352 lines
 - `specs/REFERENCES.md` — 252 lines
 - `specs/SECURITY_PRIVILEGE.md` — 398 lines

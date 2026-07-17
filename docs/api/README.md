@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-已有首批 JSON Schema 源、manifest、Rust 生成类型与校验/哈希 API、纯领域 `domain-task` 状态机、Freedom-first `domain-policy` matcher、文件型 `kernel-sqlite` 持久化基座和 Task create/get repository，以及不可连接的 `kernel-kcp` Value preflight、三方法 registration/dispatcher 和 typed handlers。当前**没有**可连接 `agentd`、稳定网络 endpoint 或 TypeScript 客户端包。
+已有首批 JSON Schema 源、manifest、Rust 生成类型与校验/哈希 API、纯领域 `domain-task` 状态机、Freedom-first `domain-policy` matcher 与 TaskScope resource containment、文件型 `kernel-sqlite` 持久化基座和 Task create/get repository，以及不可连接的 `kernel-kcp` Value preflight、三方法 registration/dispatcher 和 typed handlers。当前**没有**可连接 `agentd`、稳定网络 endpoint 或 TypeScript 客户端包。
 
 本目录是中文导航，不是新的事实源。字段、状态机、错误和兼容规则以 `specs/` 及 `schemas/source` 为准。
 
@@ -31,4 +31,4 @@
 
 KCP Envelope 使用 `protocol_version`；payload、Event payload 和持久对象使用 `schema_version`。第一版 KCP protocol 为 `1.0`。正式 Schema 使用 JSON Schema 2020-12，并通过 RFC 8785 canonical JSON 支撑稳定哈希与幂等等价比较。
 
-`domain-task` 只产出领域转换结果与事件**意图**；`domain-policy` 只产出非持久 decision draft / canonical input，并显式区分 Stop Fence/Recovery invariant。`kernel-sqlite` 已拥有文件 migration、AuditRecord JSON、Event Outbox、事务绑定 rate-limit 消费和 Task create/get repository。`kernel-kcp` 已实现 Value preflight、registration narrow、typed dispatcher、三个 handlers、稳定 response/error 构造、post-commit intent 与 SQLite adapter；仍不接受 bytes/frame，也不提供 server。Task list/update、Action 与 PermissionDecision repository仍未实现。
+`domain-task` 只产出领域转换结果与事件**意图**；`domain-policy` 只产出非持久 decision draft / canonical input，以及纯 TaskScope resource containment（不授权），并显式区分 Stop Fence/Recovery invariant。`kernel-sqlite` 已拥有文件 migration、AuditRecord JSON、Event Outbox、事务绑定 rate-limit 消费和 Task create/get repository。`kernel-kcp` 已实现 Value preflight、registration narrow、typed dispatcher、三个 handlers、稳定 response/error 构造、post-commit intent 与 SQLite adapter；仍不接受 bytes/frame，也不提供 server。Task list/update、Action 与 PermissionDecision repository仍未实现。

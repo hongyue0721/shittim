@@ -9,6 +9,7 @@
 mod error;
 mod matcher;
 mod rate_limit;
+mod resource_scope;
 mod types;
 mod uri;
 
@@ -17,6 +18,10 @@ pub use matcher::{evaluate_policy, Specificity};
 pub use rate_limit::{
     RateLimitConsume, RateLimitKey, RateLimitPort, RateLimitPreview, RateLimitRequest,
     RejectRateLimits,
+};
+pub use resource_scope::{
+    resource_refs_within_task_scope, ResourceContainmentError, ResourceContainmentErrorCode,
+    ResourceContainmentInputKind,
 };
 pub use types::{
     parse_policy_rule_json, CanonicalEvaluationInput, DelegationCoverageEvidence,

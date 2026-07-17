@@ -942,6 +942,19 @@ created_at / updated_at
 
 `TaskSpec` 必须引用 `task_scope_ref`；`ActionRequest.resource_refs[]` 必须落在对应 TaskScope 内，超出时作为新的 Policy 输入处理，不能静默修改长期 ExplorationScope。`task.create` 的首版初值固定为 `revision=1`、`source_refs=[新 origin id]`、完整 actor+entry point 的 `created_by`，并令 `created_at=updated_at=accepted_at`；详见第 5.5 节。
 
+#### 6.9.1 Resource containment（纯边界判断）
+
+`domain-policy` 提供纯函数 `resource_refs_within_task_scope(resource_patterns, exclusions, resource_refs) -> Result<bool, ResourceContainmentError>`，只回答“给定 concrete resource URI 列表是否全部落在该 TaskScope 的 include/exclude 边界内”。它：
+
+- **不是授权**：`Ok(true)` / `Ok(false)` 不产生 Policy 决策、PermissionDecision、Approval，也不修改 Scope；
+- **不复用 PolicyRule applicability**：不得调用 Policy matcher 的 `match_resources`（后者是“规则是否适用于任一 resource”的规则匹配语义）；只复用底层 Policy URI parse/normalize/segment-glob match；
+- **include 空数组 = 不限制**；**exclude 优先于 include**；**每个 resource 都必须满足**；`resource_refs` 为空时，在完整验证 patterns 后返回 `Ok(true)`；
+- **先完整验证全部输入，再返回 containment 布尔值**：前面的越界 resource 不得提前 `Ok(false)` 而掩盖后面的非法 URI/pattern；
+- **stored TaskScope pattern 必须合法且已规范化**（`normalize_uri_pattern(pattern) == pattern`），否则 `InvalidScopePattern`（含 input kind + index）；concrete resource URI 可先规范化再匹配，非法则 `InvalidResourceUri`（含 index）；
+- 数组**顺序/重复不影响布尔结果**，且**不得修改输入数组**；query/fragment 与 `*` / `**` 完全复用 `SECURITY_PRIVILEGE.md` §2.1 现有语义。
+
+错误结构必须可机读：公开 `ResourceContainmentErrorCode::{InvalidScopePattern, InvalidResourceUri}`、`ResourceContainmentInputKind::{ResourcePattern, Exclusion, ResourceRef}`、`index`，并保留底层 `PolicyError` 作为 `source`（调用方可经 `source()` / 结构化访问取得，不得仅靠 message 文本匹配）。
+
 ### 6.10 ApprovalRecord
 
 ```text

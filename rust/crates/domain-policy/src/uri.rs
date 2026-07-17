@@ -53,7 +53,11 @@ pub fn normalize_uri(value: &str) -> Result<String, PolicyError> {
 /// reject glob tokens. This function deliberately handles one pattern at a time: callers retain
 /// ownership of array ordering, duplicate preservation, and error aggregation.
 pub fn normalize_uri_pattern(pattern: &str) -> Result<String, PolicyError> {
-    Ok(parse_uri(pattern, true)?.value)
+    Ok(normalize_uri_pattern_value(pattern)?.value)
+}
+
+pub(crate) fn normalize_uri_pattern_value(pattern: &str) -> Result<NormalizedUri, PolicyError> {
+    parse_uri(pattern, true)
 }
 
 pub(crate) fn normalize_uri_value(value: &str) -> Result<NormalizedUri, PolicyError> {
@@ -173,7 +177,7 @@ fn parse_uri(input: &str, allow_glob: bool) -> Result<NormalizedUri, PolicyError
     })
 }
 
-fn uri_pattern_matches(pattern: &NormalizedUri, value: &NormalizedUri) -> bool {
+pub(crate) fn uri_pattern_matches(pattern: &NormalizedUri, value: &NormalizedUri) -> bool {
     pattern.scheme == value.scheme
         && pattern.authority == value.authority
         && pattern

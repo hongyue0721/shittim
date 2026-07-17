@@ -50,6 +50,7 @@
 
 - [x] 新增 `rust/crates/domain-policy`，直接使用生成 PolicyRule/Actor/ContentOrigin/EntryPoint/SideEffectClass/decision enum。
 - [x] 实现 URI 规范化、segment glob、capability/operation `.*`、exclude、side-effect ceiling；公开单项 `normalize_uri` / `normalize_uri_pattern` 复用同一 parser，供未来 Task repository 保序、保重复地逐项调用。
+- [x] 实现 TaskScope resource containment 纯函数 `resource_refs_within_task_scope`：include 空=不限制、exclude 优先、全量先验证再返回布尔；stored pattern 必须已规范化；不授权、不改 Scope、不复用 PolicyRule `match_resources`。
 - [x] 按 SECURITY §2.3 实现 specificity 与 priority/effect/revision/ID 稳定排序，只计算实际命中备选。
 - [x] 实现 time window、Delegation/local-presence 精确布尔和 authoritative `RateLimitPort` winner-only 原子消费重选。
 - [x] Stop Fence/Recovery invariant 优先返回独立 Blocked，不创建隐藏 deny；S0–S5 无规则均 Default Allow。
@@ -139,7 +140,7 @@ cargo test --manifest-path rust/Cargo.toml --workspace
 git diff --check
 ```
 
-全部通过；workspace 共 229 项测试，`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 46。
+全部通过；workspace 共 247 项测试，`domain-policy` 48（含 TaskScope containment 18）、`kernel-contracts` 53、`schema-tool` 14、`kernel-kcp` 46。
 
 ## 事实来源
 

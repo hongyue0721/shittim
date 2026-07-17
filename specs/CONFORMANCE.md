@@ -82,6 +82,7 @@
 - 其余条件相同时 newest revision 获胜；
 - 推荐确认模板默认未启用；
 - scope 包含/越界；
+- TaskScope resource containment 纯函数：include 空=不限制、exclude 优先、每个 resource 均须满足、resources 空在完整验证 patterns 后为 true；stored pattern 必须已规范化否则 `InvalidScopePattern`；非法 concrete URI 为 `InvalidResourceUri`；先完整验证全部输入，前面越界不得掩盖后面非法 URI；`Ok(true/false)` 只表示边界包含，不授权、不改 Scope；顺序/重复不影响结果且不修改数组；`*`/`**`/query/fragment 复用 Policy URI 语义；
 - Exploration Scope 与 Task Scope 分离：探索发现不能扩张任务写入、外发或特权作用域；
 - 入口信任差异；
 - local confirmation；
