@@ -23,8 +23,8 @@
 
 AuditRecord 是独立的本地不可变审计对象，不属于这三个事件的 payload，也不会仅因写入 Audit Store 自动成为公开事件或进入 Outbox。参见 [AuditRecord v1](audit-record.md)。
 
-其他内部事件名称只有在加入正式 payload Schema、兼容说明和 Conformance 测试后，才成为对外 Catalog 成员。
+其他内部事件名称（包括未来 Profile 可能使用的 `snapshot`、`user_takeover` 等 Extension event）只有在加入正式 payload Schema、兼容说明和 Conformance 测试后，才成为对应 Profile 的 Catalog 成员。它们默认不是公共 Kernel Event；只有正式晋升并纳入公共 Schema/Catalog 后，才可成为公共 Kernel Event。
 
 ## 当前状态
 
-目前已有 SQLite Outbox 表、sequence/position 原子分配、历史/未投递读取与 task.create producer；仍没有 Publisher、订阅 server 或消费 SDK，因此不能声称事件已经可外部订阅。
+目前已有 SQLite Outbox 表、sequence/position 原子分配、历史/未投递读取与 task.create producer；仍没有 Publisher、订阅 server 或消费 SDK，因此不能声称事件已经可外部订阅。未来 Computer Use Profile 的 `snapshot`、`user_takeover` 等名称即使由 Provider 返回，也默认只是 Profile Extension event；Provider 返回的 Event-like JSON 不能自行晋升为 Kernel Event。

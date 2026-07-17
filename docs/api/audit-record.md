@@ -49,7 +49,7 @@
 - `unknown` 必须通过非空 `reason_codes` 解释未知原因，可以没有 manifest；
 - PayloadManifest 只用 stable ref，不新增或假称已有 source Schema，也不在 AuditRecord 复制正文。
 
-当前 Schema直接校验 `not_sent` 的空 manifest 与 `unknown` 的非空原因；“sent 的多个候选数组至少一个非空”属于跨字段 producer/repository 契约，当前受限生成器不支持所需组合形状，因此只写入 Conformance，不伪装成已有自动化实现。
+当前 Schema 直接校验 `not_sent` 的空 manifest 与 `unknown` 的非空原因；`sent` 的“content origin / artifact / resource / model call / payload manifest / causation 至少一个非空”无法由当前受限生成器表达，但已由 `kernel-sqlite` 的 `enforce_sent_support` 单记录 producer/store 检查和自动化测试实现。该检查只证明本条 AuditRecord 有支撑引用，不证明引用目标存在或跨对象一致。
 
 ## 双源一致性
 

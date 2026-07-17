@@ -18,7 +18,7 @@
 - [`specs/IDENTITY_MEMORY_INITIATIVE.md`](specs/IDENTITY_MEMORY_INITIATIVE.md)：身份、记忆、探索、主动性与可生长对象。
 - [`specs/EXTENSION_SDK.md`](specs/EXTENSION_SDK.md)：扩展生命周期、边界、安装、调用与声明性风险。
 - [`specs/MODEL_RUNTIME.md`](specs/MODEL_RUNTIME.md)：Pi、模型路由、Context Pack 与云调用记录。
-- [`specs/COMPUTER_USE.md`](specs/COMPUTER_USE.md)：桌面观察、Execute Gate、输入租约与验证。
+- [`specs/COMPUTER_USE.md`](specs/COMPUTER_USE.md)：未来可选的 Computer Use Extension Profile 事实源，定义桌面观察、Execute Gate、输入租约与验证；核心产品完成不依赖它。
 - [`specs/IMPLEMENTATION_CONTRACTS.md`](specs/IMPLEMENTATION_CONTRACTS.md)：版本化对象、Kernel Control Protocol 与编码契约。
 - [`specs/CONFORMANCE.md`](specs/CONFORMANCE.md)：必须自动化的验收测试。
 - [`specs/REFERENCES.md`](specs/REFERENCES.md)：直接依赖、可选 Provider 与仅参考项目的边界。
@@ -28,7 +28,7 @@
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
 - [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；Schema/生成类型、Task create/get repository、不可连接 Value preflight/三方法 dispatcher 与 typed handlers 已实现，`agentd` 与可连接 server 尚未实现。
-- [`docs/sdk/README.md`](docs/sdk/README.md)：SDK 文档入口；当前无可发布 SDK。
+- [`docs/sdk/README.md`](docs/sdk/README.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 
 ## 实现目标

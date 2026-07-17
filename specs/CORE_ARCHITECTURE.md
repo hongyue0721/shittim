@@ -9,10 +9,12 @@
 - UI 可关闭和重连；
 - 模型 Runtime 可崩溃和重启；
 - Extension 可按需启动；
+- 可选 Profile 可以完全未安装，Core 仍可完整启动并提供非该 Profile 的全部能力；
 - Provider 可部分缺失；
 - 任务状态不依赖某个模型会话；
 - 权限不依赖 Prompt；
 - 平台差异不进入 Kernel Domain；
+- Core 不理解 Display、Window、Screenshot、Coordinate、Desktop generation、OperationSnapshot 或 Input Session Lease 等 Profile 私有对象；
 - 远程 Channel 不直接接触能力层；
 - 故障后不会重复执行不可逆动作。
 
@@ -28,11 +30,11 @@
 
 模型、Pi 和角色运行时。可以重启，不拥有现实状态。
 
-### 2.2 非常驻
+### 2.2 非常驻与可选部署
 
-#### desktop-client
+#### Client
 
-按用户界面生命周期存在。
+本地桌面客户端、Web 客户端或其他内部客户端都按各自界面生命周期存在。`desktop-client` 是可选视图实现，不是 Core 启动依赖；UI 关闭、未安装或不支持某个 Profile 时不影响 `agentd` 与 Task 真相。
 
 #### Extension/Provider Process
 
@@ -69,12 +71,13 @@
 | 有效记忆与来源 | Memory Domain |
 | Initiative Candidate | Initiative System |
 | 扩展安装与进程状态 | Extension Supervisor |
-| Provider 能力档案 | Provider Registry |
+| 已声明、协商且 probe 得到的能力档案 | Provider Registry |
+| Profile 私有观察、结果、句柄与会话状态 | 对应 Extension/Profile 实现；不是 Kernel Domain 事实 |
 | Prompt/模型会话临时状态 | agent-runtime |
-| UI 视图状态 | desktop-client |
+| UI 视图状态 | 对应 client |
 | 特权执行内部状态 | Privilege Broker，仅动作期间 |
 
-Provider 可以缓存本地对象，但其缓存不是 Kernel 事实。
+Provider 可以缓存本地对象，但其缓存不是 Kernel 事实。Profile 私有对象只能通过通用 Object Handle、stable resource ref 或已协商的 typed Extension result 被 Kernel 引用；Core 不复制其领域模型。未来 Extension Event 必须先有独立正式合同，当前不能用“result/event”并称来暗示事件边界已存在。能力未声明、未协商或 probe 未通过时，Registry 必须诚实记录缺失或不可用，不得合成占位能力。
 
 ## 5. 启动
 
@@ -85,8 +88,8 @@ Provider 可以缓存本地对象，但其缓存不是 Kernel 事实。
 1. 确认单实例和数据目录权限；
 2. 打开 SQLite，检查 Schema；
 3. 恢复未完成事务和 Action Lease；
-4. 重建 Task 状态与资源锁；
-5. 加载 Extension Registry，但不启动所有扩展；
+4. 重建 Task 状态、通用资源锁与 Stop Fence；
+5. 加载 Extension Registry，但不启动所有扩展；可选 Profile 缺失不得阻止 Core 启动；
 6. 启动本地认证 IPC；
 7. 启动或连接 agent-runtime；
 8. 恢复允许后台运行的 Channel；
@@ -104,13 +107,15 @@ Provider 可以缓存本地对象，但其缓存不是 Kernel 事实。
 
 按需启动流程：
 
-1. 解析 Profile 和权限；
-2. 选择兼容 Provider；
+1. 解析 Extension Manifest 中声明的 Profile/version 与 Task 的能力需求；
+2. 从已安装实现中选择协议和 Profile 兼容候选；
 3. 启动隔离进程；
-4. 协议握手；
-5. 进行能力探测；
+4. 完成 SDK 协议握手与 Profile/version negotiation；
+5. 执行 capability discovery/probe，以实际结果而非 Manifest 声明建立能力档案；
 6. 注册到 Provider Registry；
 7. 向等待中的 Task 返回可用性。
+
+没有兼容声明时返回 `unsupported`；已支持但当前 health/backend/session 丢失时返回 `unavailable`；SDK/Profile/operation Schema 版本无兼容交集时返回 `incompatible`；能力已发现但当前调用未获 grant 时返回 `capability_not_granted`。它们不是 Core 启动错误，也不能由 Kernel、Planner 或 UI 伪造为可用。
 
 ## 6. agent-runtime 生命周期与重连
 
@@ -137,7 +142,7 @@ agent-runtime 是 agentd 的子进程，由 agentd 管理其生命周期。
 - agent-runtime 每次连接都是全新会话；
 - 旧会话上的模型调用 Promise 被取消；
 - 新会话重新加载 Agent Identity、Persona、活跃 Task 与相关 Memory；
-- 用户通过 desktop-client 看到的是 agentd 持有的 Task 真相，不感知 agent-runtime 重启。
+- 用户通过任一 client 看到的是 agentd 持有的 Task 真相，不感知 agent-runtime 重启。
 
 ### 6.4 多实例
 
@@ -489,7 +494,7 @@ Recovery 和 Verification 不是独立状态机，而是横切关注点：
 
 - 每个 Action 完成后必须经过 Verification 才能进入 `completed` 或 `failed`；
 - Verification 由 Task Engine 根据 Action 的 `verification_policy` 执行；
-- 验证策略可包含：返回码检查、资源状态比对、快照对比、外部查询、用户确认；
+- 验证策略可包含：返回码检查、资源状态比对、前后证据对比、外部查询、用户确认；具体 Profile 可以通过 Extension 结果或 Object Handle 提供自己的证据类型，但不得要求 Core 理解其私有对象；
 - Extension 返回自然语言"成功"不能跳过 Verification；
 - Verification 结果写入 Action 记录，作为后续 Recovery 决策的输入。
 
@@ -551,29 +556,29 @@ Task Engine 在执行前必须：
 
 Planner 不能直接调用 Extension。
 
-## 15. 并发与资源锁
+## 15. 并发与通用资源锁
 
-资源锁按逻辑资源而不是进程命名：
+Core Resource Lock 按逻辑资源 URI / stable resource ref 命名，不按进程或某个 Profile 的对象类型命名。通用资源类别示例：
 
-- desktop session；
-- input device/session；
-- window；
+- session/device；
 - file/document；
 - account/channel；
 - package manager；
 - system service；
 - memory maintenance；
-- extension installation。
+- extension installation；
+- 由 Extension 映射得到的 opaque Profile resource ref。
 
 默认规则：
 
-- 一个桌面输入会话同一时刻只有一个写入者；
-- 同一文件的并发写必须串行或使用版本合并；
+- 同一可变资源的并发写必须串行，或由领域定义可验证的版本合并；
 - 同一账号的外部发送动作必须有顺序；
-- 只读观察可共享，但不得与要求稳定画面的写动作冲突；
-- 用户接管 Computer Use 时必须抢占 Agent 输入锁。
+- 只读观察可共享，但不得与声明要求稳定观察面的写动作冲突；
+- 外部主体接管资源时，Kernel 按该资源的抢占规则撤销或阻断冲突 Action。
 
-锁必须有租约、持有者、超时和恢复语义。
+锁必须绑定 Task/Action、持有者、租约、超时和恢复语义。Kernel 只判断 stable resource refs 的冲突与生命周期，不解释窗口、坐标、桌面会话等 Profile 私有结构。
+
+Platform-specific desktop session、input device/session、window 等含义不在 Core 定义；Computer Use Profile 在 readiness / Input Session Lease 章节把它们映射为 opaque stable resource refs。相应 Core Resource Lock 只接收这些不透明引用并治理冲突与生命周期。
 
 ## 16. 幂等
 
@@ -644,8 +649,8 @@ Intent persisted
 
 ### 17.5 瞬时 UI 事件
 
-- 桌面 UI 订阅 Kernel 事件通过本地 IPC；
-- UI 重连时从 cursor 恢复，丢失窗口内的事件通过拉取当前 Task/Action 状态补偿；
+- Client 通过本地 IPC 订阅 Kernel 事件；
+- Client 重连时从 cursor 恢复，丢失窗口内的事件通过拉取当前 Task/Action 状态补偿；
 - 瞬时 UI（如 toast 通知）是 best-effort，不保证送达。
 
 ### 17.6 Initiative 去重
@@ -685,9 +690,11 @@ AuditRecord v1 固定字段：
 
 所有 v1 字段均 required；无关联事实时必须显式写 `null` 或空数组，使“已知无事实”区别于“生产者漏字段”。`task.creation_recorded` 的创建快照固定回答“为什么创建任务”，`external_content_status` 与 `payload_manifest_refs` 固定回答“是否发送外部内容”。固定引用闭包同时回答 SECURITY_PRIVILEGE §17 的委托、模型建议、执行者与权限、修改资源、验证、回滚、Policy 解释及 Stop Fence/恢复影响。
 
-双源一致性属于对应 repository 的事务校验：`permission_decision_ref` 非空时 `policy_context` 必须非空，且其中 nullable `matched_rule_ref`、`policy_set_revision` 必须等于该不可变 PermissionDecision；不一致则 Audit 写入失败并整体回滚。`decision_ordering_summary`、mutation authority 与 auth evidence 只是补充审计快照。`rollback_capability` 必须从 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影，不可独立编辑；明确值缺乏权威事实则使用 `unknown`，可解析事实冲突则写入失败。`provider_id` 是实际操作 Provider，`model_call_refs` 是建议/推理引用，两者可并存；若引用对应本次模型操作，未来持久层必须校验 provider 一致。Task repository 还必须校验 `task.creation_recorded` 与同事务 Task/ContentOrigin/Event 的固定 canonical 子事实；该路径尚未实现。
+双源一致性属于对应 repository 的事务校验：`permission_decision_ref` 非空时 `policy_context` 必须非空，且其中 nullable `matched_rule_ref`、`policy_set_revision` 必须等于该不可变 PermissionDecision；不一致则 Audit 写入失败并整体回滚。`decision_ordering_summary`、mutation authority 与 auth evidence 只是补充审计快照。`rollback_capability` 必须从 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影，不可独立编辑；明确值缺乏权威事实则使用 `unknown`，可解析事实冲突则写入失败。`provider_id` 是实际操作 Provider，`model_call_refs` 是建议/推理引用，两者可并存；若引用对应本次模型操作，未来持久层必须校验 provider 一致。
 
-Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_context` 未知字段；`if/then/else` 约束 task creation 上下文、PermissionDecision 非空时的 policy_context、not_sent 空 manifest 与 unknown 非空原因。跨对象 PermissionDecision/rollback/provider 一致性，以及 sent 在多个候选引用数组中至少存在一个支撑引用，由 producer/repository 与 Conformance 约束，当前不声称已有持久层测试。开放的 `details` 仍无法由 Schema 完全禁止重复归因。
+**当前实现状态必须分开陈述**：`kernel-sqlite` 已实现 Task create/get repository，并在同一事务内生产固定 `task.creation_recorded` AuditRecord 与唯一 `task.created` Outbox；它已机械校验 Task/TaskSpec/ContentOrigin/Audit/Event 的固定 canonical 子事实、共同 `accepted_at`、correlation/causation 与失败整体回滚。通用 Audit Store 也已实现 `external_content_status=sent` 的**单记录支撑引用非空检查**。仍未实现的是 PermissionDecision / `policy_context` 跨对象字段相等、rollback 权威投影、Provider / ModelCall 跨对象一致性，以及其它业务 Audit producer；不得把 sent 单记录检查冒充跨对象外发证明。
+
+Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_context` 未知字段；`if/then/else` 约束 task creation 上下文、PermissionDecision 非空时的 policy_context、not_sent 空 manifest 与 unknown 非空原因。sent 的“多个候选引用数组至少一个非空”已由 `kernel-sqlite` producer/store 的单记录检查和测试覆盖；它不解析这些引用指向的外部对象。跨对象 PermissionDecision/rollback/provider 一致性当前仍无持久层实现或自动化测试。开放的 `details` 仍无法由 Schema 完全禁止重复归因。
 
 最小默认记录是分类、层级、时间、入口、结果、原因以及适用的稳定归因；正文范围由用户配置或适用 Policy 决定。Secret、Token 或未脱敏正文默认不记录，但不由 Schema 硬编码禁止写入 `summary` / `details`。ModelCallRecord 与 Delegation 的规范名称已存在，但本仓库尚无对应 source Schema，当前字段只承诺 stable ref。业务契约要求审计时，必须遵守 §17.1 的同事务与失败整体回滚规则。
 
@@ -703,12 +710,12 @@ Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_contex
 - `memory_candidate.proposed` / `memory_candidate.committed` / `memory_candidate.rejected`；
 - `extension.started` / `extension.stopped` / `extension.crashed`；
 - `provider.capability_changed`；
-- `snapshot.created` / `snapshot.expired`；
-- `user_takeover.started` / `user_takeover.ended`；
 - `security_mode.changed`；
 - `stop_fence.activated`。
 
-首批对外正式 Event Catalog 只包含 `IMPLEMENTATION_CONTRACTS.md` 明确定义 payload Schema 的事件；其余名称在对应 Schema 发布前不得以无类型 payload 冒充已实现 API。
+`snapshot.created`、`snapshot.expired`、`user_takeover.started`、`user_takeover.ended` 等桌面语义不是 Core 公共事件。当前也没有正式 Extension Event Schema、transport、persistence 或 subscription 合同，因此 Kernel 不得声称现已接收、保存、索引、订阅或稳定转发这些事件，更不得把它们写入 Core EventEnvelope / SQLite Outbox。未来若先建立 Profile 私有 Extension Event 合同，其 payload 对 Core 仍是不解释的 typed data；若要晋升公共 Kernel Event，必须再增加正式 payload Schema、Event Catalog、兼容说明与 Conformance。
+
+首批对外正式 Event Catalog 只包含 `IMPLEMENTATION_CONTRACTS.md` 明确定义 payload Schema 的事件；其余 Core 名称在对应 Schema 发布前不得以无类型 payload 冒充已实现 API。未来 Extension 私有事件即使建立自己的传输合同，也不得因穿过 SDK host boundary 自动成为 Core Catalog 成员。
 
 事件总线不能成为无界日志缓冲。持久化与实时订阅要分开。所有持久化事件通过 SQLite Outbox 发出，实时订阅从 Outbox 消费。
 
@@ -719,12 +726,12 @@ Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_contex
 用户触发的紧急停止，Kernel 级硬中断：
 
 1. 激活 Kernel Stop Fence；
-2. 立即停止所有 Computer Input 租约；
-3. 取消所有 `in_flight` Action（发送取消信号，不等待结果）；
-4. 将所有受影响 Action 转入 `unknown_side_effect`（不自动重放）；
-5. 活跃 Task 转入 `paused` 或 `waiting_user`；
-6. 撤销所有临时权限租约；
-7. 通知所有 Extension 停止副作用；
+2. 找出所有受 Stop 影响且仍活跃的**副作用** Action，撤销其 Action Lease，并在同一原子状态变更中释放该 Lease 持有的全部 Resource Lock；
+3. 撤销所有临时 Permission Lease / Privilege Lease，并使所有后续消费在 lease 边界返回 Stop/lease 失效错误；
+4. 向所有 `in_flight` Extension 调用发送 cancel，不等待结果；无副作用只读诊断已经取得的事实不得被误删或强制转为 `unknown_side_effect`，Fence 激活后仍可发起新的只读诊断查看状态；
+5. 可安全取消且确认未产生副作用的 Action 按正常取消事实闭合；只有不可安全取消或取消后外部结果仍不确定的副作用 Action 转入 `unknown_side_effect`，禁止自动重放；
+6. 活跃 Task 转入 `paused` 或 `waiting_user`；
+7. 通知所有 Extension 停止新的副作用；
 8. 进入 Security Mode `Restricted`；
 9. Emergency Stop 不依赖模型响应，完全由 agentd Kernel 执行。
 
@@ -732,10 +739,10 @@ Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_contex
 
 ### 19.2 Kernel Stop Fence
 
-Kernel Stop Fence 是 agentd 内部的逻辑栅栏，防止新副作用在停止期间被创建：
+Kernel Stop Fence 是 agentd 内部的通用逻辑栅栏，防止新副作用在停止期间被创建或派发：
 
 - Emergency Stop 触发后立即拉起 Stop Fence；
-- Fence 拉起期间：任何创建或推进新副作用 Action 的执行边界都直接返回 `stop_fence_active`，不创建普通 PermissionDecision，也不把 Fence 伪装为 PolicyRule `deny`；已存在 `pending` Action 保持 `pending` 并记录被 Fence 阻断的恢复事实；
+- Fence 拉起期间：任何创建或推进新副作用 Action 的执行边界都直接返回 `stop_fence_active`，不创建普通 PermissionDecision，也不把 Fence 伪装为 PolicyRule `deny`；已存在 `pending` Action 保持 `pending` 并记录被 Fence 阻断的恢复事实；所有已撤销临时 Permission/Privilege Lease 的后续消费必须拒绝；无副作用只读 Query/诊断继续允许；
 - 第一版 Fence 一旦激活就持久保持，Security Mode 切回 Normal **不能**暗中解除；首批 KCP 不提供解除方法；
 - 后续只有经独立规范、API、恢复验证和审计定义的显式解除流程才能降下 Fence；
 - 只读 Query 在 Fence 期间仍允许，用于诊断和状态查看。
@@ -812,6 +819,9 @@ Kernel Stop Fence 是 agentd 内部的逻辑栅栏，防止新副作用在停止
 - 同一 Task 状态在多个进程各自维护；
 - UI 关闭导致任务丢失；
 - Planner 直接调用 Provider；
+- Core 启动、KCP、Schema、crate 或基础产品完成声明依赖某个可选 Profile；
+- Core 持有 Display、Window、Screenshot、Coordinate、Desktop generation、OperationSnapshot、Input Session Lease 等 Profile 私有模型；
+- Profile 缺失、未协商或 probe 失败时仍返回成功或伪造能力；
 - Provider 崩溃拖垮 agentd；
 - 扩展之间直接互调；
 - 失败恢复重放不可逆动作；

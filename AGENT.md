@@ -10,12 +10,19 @@
 - **Core-prohibited/self-modification boundary**：Agent、Skill、Extension、Provider 不得读取后修改、补丁、热替换或重写 agentd Kernel、Task/Policy 解释器、Audit 完整性机制、Privilege Broker、Emergency Stop、Core Identity、安全/隔离边界或私有 Kernel API。正式开发者发布升级可更新 Core。
 - **Growth is allowed**：Memory、Learned Style、Self Preferences、Skill、Trigger、Delegation、Governed Configuration、模型/Provider 路由、Extension 源码/安装/更新/回滚、Provider Adapter、任务策略及恢复知识可由 Companion 版本化生成和迭代，受 Policy、预算、停止条件、可观测性和回滚治理；这些不是默认审批。
 - **Truthful boundaries**：必须区分 OS-enforced、host-enforced 与 declaration-only 权限，特别是未沙箱 Native Extension；不得把声明伪装为隔离。
+- **Optional Profile independence**：任何可选 Profile（包括 Computer Use）都不得成为 Core 的隐含启动、运行、Schema、crate、KCP 或产品完成依赖。Core 面向 Optional Profile 暴露并治理通用 Task/Action/Policy/Scope/Lease/Lock/Stop/Verification/Audit/Recovery 与 Extension 生命周期原语，但这不削弱 Memory、Delegation、Initiative 等 Core 领域自身的事实权威；Core 不预埋 Profile 私有对象或字段。
+- **Truthful capability absence**：Profile 未安装、未声明、未协商、probe 未通过或运行时不可用都是合法且必须显式表达的状态；不得用占位实现、空壳兼容层、默认成功或伪造能力档案掩盖缺失。
 - **Verification over assertion**：Provider 成功不等于目标成功。副作用必须归属 Task/Action，并按规则和能力验证、审计、恢复。
 - **Identity honesty**：Companion 承认自己是 AI，不冒充用户。机械转发用户原文可不标 AI；AI 起草且用户批准的最终文可按用户授权发送；按 Delegation 自主生成外发必须避免冒充并留存来源/审计。
 
 ## 2. 可信边界与依赖方向
 
 允许：`client -> agentd`、`agent-runtime -> Kernel Control Protocol`、`agentd -> domain/extension protocol`、`extension -> extension protocol`、`Broker -> fixed system mechanism`。禁止 UI 或 runtime 直连平台能力、Extension 互调、Extension 直接使用 Broker 凭据、Provider 写 Kernel 事实、模型输出直写权限。
+
+必须区分两张方向不同但含义不同的图，禁止合并成一句“唯一依赖方向”：
+
+- **源码 / Schema 依赖**：`Optional Profile package -> Extension SDK public contracts -> Core public contracts`；Shittim Core 与 Extension SDK Base 不得反向 import、生成或固定任一 Profile 类型；
+- **运行时宿主控制 / 调用**：`Core host -> SDK host boundary -> negotiated Profile implementation`；这是宿主发起协商、grant、invoke、cancel 与监督的控制流，不表示源码反向依赖 Profile。
 
 第三方代码不得载入 agentd 地址空间。Extension 不得成为 Core 或绕过 Task、Policy、Scope、Lease、审计链。普通系统 Shell 与 Broker 固定特权 Action 是两条不同通道；Agent 不得用前者规避后者或改可信 Core。
 
@@ -31,4 +38,12 @@
 
 ## 4. 完成条件
 
-实现必须保持唯一状态所有者与依赖方向；所有副作用可取消、超时、验证和审计；停止不依赖模型；删除和纠正传播到派生数据；扩展崩溃不破坏 Kernel；没有用“健壮兜底”掩盖缺失业务事实。详情与可测试枚举见领域 specs。
+实现必须保持唯一状态所有者与依赖方向；所有副作用可取消、超时、验证和审计；停止不依赖模型；删除和纠正传播到派生数据；扩展崩溃不破坏 Kernel；没有用“健壮兜底”掩盖缺失业务事实。
+
+完成声明必须区分三类义务：
+
+- **Core MUST**：基础产品无条件满足，不能依赖任何可选 Profile；
+- **claim-conditional Profile MUST**：只有产品、发行物或 Extension 明确宣称支持某 Profile/version/facet 时才成为验收义务，并必须独立通过该 Profile 的 Conformance；
+- **future direction**：尚未形成正式 Schema、Catalog、实现和测试的方向，不得写成已提供能力或基础产品完成项。
+
+详情与可测试枚举见领域 specs。

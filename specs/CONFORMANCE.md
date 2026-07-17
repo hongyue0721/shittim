@@ -1,6 +1,12 @@
 # CONFORMANCE.md
 
-> 本文件定义核心、SDK、模型、Computer Use、平台、安全和恢复的一致性测试。
+> 本文件定义核心、SDK、模型、可选 Extension Profile（含 Computer Use）、平台、安全和恢复的一致性测试与发布门槛。
+>
+> **套件分层原则**：
+>
+> 1. **Core / Extension SDK Base 无条件套件**：凡声称实现 Shittim Core 或 Extension SDK Base 的产物，必须通过；**不**依赖 Computer Use、跨平台桌面 Provider 或 Hyprland / niri 真机。
+> 2. **Optional Profile 条件性套件**：统一读取 `ProfileClaim` 集合；存在对应精确 `claim_id` 时相关套件成为硬门，`distribution_asserted=true` 时还成为该发行物对外声明的发布门。未记录该 claim 不阻塞 Core 发布，但运行时必须按第 1.2 节返回唯一语义错误。
+> 3. **声明即验收**：Manifest 文本 alone 不等于支持；一旦 `distribution_asserted=true` 或对外宣称支持，对应 claim 依赖闭包和全套测试硬性适用（见 `COMPUTER_USE.md` §3）。
 
 ## 1. 测试原则
 
@@ -17,14 +23,44 @@
 - Recovery；
 - Resource/Performance。
 
-## 2. 核心不变量
+### 1.1 条件性门控词汇与统一 Claim 集合
+
+所有条件门只读取同一去重后的语言中立 `ProfileClaim` 集合 `C`；概念字段为 `{claim_id, maturity, distribution_asserted, evidence_refs}`，本阶段不创建 Schema。`maturity` 只允许 `contract-only | schema/SDK | composition | provider contract | real-platform`；distribution assertion 是正交布尔值，不是 maturity。
+
+| 标记 | 含义 |
+|---|---|
+| **BASE** | Core 或 Extension SDK Base 无条件硬门 |
+| **IF_CLAIM(expr)** | 对 `C` 中稳定 claim id 的布尔表达式门控。原子在对应精确 id 存在时为真；组合只允许 `ANY(a,b,...)` 与 `ALL(a,b,...)`。禁止 `computer.*`、`a|b`、省略 namespace 或自然语言替代 claim id |
+| **IF_REAL(platform claim id)** | 仅当 `C` 中该精确 platform claim 的 `maturity = real-platform` 时为真；`provider contract` mock 不满足 |
+| **NEVER_CORE_GATE** | 明确不得作为 Core 发布阻塞项 |
+
+读取规则：
+
+- 任一 `computer.*` claim 都先隐含 §11.0；各专节再按自己的 `IF_CLAIM` 增量适用；
+- `distribution_asserted=true` 不改变 maturity，但要求该 claim、其机械依赖闭包和本文件映射的套件全部通过；
+- 同一 `claim_id` 多条、证据不足、散文声明与集合冲突均使发布报告失败；不得从 family 名、包名、单独 Manifest 文本或“完整支持”自然语言补造 claim；
+- “完整 Computer Use”的必需 claim 集合与依赖闭包只由 `COMPUTER_USE.md` §3.3 定义，Conformance runner 必须逐成员闭包，不能接受一个含糊 `ALL` 标签代替记录集合。
+
+### 1.2 未声明时的行为验收
+
+对任何 Optional Profile（含 Computer Use），错误按事实唯一选择：
+
+- 当前安装、发行物或协商集合不提供 → `unsupported`；
+- 已支持但 disabled、quarantined、health/backend/session 等当前暂不可用 → `unavailable`；
+- SDK/Profile/operation Schema 版本无兼容交集 → `incompatible`；
+- 能力已 discovery-visible 且版本兼容，但当前调用未获 grant → `capability_not_granted`；
+- 禁止同一事实“任选其一”；合同缺失 **不是** Policy Default Allow；
+- discovery-visible 与 invocable 必须分测：只读 observation 不需要副作用 Action grant，但仍需正式兼容 Schema、身份/scope 与数据策略；
+- 不得把可选套件失败解读为“Core 不变量失败”，也不得把未跑可选套件解读为“已支持该 Profile”。
+
+## 2. 核心不变量（BASE）
 
 必须自动测试：
 
 - 模型不能写权限；
 - Provider 不能写 Task 状态；
 - Extension 不能直接互调；
-- 用户取消优先于 Agent 输入；
+- 用户取消优先于 Agent 输入（输入路径存在时；无 Computer Use 时至少在 Action 取消边界验证）；
 - 任务成功必须有验证；
 - 无匹配 PolicyRule 的 Action 得到 `allow`；
 - 匹配规则按 priority、确定性 specificity tuple、deny/confirm/allow effect、newest revision、rule ID UTF-8 字节序升序稳定决定；ID tie-breaker 不改变前述语义；
@@ -36,9 +72,10 @@
 - UI 断开不丢 Task；
 - Agent Runtime 重启不重复不可逆 Action；
 - Stop Fence 在模型、Provider、Extension、远程入口和租约边界均生效；
-- 外部内容不能伪造 Kernel Command、Kernel Event、Policy mutation evidence 或 Broker 请求。
+- 外部内容不能伪造 Kernel Command、Kernel Event、Policy mutation evidence 或 Broker 请求；
+- **能力未协商 / Profile 未启用不得落入 Policy Default Allow**：当前集合不提供为 `unsupported`；已支持但当前暂不可用为 `unavailable`；版本无兼容交集为 `incompatible`；已发现但当前调用未获 grant 为 `capability_not_granted`。
 
-## 3. Task Engine
+## 3. Task Engine（BASE）
 
 场景：
 
@@ -58,7 +95,7 @@
 - idempotent retry；
 - unknown external outcome。
 
-## 4. Policy/Delegation
+## 4. Policy/Delegation（BASE）
 
 测试：
 
@@ -97,7 +134,7 @@
 - mutation 审计包含 actor、entry_point、auth evidence（如有）、ContentOrigin 与 policy mutation authority；第一版不要求 Owner 或本机唯一身份，`policy_mutation_authority` 是后续认证与细粒度规则的预留上下文；
 - ambiguous natural language never directly authorizes，必须先成为可解释的结构化候选。
 
-## 5. Kernel Control Protocol、Schema 与事件
+## 5. Kernel Control Protocol、Schema 与事件（BASE）
 
 必须自动测试：
 
@@ -149,19 +186,21 @@
 - AuditRecord v1 是 `agentd` 拥有的不可变本地事实，不带 revision；全部字段 required，无关联事实使用显式 null/空数组；未知字段、未知 audit_type、`policy_context` 未知字段和非 `system_internal` 的 null actor 被 Schema 拒绝；`task.creation_recorded` 必须有 UUID task_id 与严格创建快照（revision=1、goal、origin、proposer），其他 audit_type 的该快照必须为 null；Actor 非空时必须保存完整 revision 快照；
 - AuditRecord 的稳定引用闭包必须结构化回答任务创建原因、Delegation、模型建议/推理、VerificationResult、修改资源、是否外发、回滚能力、Stop Fence/恢复影响，以及匹配规则、排序依据、policy mutation authority 与 auth evidence；`not_sent` 拒绝非空 manifest refs，`sent` 的 producer 至少提供 content origin/artifact/resource/model call/payload manifest/causation 支撑，`unknown` 必须有 reason code；ModelCallRecord/PayloadManifest/Delegation 当前只使用非空 stable ref，不声称已有 source Schema 或 UUID；
 - `permission_decision_ref` 非空时 `policy_context` 必须非空；未来 Audit repository 必须将 nullable matched_rule_ref、policy_set_revision 与不可变 PermissionDecision 比对，失配使 Audit/业务/Outbox 同事务回滚；该跨对象一致性当前只有 Conformance 契约，没有 SQLite 实现或自动化测试；
+- Computer Use Protected Surface/target/Snapshot generation/destination/operation/resource scope 等参与判定事实必须进入当前 PermissionDecision evaluation context；任一事实变化导致 context hash 不再覆盖时，旧 PermissionDecision、派生 ApprovalRecord 与相关 Permission/Privilege Lease 不可继续消费，必须回 Core 重评；Profile 只产出标签/证据，不决定 Policy effect；
 - `rollback_capability` 必须由 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影且不可独立编辑；事实缺失/不可判定用 unknown，可解析事实冲突使事务失败；`provider_id` 表示实际操作 Provider，`model_call_refs` 表示建议/推理参与者，二者可并存；同一模型操作的 provider 一致性属于未来 repository 检查；
 - AuditRecord 不自动成为首批公开 Event、不自动进入 Outbox；业务契约要求审计时，业务事实、AuditRecord 与该业务事实要求的 Outbox 在同一事务提交，Schema/跨对象一致性/插入失败整体回滚；固定归因必须有顶层 required 字段，不能仅藏进 details，但 Schema 无法完全禁止开放 details 重复这些值；正文默认最小记录但不硬禁 Secret；
 - 首批事件类型及 payload 严格为 `task.created`、`task.state_changed`、`stop_fence.activated`，使用点号小写；
-- `stop.activate` 就是首批 Emergency Stop 入口：先持久化 Fence generation 与事件，再撤销输入/权限租约、取消 in-flight Action、通知 Extension 并更新 Task；重复调用保持同一 active generation；Fence 不因 Security Mode 恢复而解除，KCP 第一版不存在清除方法；
+- `stop.activate` 就是首批 Emergency Stop 入口：先持久化 Fence generation 与事件；随后撤销**所有受 Stop 影响且仍活跃的副作用 Action Lease**，并在同一原子状态变更中释放其全部 Resource Lock；撤销所有临时 Permission Lease / Privilege Lease，且后续消费必须拒绝；向**所有 in-flight Extension 调用**发送 cancel。无副作用只读诊断的已取得事实不得被误删或强制转未知，Fence 后仍可发起新的只读诊断；只有已开始且不能安全取消、其副作用结果不确定的 Action 进入 `unknown_side_effect`。重复调用保持同一 active generation；Fence 不因 Security Mode 恢复而解除，KCP 第一版不存在清除方法；
 - PermissionDecision 包含不可变 id、evaluated_at、evaluation_context_hash、policy_set_revision；同一 Action 的 decision_revision 严格递增，ActionRequest 引用当前 decision；
 - ApprovalRecord 使用 supersedes_ref 的不可变决议链；approved/denied 的 resolved_at 必填，deferred 为 null；
 - policy_set_revision 在参与匹配的 PolicyRule、Delegation、Security Mode 投影规则或治理对象启用/修改/撤销事务中单调增加；
 - RecoveryDecisionCandidate 的 retry_original 只在副作用未发生且幂等保障成立时合法；RecoveryAttemptRef 不可变追加；Verification recommendation=retry 不直接执行重放；
 - JSON Schema 全部声明 2020-12，RFC 8785 canonical JSON 测试向量跨 Rust/TypeScript 产生同一 SHA-256；
 - Schema 生成运行两次 byte-for-byte 一致，生成物无手改漂移、`$id` 唯一、`$ref` 可解析；
-- Unix Domain Socket 与 Windows Named Pipe 的传输合同测试共用同一 KCP Schema；不得用 JSON-RPC 特有字段替代 KCP Envelope。
+- Unix Domain Socket 与 Windows Named Pipe 的传输合同测试共用同一 KCP Schema；不得用 JSON-RPC 特有字段替代 KCP Envelope；
+- **KCP / Core Schema 不得因 Computer Use 而扩张固定字段**；Desktop model、Snapshot、Coordinate、Input Session Lease 等不得出现在 Core 顶层必选对象中（BASE 负向测试）。
 
-## 6. Memory
+## 6. Memory（BASE）
 
 测试：
 
@@ -179,7 +218,7 @@
 - Memory 可在明确来源、作用域和规则下保存敏感内容、认证数据与 Secret；
 - mid-term summary not automatically permanent。
 
-## 7. Initiative
+## 7. Initiative（BASE）
 
 测试：
 
@@ -193,9 +232,9 @@
 - no infinite task generation；
 - system maintenance vs user task labeling。
 
-## 8. Extension SDK
+## 8. Extension SDK Base（BASE）
 
-通用：
+通用（无条件）：
 
 - handshake/version；
 - permission projection；
@@ -203,7 +242,7 @@
 - timeout；
 - cancel；
 - progress；
-- event sequence；
+- Extension Event 当前没有正式 Schema/transport/persistence/subscription 合同；BASE 负向测试证明 Profile 私有事件不能进入 Core EventEnvelope/Outbox，且产品不得声称 Kernel 已可保存、索引、订阅或稳定转发；
 - object handle expiry；
 - crash/quarantine；
 - reconfigure；
@@ -211,11 +250,20 @@
 - permission/source declaration diff；
 - Native Extension 的 OS-enforced、host-enforced、declaration-only 风险展示准确，声明不会被当作隔离；
 - Native、AI 自写和社区 Extension 在无匹配拒绝/确认规则时可安装、运行和使用其声明网络能力；
-- incompatible profile。
+- incompatible profile；
+- Manifest 声明 ≠ discovery-visible ≠ invocable：只有正式兼容的 versioned operation payload/result Schema（事件能力再加 event Schema）、negotiation 与 probe 全部成立才可 discovery-visible；当前调用仍须独立满足 grant（若需要）与边界检查；
+- 跨扩展直接调用应在测试环境失败；
+- Privilege Profile 不得直连 Broker；CapabilityNeed 不得绕过 Registry；
+- Core 自改防护（扩展侧无法获得写 Core 的合法 API）。
 
-跨扩展直接调用应在测试环境失败。
+### 8.1 Optional Profile 挂载规则（BASE 元测试）
 
-## 9. Model Provider
+- SDK 必须按固定语义拒绝：当前集合不提供为 `unsupported`，已支持但暂不可用为 `unavailable`，版本无兼容交集为 `incompatible`，已发现但当前调用未获 grant 为 `capability_not_granted`；
+- 声明了某 Profile 的扩展在版本协商失败时不得进入 ready 并对外提供该 Profile 能力；
+- 正式 versioned operation payload/result Schema 缺失、不兼容或未协商时，Registry 不得标为 discovery-visible；事件能力还必须有正式 event Schema；
+- Profile 专用深度测试挂在第 11 节及后续 IF_CLAIM 套件，不进入本节无条件清单。
+
+## 9. Model Provider（BASE）
 
 - Responses；
 - Chat Completions；
@@ -233,7 +281,7 @@
 - usage accounting 与最小元数据记录；
 - 所有外部调用携带 Task、Action、ContentOrigin、适用规则和最小恢复元数据，Provider 文本或外形相似的外部 JSON 不得升级为 Kernel 事实。
 
-## 10. Companion
+## 10. Companion（BASE）
 
 - 承认 AI 身份；
 - 不冒充用户；
@@ -242,11 +290,27 @@
 - 简单任务不加载无关工具；
 - 不把情绪表达自动转任务；
 - 能解释权限拒绝；
-- 能承认不确定和失败。
+- 能承认不确定和失败；
+- 在 Computer Use 未启用时不得向用户暗示“已支持桌面操控”（IF 负向 / BASE 产品诚实性）。
 
-## 11. Computer Use Core
+## 11. Optional Profile：Computer Use
 
-### Scene
+> **门控**：本节各专节使用精确 `IF_CLAIM(...)` 并统一读取 `ProfileClaim` 集合；完整 Computer Use 的固定成员与机械闭包见 `COMPUTER_USE.md` §3.3。
+> **NEVER_CORE_GATE**：本节整体不得作为纯 Core 发布阻塞项。
+> 深度场景在声明后为硬门；未声明时仅要求第 1.2 节诚实错误。
+
+### 11.0 启用、Schema 与诚实性（BASE 负向；任一 Computer Use claim 时正向）
+
+- 当前安装/发行/协商集合不提供 operation → `unsupported`；
+- 已支持但 disabled/quarantined/backend/session 暂不可用 → `unavailable`；
+- SDK/Profile/operation payload/result Schema 版本无兼容交集 → `incompatible`；声明事件能力时 event Schema 同样纳入版本兼容检查；
+- capability 已 discovery-visible 但当前调用未获 grant → `capability_not_granted`；
+- Manifest 或 probe 孤立存在均不得报告 discovery-visible；正式 versioned operation payload/result，以及声明 `computer.event` 时的 event Schema 必须存在、兼容并完成协商；
+- discovery-visible 不等于 invocable；只读 observation 无需副作用 Action grant，但仍需 Schema、身份/scope 与数据策略；
+- 合同缺失 fail closed，不得当作 Policy allow；
+- maturity token 只能是 `contract-only`、`schema/SDK`、`composition`、`provider contract`、`real-platform`；`distribution_asserted` 是独立 boolean，不得塞进 maturity。
+
+### 11.1 Scene — `IF_CLAIM(computer.scene)`
 
 - multi-display；
 - workspace；
@@ -254,46 +318,92 @@
 - window generation；
 - partial visibility。
 
-### Semantic
+### 11.2 Semantic — `IF_CLAIM(computer.semantic)`
 
 - element tree；
 - action；
 - unavailable/empty tree；
 - stale element ref。
 
-### Capture
+### 11.3 Capture — `IF_CLAIM(computer.capture)`
 
 - display/window/region；
 - scaling；
 - redaction；
 - object handle；
-- frame expiration。
+- frame expiration；
+- **截图尺寸/频率预算**（声明 capture 时硬门；未声明则不要求启动视觉管线）。
 
-### Input
+### 11.4 Input — `IF_CLAIM(computer.input)`
 
 - absolute/relative；
 - wrong focus protection；
 - user takeover；
 - lock screen revocation；
-- protected surface。
+- protected surface；
+- Profile-local Input Session Lease 闭合与 Core Action Lease / Resource Lock / Stop Fence 协作；
+- Input Session Lease **不是** Kernel Permission Lease 的替代。
 
-### Snapshot
+### 11.5 Snapshot / Operation Snapshot — `IF_CLAIM(computer.snapshot)`
+
+- `computer.snapshot` 必须同时声明至少一个实际观察来源 facet：`computer.scene`、`computer.semantic`、`computer.capture`、`computer.visual_grounding` 或 `computer.application`；
 
 - merge/deduplicate；
 - number layout；
 - task filtering；
 - stale “click 7”；
-- new snapshot on UI change。
+- new snapshot on UI change；
+- Profile-local 对象不倒灌 Core Schema 固定字段。
 
-### Verification
+### 11.6 Target Resolution、动作路径与 Execute Gate — `IF_CLAIM(computer.operation.execute)`
 
+> 声明 `computer.semantic`、`computer.application` 等 facet 不自动等于声明副作用执行；只有 `computer.operation.execute` 触发本套件。只读 scene/capture/event/semantic/application/visual-grounding 实现不因此被强迫通过 input/副作用执行套件。
+
+- Core Execution Boundary 与 Profile Readiness Gate **分离**：后者不能替代前者；
+- 当前焦点窗口/元素不得作为唯一目标绑定；焦点只能用于排序或 Prepare 提示；执行必须绑定 stable provider/semantic/Snapshot generation/user-selected candidate 等引用；违规返回结构化失败且 Profile Readiness Gate 失败；
+- Prepare 后 reobserve；
+- stale generation / 裸旧坐标拒绝；
+- Policy allow 但 Snapshot 过期 → 不得执行；
+- Snapshot 新鲜但 Stop Fence 激活 → 不得执行；
+- capability 未 grant → 不得执行。
+
+### 11.7 Verification — `IF_CLAIM(computer.operation.verify)`
+
+- `computer.operation.verify` 必须与 `computer.operation.execute` 一起声明；纯只读 scene/capture/event/semantic/application 不被强迫产生副作用验证；
 - semantic success；
 - visual success；
 - file/external confirmation；
 - false provider success；
 - 验证政策按匹配规则与能力处理不可验证的高风险结果：可允许、确认、拒绝或进入恢复，不能以风险等级默认阻断。
 
-## 12. Hyprland
+### 11.8 Event — `IF_CLAIM(computer.event)`
+
+- operation/event payload 使用正式 versioned Schema，且版本已协商；
+- event type/version、source extension instance、scope、extension-local sequence 与可选 task/action correlation 可测；
+- 当前无 Extension Event transport/persistence/subscription 合同时，负向测试证明事件不得进入 Core EventEnvelope / Outbox，也不得宣称可保存、索引、订阅或稳定转发；
+- 未来若建立正式 Extension Event 合同，仍不得自动晋升 Core Event Catalog。
+
+### 11.9 Visual Grounding — `IF_CLAIM(computer.visual_grounding)`
+
+- 只产生候选，不直接输入；
+- 与语义候选去重；
+- 低置信度不默认阻断（Policy 决定）。
+
+### 11.10 Application Adapter — `IF_CLAIM(computer.application)`
+
+- 不绕过 Task/Policy/Lease/Lock/Stop；
+- 不直连 Broker；
+- 仍通过完整 Execute Gate。
+
+### 11.11 远程监督与降级 — `IF_CLAIM(ANY(computer.supervision.automatic,computer.supervision.approval,computer.supervision.cooperative,computer.supervision.observe_only))`
+
+- 只测试实际声明的 supervision mode claim；
+- automatic / approval / cooperative / observe-only；
+- observe-only 不要求 `computer.input`、副作用 Action Lease 或副作用 Execute Gate，但仍要求观察 Schema、scope 与数据策略；
+- 任何副作用降级路径仍过完整 Execute Gate；
+- degraded 状态可见，不静默假装完整。
+
+## 12. Hyprland — `IF_CLAIM(computer.platform.hyprland)`；声明真机时再加 `IF_REAL(computer.platform.hyprland)`
 
 - outputs/workspaces/clients；
 - focus and event stream；
@@ -303,7 +413,9 @@
 - Provider crash/fallback；
 - AT-SPI and Capture composition。
 
-## 13. niri
+**NEVER_CORE_GATE**：未声明 Hyprland 支持时不阻塞 Core 发布。
+
+## 13. niri — `IF_CLAIM(computer.platform.niri)`；声明真机时再加 `IF_REAL(computer.platform.niri)`
 
 - scrolling layout；
 - window outside viewport；
@@ -313,7 +425,27 @@
 - dynamic capture source（若声明）；
 - event stabilization。
 
-## 14. Privilege
+**NEVER_CORE_GATE**：未声明 niri 支持时不阻塞 Core 发布。
+
+## 14. 其他平台 Provider 合同
+
+### 14.1 跨平台非 Linux Provider
+
+- **NEVER_CORE_GATE**：Core 发布**不**要求至少一个跨平台非 Linux Provider 合同测试。
+- `IF_CLAIM(ANY(computer.platform.windows,computer.platform.macos))`：声明支持的平台必须通过对应 `provider contract`；声明 `real-platform` 时升级为真机硬门。其他平台必须使用自己的稳定 claim id，不能写省略号或 `a|b`。
+
+### 14.2 Generic Wayland / 部分能力
+
+- 声明部分能力时必须报告窗口管理限制；
+- 禁止在限制存在时宣称完整 desktop control。
+
+### 14.3 Capture / Input backend claim
+
+- `computer.backend.capture` 与 `computer.backend.input` 分别要求对应 facet 依赖 claim；
+- 故障注入分别由 §18.2b / §18.2c 门控，禁止 capture-only claim 被拖入 input takeover/lease/lock-screen 套件；
+- 未声明时不要求对应桌面 backend 故障矩阵，但通用 Extension crash 矩阵仍属 BASE（第 18.1 节）。
+
+## 15. Privilege（BASE）
 
 - arbitrary shell rejected；
 - unknown action rejected；
@@ -325,13 +457,14 @@
 - system auth cancelled；
 - 认证数据的流转、保存和最小元数据审计按匹配 Policy 处理，不以硬编码“密码不记录/不进模型”替代规则；
 - broker crash；
-- action verification。
+- action verification；
+- Extension / Computer Use Profile 不得直连 Broker（BASE 负向 + IF_CLAIM 交叉）。
 
-## 15. Channel
+## 16. Channel（BASE）
 
 - stable identity；
 - replayed message idempotency；
-- image/snapshot access；
+- image/snapshot access（有 Object Handle 时；Computer Use Operation Snapshot 的远程展示另受 IF_CLAIM）；
 - callback authorization；
 - remote cancellation；
 - remote approval policy；
@@ -341,7 +474,7 @@
 - 外部 JSON、网页、附件、模型文本和 Extension 输出均不能升级为 Kernel Command/Event 或 policy mutation evidence；
 - no direct Provider access。
 
-## 16. Self-improvement、恢复与预算
+## 17. Self-improvement、恢复与预算（BASE）
 
 测试：
 
@@ -351,10 +484,12 @@
 - 自我改进的 Extension/Skill 失败不会破坏 Kernel 事实、审计或进行中 Task；
 - Agent、Skill、Extension、Provider 均不能读取后修改、补丁、热替换或重写 Core；
 - 普通 Shell 通道不能修改 Core，也不能绕过固定 Broker API 执行特权动作；
-- Emergency Stop 启动 Stop Fence 后拒绝新副作用、输入、主动任务、Extension 调用、远程执行和 Privilege Lease 消费；
+- Emergency Stop 启动 Stop Fence 后拒绝新副作用、主动任务、产生副作用的 Extension 调用、远程执行及任何临时 Permission/Privilege Lease 的后续消费；当发行物声明 `computer.input` 或实际存在输入路径时，输入副作用作为该通用拒绝边界的 Profile 投影同样被禁止，不得反向成为 Core 的无条件前提。只读诊断可继续；撤销所有受 Stop 影响且仍活跃的副作用 Action Lease 并原子释放其全部 Resource Lock，撤销所有临时 Permission/Privilege Lease，向所有 in-flight Extension 调用发 cancel；已取得的只读诊断事实保留，只有不可安全取消且结果不确定的副作用 Action 进入 `unknown_side_effect`；
 - 已开始且不可安全取消的 Action 转入恢复、验证和审计，而非假称完成。
 
-## 17. 故障注入
+## 18. 故障注入
+
+### 18.1 BASE（无条件）
 
 至少注入：
 
@@ -366,37 +501,123 @@
 - DB busy/full disk；
 - object missing；
 - network loss；
-- permission revoked mid-task；
-- compositor restart；
-- capture/input backend loss。
+- permission revoked mid-task。
 
-## 18. 资源与性能
+### 18.2a Platform fault suites — `IF_CLAIM(ANY(computer.platform.hyprland,computer.platform.niri,computer.platform.windows,computer.platform.macos))`
+
+- 对声明平台注入 platform session/compositor/window-system restart；
+- platform facts 重建后旧 provider/window/generation refs 必须失效，诚实返回 `stale_state` / `unavailable` 并按能力恢复；
+- 本套件不隐含 capture backend、input lease、用户接管或锁屏测试。
+
+### 18.2b Capture fault suites — `IF_CLAIM(ANY(computer.capture,computer.backend.capture))`
+
+- capture backend loss/recovery；
+- 已发 Capture Frame/Object Handle 的过期与读取失败可辨识；
+- capture-only claim **不得**被要求运行 Input Session Lease、user takeover、lock screen revocation 或 input Resource Lock 套件。
+
+### 18.2c Input fault suites — `IF_CLAIM(ANY(computer.input,computer.backend.input))`
+
+- input backend loss/recovery；
+- 用户接管抢占 input Resource Lock，并闭合或挂起 Input Session Lease；
+- 锁屏/session unavailable 撤销 Input Session Lease；
+- Stop Fence、Action Lease 与 Resource Lock 丢失后禁止继续输入。
+
+
+## 19. 资源与性能
+
+### 19.1 BASE
 
 不是追求固定数字，而是确保：
 
-- 基础空闲不启动视觉/Python/WASI；
+- 基础空闲不启动视觉/Python/WASI（无声明/无任务需要时）；
 - Tool Schema 按需；
-- Screenshot 有尺寸/频率预算；
 - 日志和对象有保留策略；
 - Extension 闲置可回收；
 - Memory 检索有预算；
 - Agent Runtime 重启可恢复；
 - Channel 不造成无界队列。
 
-## 19. 发布门槛
+### 19.2 `IF_CLAIM(ANY(computer.capture,computer.visual_grounding))`
+
+- Screenshot 有尺寸/频率预算；
+- 视觉/解析管线按需启动，不得在无 Computer Use 任务时常驻拖垮空闲基线。
+
+## 20. 发布门槛
+
+### 20.1 Core 发布门槛（BASE，无条件）
 
 核心发布必须：
 
-- 所有不变量通过；
+- 所有 BASE 不变量通过；
 - Schema 兼容验证；
 - 数据迁移 preflight/rollback；
 - Privilege 安全测试；
-- 至少一个跨平台非 Linux Provider 合同测试；
-- Linux Hyprland 真实环境测试（声明支持时）；
-- niri 真实环境测试（声明支持时）；
-- Extension SDK conformance；
+- Extension SDK **Base** conformance（第 8 节）；
 - 远程入口安全回归；
 - Freedom-first 默认 allow、确定性规则排序、Condition fail-closed、自然语言治理、ContentOrigin 与 Stop Fence 回归；
 - 首批 KCP、事件/错误目录、Outbox cursor、deadline/auth/schema version 与 RFC 8785 生成链回归；
 - 自我改进版本/预算/回滚与 Core 不可自改回归；
-- 文档单一事实源检查。
+- 文档单一事实源检查；
+- **能力未协商 / 可选 Profile 未声明时的诚实 unsupported 回归**；
+- **明确不要求**：Computer Use 全套、跨平台桌面 Provider 合同、Hyprland 真机、niri 真机、截图预算（除非该 Core 发行物额外作出对应 claim）。
+
+### 20.2 Optional Profile / Platform 发行门槛（条件性硬门）
+
+发行物、安装包、Manifest、用户文档或发布说明一旦声明支持下列任一项，则对应套件**全部**成为该发行物的硬门：
+
+| 声明 | 硬门套件 |
+|---|---|
+| `computer.scene` | 11.0 + 11.1 |
+| `computer.semantic` | 11.0 + 11.2 |
+| `computer.capture` | 11.0 + 11.3 + 18.2b + 19.2 |
+| `computer.input` | 11.0 + 11.4 + 18.2c |
+| `computer.event` | 11.0 + 11.8 |
+| `computer.visual_grounding` | 11.0 + 11.9 + 19.2 |
+| `computer.application` | 11.0 + 11.10 |
+| `computer.snapshot` | 11.0 + 11.5；必须同时声明至少一个实际观察来源 facet |
+| `computer.operation.execute` | 11.0 + 11.6；并按实际执行路径声明所用 facet；输入路径必须另有 `computer.input` |
+| `computer.operation.verify` | 11.0 + 11.7；必须同时声明 `computer.operation.execute` |
+| `computer.supervision.automatic` / `computer.supervision.approval` / `computer.supervision.cooperative` / `computer.supervision.observe_only` | 11.0 + 11.11 中对应模式；`observe_only` 不绑定 input 套件 |
+| `computer.platform.hyprland` | 11.0 + 第 12 节 + 18.2a；同一 claim maturity 为 `real-platform` 时再加 `IF_REAL(computer.platform.hyprland)` |
+| `computer.platform.niri` | 11.0 + 第 13 节 + 18.2a；同一 claim maturity 为 `real-platform` 时再加 `IF_REAL(computer.platform.niri)` |
+| `computer.platform.windows` / `computer.platform.macos` | 11.0 + 第 14 节对应 `provider contract` + 18.2a；同一 claim maturity 为 `real-platform` 时再加对应 IF_REAL |
+| `computer.backend.capture` | 11.0 + 11.3 + 18.2b + 19.2；并要求 `computer.capture` 依赖 claim |
+| `computer.backend.input` | 11.0 + 11.4 + 18.2c；并要求 `computer.input` 依赖 claim |
+
+规则：
+
+- 发布门读取与 `IF_CLAIM` / `IF_REAL` 相同的 `ProfileClaim` 集合，不从散文另造第二份状态；
+- `distribution_asserted=true` 与 maturity 正交：它要求对外承诺的 claim 及机械依赖闭包全部通过，但不把 maturity 自动升级；
+- “完整 Computer Use”必须精确满足 `COMPUTER_USE.md` §3.3 的固定必需集合、依赖闭包、至少一个 supervision mode 与至少一个 `real-platform` platform claim；禁止以单个 `ALL(...)` 字符串、family 通配符或“相关全部”替代成员记录；
+- 若发行物对外展示 Operation Snapshot，必须显式记录 `computer.snapshot`，不能从 scene/capture 等 facet 暗推；
+- 仅 `contract-only` 或 mock `provider contract` 证据时，禁止把同一 claim maturity 标为 `real-platform`；
+- 撤回 distribution assertion 后，可选套件不再阻塞后续 Core 发布，但已发布产物的变更记录须可审计。
+
+### 20.3 套件关系图
+
+```text
+                    ┌──────────────────────────┐
+                    │ Core / Extension SDK Base │  ← 始终硬门
+                    └────────────┬─────────────┘
+                                 │
+          ┌──────────────────────┬──────────────────────┐
+          │ IF_CLAIM(expr)       │ IF_CLAIM(expr)
+          ▼                      ▼
+   Computer Use facets     Computer Use platform claims
+   (COMPUTER_USE.md)       Hyprland/niri/Win/mac
+          │                      │
+          └──────────┬───────────┘
+                     ▼
+          IF_REAL / distribution_asserted
+          → 真机成熟度与产品宣传级硬门
+```
+
+## 21. 与其他规范的交叉
+
+| 主题 | 事实源 |
+|---|---|
+| Computer Use 领域合同与双层 Execute Gate | `COMPUTER_USE.md` |
+| Extension Profile / probe / Manifest | `EXTENSION_SDK.md` |
+| Task / Action Lease / Lock / Stop Fence | `CORE_ARCHITECTURE.md` |
+| Freedom-first / Broker / Protected Surface 安全语义 | `SECURITY_PRIVILEGE.md` |
+| KCP 与固定 Schema（禁止 Computer Use 倒灌） | `IMPLEMENTATION_CONTRACTS.md` |

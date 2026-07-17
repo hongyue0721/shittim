@@ -23,7 +23,6 @@
       extension-supervisor/
       extension-protocol/
       provider-registry/
-      computer-core/
       audit-store/
       object-store/
       platform-common/
@@ -37,19 +36,19 @@
     typescript/
     python/
     conformance/
-  providers/
+  providers/                # optional package / 独立 workspace / distribution 示例；不是 Core build 依赖
     linux/
     windows/
     macos/
   workers/
-    memorix/
-    vision/
+    memorix/                # optional worker 示例
+    vision/                 # optional Computer Use/ML package 示例；不是 Core build 依赖
   extensions/
     official/
   tests/
 ```
 
-目录可以调整，但依赖方向必须保持。
+目录可以调整，但必须分别保持两类方向：源码/Schema 依赖为 `Optional Profile package → Extension SDK public contracts → Core public contracts`，Shittim Core 与 Extension SDK Base 不得反向引用 Profile 领域类型；运行时控制/调用为 `Core host → SDK host boundary → negotiated Profile implementation`，描述 negotiation、grant、invoke、cancel 与监督，不是源码依赖。Computer Use 平台 Provider 必须归 optional package、独立 workspace 或独立 distribution，可放在 `extensions/`、独立 `providers/` workspace 或仓库外分发包；上图 `providers/`、`workers/vision` 都只是 optional package 示例，**不**进入 Core 默认 workspace/build dependency。本阶段也不为其创建空目录、占位 crate 或实现声明。通用 `extension-protocol`、`provider-registry`、`object-store` 与 capability infrastructure 继续属于基础设施。
 
 ## 2. Rust 模块
 
@@ -79,11 +78,11 @@ Schema、消息、错误、Object Handle。
 
 ### provider-registry
 
-Profile、能力档案、选择和降级。
+Profile 协商元数据、通用能力档案、Provider 选择和降级；不得解释某一 Profile 的领域对象。
 
-### computer-core
+### platform-common
 
-统一桌面模型、Target Resolver、Snapshot 和 Verification。
+只允许跨领域、领域无关的宿主机制，例如 OS process/IPC primitives、文件权限抽象、clock/handle plumbing 与通用 platform detection。不得容纳 Display、Window、Workspace、Screenshot、Coordinate、desktop generation、Input Session Lease、compositor 事件等桌面领域模型，也不得成为 Computer Use 平台 Provider 的藏身 Core crate。
 
 ### audit-store/object-store
 
@@ -115,7 +114,6 @@ Profile、能力档案、选择和降级。
 
 - Conversation；
 - Task Center；
-- Operation Snapshot；
 - Approval Center；
 - Memory & Persona；
 - Initiative & Delegation；
@@ -123,6 +121,8 @@ Profile、能力档案、选择和降级。
 - Model Routing；
 - Platform Capability/Doctor；
 - Audit/Recovery。
+
+当且仅当对应 optional Profile 已安装、启用、协商并由 probe 确认为可用时，desktop-client 才可挂载该 Profile 的专属视图；例如 Computer Use 的 Operation Snapshot 视图属于这种条件性 UI。`desktop-client` 本身不等于 Computer Use，也不得在 Profile 缺失时显示占位能力或暗示桌面操控可用。
 
 UI 不拥有 Task 真相，只订阅并发出 Command。
 
@@ -1133,7 +1133,9 @@ details: <object>
 - `policy_context` 是审计时上下文快照，不复制 PolicyRule；Schema 可以校验同一 AuditRecord 内 PermissionDecision ref 非空时 context 非空，但无法跨对象验证字段相等；
 - 固定归因字段不得仅放入 `details`。Schema 通过 required 顶层字段要求显式事实并拒绝 `policy_context` 未知字段，但开放 `details` 无法完全禁止重复内容，生产者必须以顶层字段为准；
 - `details` 是由日志配置/适用 Policy 控制的结构化扩展正文。默认只记录最小元数据；Secret、Token 与未脱敏正文不默认记录，但 Schema 不硬禁；
-- 每当业务契约要求审计时，Kernel 必须先通过 AuditRecord Schema 校验，并在同一个 SQLite 事务中写入业务事实、AuditRecord 以及该业务事实要求的 Outbox 记录。Schema校验、跨对象一致性校验或 AuditRecord 插入失败必须使整个事务回滚；不得降级为只写业务事实或只写日志文本。当前仓库尚未实现 repository，不得声称上述跨对象检查已有代码或测试。
+- 每当业务契约要求审计时，Kernel 必须先通过 AuditRecord Schema 校验，并在同一个 SQLite 事务中写入业务事实、AuditRecord 以及该业务事实要求的 Outbox 记录。Schema 校验、适用的跨对象一致性校验或 AuditRecord 插入失败必须使整个事务回滚；不得降级为只写业务事实或只写日志文本；
+- 当前 `kernel-sqlite` 已实现 Task create/get repository 的固定 `task.creation_recorded` producer：Task/TaskSpec/ContentOrigin/Audit/唯一 `task.created` Event 的 canonical 子事实、共同 `accepted_at` 与同事务失败回滚均有实现和测试；通用 Audit Store 也已实现 `sent` 单记录至少一个支撑引用非空检查；
+- 仍未实现 PermissionDecision / policy context 跨对象字段相等、rollback 权威投影、Provider / ModelCall 跨对象一致性与其它业务 producer。
 
 ### 6.16 PayloadManifest
 
@@ -1243,18 +1245,11 @@ verification hints
 cost / platform
 ```
 
-### 6.21 OperationSnapshot
+`CapabilityDescriptor` 与 Provider Registry 的选择输入保持通用，只描述协商、Schema 引用、权限、副作用、可靠性、健康、成本与平台等跨 Profile 元数据。Profile 专属结构只能出现在已协商的 versioned operation payload/schema（包括 typed Extension result；未来若有正式 Extension Event 合同则包括其 event payload）或 Object Handle 所引用对象中；不得把窗口、坐标、截图、desktop generation 等字段加入通用 descriptor、KCP 或其他 Core 顶层对象。
 
-```text
-snapshot_id
-desktop_generation
-task_id
-frame_handles[]
-window / context
-candidates[]
-transforms[]
-created_at / expires_at
-```
+### 6.21 Optional Profile 参考对象
+
+Computer Use 的 Operation Snapshot 归属 optional Profile，完整语义只见 [`COMPUTER_USE.md`](COMPUTER_USE.md)。当前仓库没有其正式 Profile Schema，因此不得把它当作 Core object、KCP API、已生成 SDK 类型或已实现能力。
 
 ## 7. 消息路由逻辑
 
@@ -1363,9 +1358,9 @@ candidate
 
 ## 12. Provider 选择
 
-Provider Registry 根据：
+Provider Registry 根据通用元数据选择：
 
-- Profile；
+- Profile 与协商版本；
 - platform；
 - capability completeness；
 - permission availability；
@@ -1375,7 +1370,7 @@ Provider Registry 根据：
 - cost；
 - task requirements。
 
-允许组合多个 Provider，选择结果写入 Action/Audit。
+允许组合多个 Provider，选择结果写入 Action/Audit。Registry 与 Core 只处理 descriptor、grant、health、stable resource ref 和选择事实，不解释 Profile 私有对象；具体领域参数与结果必须留在已协商的 versioned operation payload/schema（包括 typed Extension result；未来正式 Extension Event 合同另行定义 event payload）或 Object Handle 中。
 
 ## 13. Schema、Canonical JSON 与生成物
 
@@ -1491,7 +1486,7 @@ ADR 必须说明替代方案和迁移。
 - 九套 SDK；
 - Extension Host 无理由独立常驻；
 - 通过环境变量把所有 Secret 传给子进程；
-- 使用当前焦点作为 Computer Use 唯一目标；
+- 不得凭不稳定外部观察或未验证的瞬时上下文引用执行副作用；具体 Profile 必须在自己的规范中定义稳定引用、过期判定与重新观察规则；
 - 在恢复中重放未知外部副作用；
 - Kernel Control Protocol 与 Extension RPC 混用同一 envelope；
 - Delegation 越界自动降级为确认而不重新评估 Policy；

@@ -6,6 +6,8 @@
 
 已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `serde_json::Value` preflight、全八方法 typed Accepted、三方法 registration/dispatcher 和 `system.ping` / `task.create` / `task.get` typed application handler。根目录已落地**零依赖** Node 24.18.0 / pnpm 11.3.0 工作区基座（`package.json`、`pnpm-workspace.yaml`、`.npmrc`、`.node-version`、`pnpm-lock.yaml`、`scripts/check-node-toolchain.mjs`），**没有** `ts/*` 包、deps、TS 生成物或 SDK/client。当前仍没有 Task 更新/list、Action/PermissionDecision repository、可连接 KCP server、`agentd`、TypeScript 业务包、桌面客户端、Publisher 循环或 Provider。
 
+统一 Extension SDK Base 是基础产品的 Core 阻塞项：目前只有 `contract-only` 规范，没有正式 operation Schema、library、`composition`、public API 或 SDK 包；因此尚未达到 `schema/SDK`。`provider contract` 与 `real-platform` 是可选 Profile claim 的后续成熟度，`distribution_asserted` 则是与 maturity 正交的对外声明事实；当前两者都不存在。Computer Use 已从 Core 必做能力移为 Extension SDK Base 上的 optional Profile；当前同样仅为 `contract-only`，没有专用 Schema、crate、SDK composition、Provider 或真机测试，因而不阻塞 Core 完成。`desktop-client` 也不等同于 Computer Use。
+
 `domain-task` 只计算状态图、不变量、revision/plan_version 和待持久化意图；`domain-policy` 只计算规则匹配、非持久 decision draft 与 canonical input。`kernel-sqlite` 拥有本批明确的 SQLite 基座和 Task create/get 事实，不伪造尚无权威表的其它跨对象一致性。
 
 ## 已完成
@@ -113,18 +115,22 @@
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
 - [ ] 实现 `agentd` 组合根和首批八个 KCP 方法处理（本批三方法合同不等于八方法可用）。
 - [ ] 在已有根工作区基座上创建 `ts/*` 包、SDK client 与 Pi `agent-runtime`（当前仅有零依赖根基座，无 TS 包/生成/SDK）。
+- [ ] 实现统一 Extension SDK Base：当前为 `contract-only`；没有正式 operation Schema、library、`composition`、public API 或 SDK 包，尚未达到 `schema/SDK`。这是基础产品未完成的阻塞项；Extension SDK Base 完成不要求任何 Computer Use 或其他 Profile 的 `provider contract` / `real-platform`。
+- [ ] 实现 optional Computer Use Profile：当前 `contract-only`；没有专用 Schema、crate、SDK `composition`、Provider 或真机测试。它不阻塞 Core 完成，也不由 `desktop-client` 替代。
 - [ ] 创建 Tauri/React/Ant Design 蓝白桌面客户端。
-- [ ] 实现 Extension SDK、Provider、Memory、Initiative、Computer Use 与 Broker。
-- [ ] 完成 `specs/CONFORMANCE.md` 全量自动化测试。
+- [ ] 实现 Provider、Memory、Initiative 与 Broker。
+- [ ] 完成 `specs/CONFORMANCE.md` 的全部 BASE 套件，以及本发行物实际声明的 Profile / Platform 对应 `IF_CLAIM` / `IF_REAL` 条件套件。
 
 ## 当前阻塞
 
 - Value preflight/registration/dispatcher 已实现，但五个 Catalog 方法仍没有 handler，因此 server 生命周期仍被硬性阻塞。
 - `task.create` repository 已完成；Delegation authority 正向路径仍未实现，任何非 null Delegation 固定返回 `delegation_not_found`。
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
-- AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store 和 `sent` 支撑引用检查已完成。PermissionDecision/policy context、rollback 投影、Provider/ModelCall、Task creation canonical 子事实仍缺少对应权威 repository 表，明确作为下一 repository 硬门；不得用默认值或本 crate 的单记录校验冒充跨对象一致性。
+- AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store、`sent` 单记录支撑引用检查，以及 Task create 的固定 Audit/Event canonical 一致性已完成。仍缺 PermissionDecision/policy context 跨对象字段相等、rollback 权威投影、Provider/ModelCall 跨对象一致性与其它业务 producer；不得用默认值或单记录校验冒充这些跨对象事实。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
 - Node 24.18.0 / pnpm 11.3.0 根基座已落地；默认 PATH 仍可能是 Node 26.x，必须显式使用 `~/.local/share/pnpm` 入口。尚无 `ts/*` 包与 Schema→TS/SDK。
+- 统一 Extension SDK Base 仍为 `contract-only`：没有正式 operation Schema、library、`composition`、public API 或 SDK 包，尚未达到 `schema/SDK`，因而阻塞基础产品完整性；Extension SDK Base 不要求 `provider contract` 或 `real-platform`。不得把现有 Extension 规范或根 Node 工作区冒充为 SDK 实现。
+- optional Computer Use Profile 也仅为 `contract-only`：没有专用 Schema、crate、SDK `composition`、Provider 或真机测试；它不阻塞 Core，且 `desktop-client` 不等同于该 Profile。
 - 真实模型 Provider、远程 Channel、跨平台 Provider 与 Privilege Broker 仍需要后续真实环境和用户选择；当前没有伪造支持。
 
 ## 下一步
@@ -132,7 +138,9 @@
 1. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
 2. 为剩余五个 Catalog 方法逐个提供正式 handler；八方法 registration 完整后再关闭 server 阶段门。
 3. 随后实现本地传输、Task/Event 纵切与 Publisher 循环。
-4. 再在根基座上建立 TypeScript 包、client/SDK 和 Ant Design 桌面端。
+4. 建立统一 Extension SDK Base 的正式 Schema、library、`composition`、public API 和 Base 验证，使其达到 `schema/SDK`；这是基础产品完整性的阻塞项，但不要求任何真实平台 Provider。
+5. Extension SDK Base 具备组合边界后，再按独立 roadmap 实现 optional Computer Use Profile 的专用契约、Provider 与 `real-platform` 验证；不把它作为 Core 完成门槛。
+6. 再在根基座上建立 TypeScript 包、client/SDK 和 Ant Design 桌面端。
 
 ## 最近验证
 
