@@ -274,7 +274,7 @@ Memory Packet 必须：
 
 ### task_scope
 
-`task_scope` 只服务于一个具体 Task 或 Subtask，来自当前目标、Delegation、Capability 和 Policy 结果。它至少表达：
+`task_scope` 只服务于一个具体 Task 或 Child Task，来自当前目标、Delegation、Capability 和 Policy 结果。它至少表达：
 
 - 本次可访问的对象；
 - 本次允许的读写动作；

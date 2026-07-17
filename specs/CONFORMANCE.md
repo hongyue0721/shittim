@@ -66,7 +66,7 @@
 - 匹配规则按 priority、确定性 specificity tuple、deny/confirm/allow effect、newest revision、rule ID UTF-8 字节序升序稳定决定；ID tie-breaker 不改变前述语义；
 - 推荐确认模板未被显式启用时不改变默认 allow；
 - Secret、敏感内容及认证数据可按 Task/Policy 流转至 Memory、模型或 Extension，且审计只记录配置要求的最小元数据；
-- 委托不能超出作用域和副作用上限；
+- Child Task不能超出其**显式声明**的作用域和能力事实而不经过Policy；父子扩大delta本身不是hard deny；
 - 扩展更新保留可解释的 Policy 决策、版本和回滚点；
 - AI 自写扩展不能访问 Core 写权限；
 - UI 断开不丢 Task；
@@ -88,7 +88,7 @@
 - partial side effect；
 - rollback success/failure；
 - Task 从 `running` / `partially_completed` / `failed` / `cancelled` 在存在需补偿的已发生外部副作用时进入 `rolling_back`，且该流程不能伪装为 SQLite rollback；
-- Policy `confirm` 使 Action 保持 `pending` 并关联 ApprovalRecord；批准后进入 `approved`，拒绝后进入 `cancelled`；
+- Policy `confirm`使Action保持`pending`并关联Approval v2 request chain；approved resolution后进入`approved`，denied后`cancelled`，invalidation触发重评；
 - `leased -> approved` 仅由 `lease_expired` 触发，且 Lease 失效、revision 更新、全部资源锁释放在同一 SQLite 事务中；取消只有在确定未派发时才进 `cancelled`，派发事实不确定时进 `unknown_side_effect`；
 - 补偿 Action 按普通执行链进入 `completed` / `failed` / `unknown_side_effect`，原始 Action 才依据补偿结果进入 `rolled_back` / `rollback_failed`；
 - crash before/after external action；
@@ -100,11 +100,16 @@
 测试：
 
 - Policy URI pattern 规范化与 segment glob：Resource、Actor source、ContentOrigin source 均使用 URI；`*` 单段、`**` 多段，非法内嵌 glob 和 regex 被拒绝；
-- `task.create` 只对非 null origin.source_uri 与 TaskScope include/exclude URI pattern 做 Policy URI 规范化；顺序/重复保留，其他字符串不 trim/排序，规范化 payload 重新通过 TaskCreateRequest Schema；
+- active `task.create` v2只创建root；payload出现`parent_task_id`被拒绝；v1 request只可legacy validation/read/migration，active preflight按method-aware version返回`unsupported_schema_version`且不能进入dispatcher；
+- 新child唯一通过`kernel.task/task.child.create` Action创建，父ID只取Action.task_id，proposal禁止child id/parent/status/revision/time；
+- child Scope与Delegation完整显式，不继承/求交；父子scope/capability/delegation delta进入Policy context；扩大按Freedom-first裁决，Delegation authority缺失明确失败；
+- child materialization故障矩阵证明Origin/Scope/Task/provenance/Audit/Event/Verification/Action completion全有或全无，同Action跨generation/idempotency最多一个child，canonical readback失败整体回滚；
+- commit后丢响应重放返回原child；mapping/bundle不完整为stored_data_invalid/Safe Recovery，不局部补写；
+- legacy direct-child可读并标记`legacy_direct_create_v1`，迁移不伪造Action/Approval/PermissionDecision/Verification；
 - operation/capability 只接受精确或末尾 `.*`，空数组不限制，exclude 优先，`side_effect_max` 按 S0..S5 ceiling；
 - ContentOrigin 多值匹配要求同一条 origin 同时满足受限的 kind/source 维度，不得跨两条 origin 拼接命中；空数组/缺省维度不限制；
 - specificity tuple 的每个字段按本次实际命中的最具体备选 pattern 计分；数组重排或增加未命中备选不改变结果，通配越少越具体，最终同分按 rule ID UTF-8 字节序升序；
-- `effect=confirm` 必须有 `confirmation_mode`，`allow`/`deny` 携带该字段 Schema 校验失败；
+- Policy confirmation词表全映射：PolicyRule v2五种mode逐一映射PD decision与Approval request canonical wire；`remote_signature→require_remote_signature`有正式Policy入口，通用mode中不存在算法名；PolicyRule v1只按自身lifecycle读取；
 - authentication_level 按 `unauthenticated < asserted < platform_verified < system_authenticated` 比较，任一等级均不自动授权；
 - time_window 使用 IANA timezone、weekday 和本地半开区间，覆盖同日、跨午夜、全天及 DST；
 - rate_limit 的 count/window_seconds/key_scope 原子检查与消费；delegation/local presence 布尔条件精确匹配；
@@ -140,25 +145,27 @@
 
 必须自动测试：
 
-- KCP 第一版只暴露 `system.ping`、`task.create`、`task.get`、`task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`；未知方法返回 `unsupported_method`；
-- Envelope `protocol_version = 1.0`，payload/持久对象携带独立 `schema_version`；错误混用或缺失版本被拒绝；
+- KCP首批方法名仍为`system.ping`、`task.create`、`task.get`、`task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`；未知方法返回`unsupported_method`；
+- `task.create`active v2 root-only：Envelope task_id/expected_revision null，payload无parent；method-aware preflight拒绝v1 production write；root allocation为七UUID，legacy v1 allocation才是六UUID；
+- payload版本按generated `MethodVersionBinding`分类：`task.create active=[2], legacy_validation=[1]`；其余七个首批方法active=[1], legacy=[]；同一binding同时给出request/response schema ids，测试证明response选择不只按method猜测；
 - Actor 带单调 revision；`owner` 仅预留标签；Envelope v1 不执行身份认证，只解析并记录 actor/entry_point；`auth` 只能为 null，非 null 返回 `unsupported_auth_schema`；
 - 已过期 deadline 与处理期间超时均返回 `deadline_exceeded`，不得静默丢弃；已开始且不可安全取消的外部动作先持久化为 `unknown_side_effect`/恢复待查，不伪称未生效；
-- `task.create` 幂等 scope 精确为 `(actor.id, entry_point, command_type, idempotency_key)`；等价投影只含完整 actor revision 快照、entry_point、固定 command_type、Envelope task_id/context/expected_revision 与规范化完整 payload，明确排除 protocol/message/auth/request/deadline/key；RFC 8785 + SHA-256 同 hash 返回原 task_id 和当前 revision，不同 hash 返回 `idempotency_conflict`；记录与 Task 同生命周期、v1 不清理且无 processing 状态；
-- `task.create` receipt content hash 精确覆盖规范化后的完整 TaskCreateRequest payload，不含 Envelope/Kernel IDs/时间/receipt/物化对象；共享复合 hash fixture `schemas/fixtures/kcp/task_create_normalized_hash.v1.json`（不是 schema-tool 通用 `$schema_id`/`instance` example wrapper）必须自动验证：`schema-tool validate` 校验其中 `normalized_payload`，实际 CLI `canonicalize --hash` 分别处理 `normalized_payload` 与 `idempotency_projection`，并与 Rust `sha256_canonical` 得到相同 lowercase hash；
-- `task.create` 固定一个 accepted_at，并令 ContentOrigin received/receipt、TaskScope created/updated、Task created/updated、Audit occurred 与 Event occurred 全部等于该值；分别取时钟的实现不合格；
-- `task.create` TaskScope 初值固定 UUID/schema1/revision1/task ID、请求数组原序保留、`source_refs=[新 origin id]` 不展开 parent、完整 actor+entry point created_by、请求 expires、双时间 accepted_at；ContentOrigin 的 UUID/entry/carrier/receipt/parent 投影同样逐字段校验；
-- `task.create` 固定 `task.creation_recorded` producer：上层 Audit ID、严格 null/空数组、`reason_codes=["task_created"]`、`details={}`、唯一 origin ref、Task delegation、command causation、与 `task.created` 相同 correlation；与 Task canonical 子事实不一致必须使事务失败；
-- `task.created` event ID/correlation/dedup 由 Kernel 上层显式提供，repository 不生成；sequence=0、唯一事件、command causation、payload 与 Task 精确一致；
-- 非 null parent task 与每个 parent origin 必须存在；当前任何非 null delegation_ref 返回 `delegation_not_found`，Schema 仍允许非 null，正向 Delegation authority 路径明确未实现；
-- `task.create` 幂等 scope 重复相同请求返回原 Task，不同规范化请求返回 `idempotency_conflict`；risk_hint 可为 null、capability_hints 可为空且 Kernel 不猜测；新建 Task 固定 `status=candidate`、`plan_version=0`、`revision=1`，只发布一个 `task.created`；ContentOrigin、TaskScope、Task、Audit、幂等记录与 Outbox 在同一事务创建；
+- 以下v1 hash/idempotency/accepted_at/producer断言是legacy实现回归；active v2必须新增独立fixture并将Envelope task_id/expected_revision固定为null、payload无parent；
+- legacy v1 receipt fixture `task_create_normalized_hash.v1.json`继续自动验证，但不得作为v2向量；v2 receipt/idempotency hash另建fixture；
+- root v2与child materialization各自固定一个accepted/materialized_at并将bundle内时间一致投影；legacy v1 accepted_at测试继续保留；
+- `task.create`的v1 fixed TaskScope/ContentOrigin/Audit/Event投影测试属于legacy回归；active v2按新Schema/provenance测试，child按Action carrier/delta/bundle测试；
+- legacy v1 `task.creation_recorded`固定producer继续回归；active v2 Audit增加provenance，child producer增加Action/PD/Verification与Action causation；
+- root v2 `task.created` command causation；child `task.created` Action causation；两者ID/correlation/dedup上层分配、sequence=0、payload精确一致；root使用七UUID的`RootTaskCreateAllocationV2`，child使用十UUID allocation；
+- `NormalizedRootTaskCreatePayloadV2`字段表与TaskCreateRequest v2一一对应、无parent：receipt就是normalized payload的JCS；Envelope `context`只在idempotency projection出现一次；URI规范化与所有数组保序/重复、InputContentOriginV1、raw/normalized/JCS/hash/tamper独立fixture逐项验证，禁止复用v1/child向量；
+- 以下为legacy v1实现回归：非null parent task/parent origin存在性、所有非null delegation固定not found、v1 producer/hash/command causation。它们不属于active v2 Conformance；
+- 以下为legacy v1实现回归：`task.create`幂等、candidate初值、单一`task.created`与Origin/Scope/Task/Audit/Outbox事务；active v2必须使用独立fixture/provenance并强制root-only；
 - `task.list` 的 parent_filter 明确区分 any/root/exact，稳定排序、limit 边界和 opaque cursor；cursor 编码技术选择留待 repository 实现前的 ADR/API 拍板，本批不把任一编码写成事实；
 - Value preflight 输入只接受已由调用方解析的 `serde_json::Value`；bytes、UTF-8、JSON parse、frame、最大尺寸、clock/backend/ID 不进入该层；优先加入现有 `kernel-kcp` 并复用 handler/ports/response 门，禁止复制 Catalog/response/handler abstraction；公开调用必须分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`，不得用一站式 `process_value` 暗示全 Catalog 可执行；
 - preflight 严格短路优先级为 request_id response eligibility > message_kind/family > protocol > auth > family-specific method > 根 payload.schema_version > 完整 Envelope/方法 Schema + generated typed decode；测试必须构造多个同时错误的输入证明高优先级结果稳定胜出；
 - 非 object，或顶层 request_id 缺失/非 string/非法 UUID，固定得到本地 `PreflightLocalRejection::UncorrelatableRequest { kind, message }` 且不产生 wire response；合法 UUID string 在所有 error response 中逐字原样保留；本地 ContractFailure 也只有固定 safe kind/message，不暴露内部 schema ID/detail；
 - request_id 可关联后，message_kind 缺失/非 string/response/未知均为 `invalid_request`；family 确定后只解释对应 discriminator，另一 family discriminator 留给最终 Schema 作为未知字段；protocol 缺失/非 string为 `invalid_request`、string 非 `1.0` 为 `unsupported_protocol_version`；auth 缺失为 `invalid_request`、任意非 null为 `unsupported_auth_schema`；
 - command 只按 generated command Catalog 检查 command_type，query 只按 generated query Catalog 检查 query_type；字段缺失/非 string为 `invalid_request`，不属于所选 family 为 `unsupported_method`，包括 query `task.create` 与 command `task.get` 等跨 family 错配；测试必须证明实现没有手写第二份八方法目录；
-- payload missing/non-object，或根 schema_version missing/JSON number 非 i64/u64 integer（包括 `1.0` 与超出 i64/u64 可表示范围的数字）/<=0 为 `invalid_request`；根正 integer !=1 为 `unsupported_schema_version`；嵌套 schema_version 与其它业务字段/enum/format/unknown field失败只为 `invalid_request`；
+- payload missing/non-object，或根 schema_version missing/JSON number 非 i64/u64 integer（包括 `1.0` 与超出 i64/u64 可表示范围的数字）/<=0 为 `invalid_request`；根正 integer不在所选family+method的generated active request version集合中为`unsupported_schema_version`（`task.create`: active `[2]`、legacy validation `[1]`；其余首批方法active `[1]`）；嵌套 schema_version 与其它业务字段/enum/format/unknown field失败只为 `invalid_request`；
 - 完整 family Envelope Schema、方法 payload Schema 与 generated typed decode 对八方法逐项有 Accepted 用例；五个已知未实现方法也必须先完整 decode，畸形 payload 不得提前变成 KnownCatalogMethodNotImplemented；
 - `kernel-contracts` 必须提供并测试结构化 `ContractFailureStage` 等价分类：`CallerSchemaValidation` 唯一映射 wire `invalid_request`；`WireDecodeAfterSchema`、`PayloadDecodeAfterSchema`、`GeneratedDiscriminatorMapping`、`SchemaCatalog` 均本地 ContractFailure；`UnknownSchema`/Catalog 与 post-Schema serde 失败逐项有定向测试，禁止匹配 ContractError/Schema/serde message；
 - 五个已知但未注册方法 narrow 后得到不可序列化的本地 `KnownCatalogMethodNotImplemented`，不能成为 `KcpError`、`unsupported_method`、`method_unavailable` 或 `internal_error`；三个 registered variant 分别只路由 ping/create/get；
@@ -170,32 +177,52 @@
 - `system.ping`、`task.create`、`task.get` handler 使用 fake backend/fake clock/deterministic fake ID generator 做库级矩阵；Value preflight/registration/dispatcher 同样只做不可连接库级测试，本阶段不得启动 Socket/Named Pipe 或构造可连接 server；
 - 三方法第一次可观察操作是 clock 读取，并在任何 ID/backend 前按 `now >= deadline` 检查；入口已过期不访问 backend、不分配 ID；
 - `system.ping` 复用第一次时间为 `kernel_time`，完成时第二次读 clock；`task.get` backend 后第二次读 clock；两者完成时到期均返回 `deadline_exceeded`；backend 错误与 deadline 同时出现时，成功读取到的到期结果优先，完成 clock 自身失败则 `internal_error`；
-- `task.create` 第一次 clock 同时固定唯一 `accepted_at`；deterministic fake generator 必须证明恰好分配 Task/Scope/Origin/receipt/Audit/Event 六个合法、两两不同的 UUID 及独立非空 correlation/dedup，生产 UUID 版本不固定且不得从 caller 字段派生；handler 在 backend 前验证 UUID 格式与本次互异，失败为 `internal_error`；
+- legacy v1 `task.create` handler的deterministic fake generator必须证明恰好分配Task/Scope/Origin/receipt/Audit/Event六个合法、两两不同的UUID及独立非空correlation/dedup；active root v2必须以独立测试证明`RootTaskCreateAllocationV2`恰好分配Task/Scope/Origin/receipt/CreationProvenance/Audit/Event七个合法、两两不同UUID及独立opaque值。生产UUID版本不固定且不得从caller字段派生；handler在backend前验证对应allocation的格式与互异，失败为`internal_error`；
 - deadline 必须把 Envelope RFC 3339 文本与 clock UTC instant 按时间点比较，禁止字符串字典序；deadline 解析失败在任何 ID/backend 前映射 `internal_error`；
 - `task.create` adapter 只通过 backend 高阶端口调用现有 repository；测试 spy 必须证明 handler 不复制 normalize/hash/Audit/Event，SQLite adapter 只在 `SqliteStore::with_write_transaction` 内调用 `create_task`，不暴露 transaction/SQL；typed Envelope 到 `TaskCreateEnvelopeFacts` / request / allocation 的字段映射逐项断言；
 - backend error 使用 §5.10.2 的闭集分类；SQLite adapter 对当前每个 `StoreErrorCode` 穷举转换，同名公开分类或 `Internal`，新增 Store code 导致编译/测试更新，不允许 wildcard 或 message 匹配；
 - Created 与 Replayed 都返回 backend 给出的当前 Task；Created 必须同时返回与本次 operation Event UUID 相等的 `committed_event_id`，adapter 不能证明绑定时返回 Internal；仅 Created 携带一个 `TaskCreatedCommitted {task_id,event_id}` post-commit notification intent，Replayed 无 intent；Created 后即使 response contract 失败成为本地 HandlerContractFailure 也必须保留 intent；notifier 在事务外，失败不改变 response、不回滚事实、不声称 delivered；
 - `task.create` 事务内不做第二次 clock 读取、不轮询/取消；backend 的 Created/Replayed/错误返回后才第二次读 clock。完成到期优先返回 `deadline_exceeded`；完成 clock 失败优先 `internal_error`；未到期才映射 backend 结果。Created post-commit 到期/clock failure 均保留事实与 intent；同一幂等键重放返回当前 Task；
 - `task.get` 的 `None` 精确映射 `task_not_found`；Created/Replayed/get-found/not-found 均有独立用例；
-- 对三方法逐项测试 stable error mapping，不匹配 message：`invalid_scope_pattern`、`idempotency_conflict`、`delegation_not_found`、`parent_task_not_found`、`parent_origin_not_found`、`sqlite_busy`、`sqlite_full`、`sqlite_corrupt`、`stored_data_invalid`，以及 constraint/contract/serialization/not-found/internal/open/config/migration 等折叠 `internal_error`；断言固定 safe message、`details=null` 与 retryable。deadline 和 sqlite_busy 为 true，其余本矩阵为 false；
+- 下列legacy v1 handler测试继续保留用于代码事实与迁移回归：`parent_task_not_found`、v1 projection/fixture、v1 Created/Replayed；它们不得被计入active v2 Conformance；
 - 每个成功 payload 在装 Envelope 前用原方法 response Schema 验证；每个最终成功/错误 Response Envelope 再用通用 Schema 验证，并断言 request_id 原样、protocol `1.0`、message `response`、success/error 互斥；Response 无 method discriminator，测试按原方法选择 payload Schema；
 - 构造成功 payload 的 response Schema 失败必须安全转换为 `internal_error`；最终 error Envelope 若也无法验证则产生本地 HandlerContractFailure，不发送未验证响应；Created 路径必须证明该 failure 仍向组合根返回 post-commit intent；
 - Event cursor 只使用十进制 `outbox_position`，按严格递增位置轮询；拒绝 event ID、时间戳或 aggregate sequence cursor；
-- EventEnvelope 包含 aggregate_type、sequence、outbox_position 和 `{kind,id}` causation_ref，causation kind 只允许 `command_request | event`；同一聚合首条已提交事件 `sequence = 0`，后续已提交事件严格连续 `+1`，事务回滚的暂分配不占号；
+- CausationRef v2允许`command_request | event | action | action_transition`；EventEnvelope/ContentOrigin/Audit active producer使用相应v2，v1历史继续读取；child `task.created`直接causation Action，Action自身`action.state_changed`必须用transition anchor，不允许伪造`action.requested` Event或self-causation；
 - `delivered_at` 只代表 Publisher 发布，不因某订阅者未消费而回滚，也不伪称全部订阅者已消费；
 - `mark_delivered` 是 public 业务写 convenience，必须委托统一 `BEGIN IMMEDIATE` / `with_write_transaction`；只有 `COMMIT` 成功后才允许返回 `Marked | AlreadyMarked | NotFound`。transaction-bound crate-private helper 在外层主动 `Err` 或 panic 时必须 rollback，公共重试可再次 `Marked`；unhealthy store 上 public mark fail closed 且另一健康 store 确认未改变；writer contention 映射 `sqlite_busy`，释放后 retry 得到 `Marked`；两个独立 store/connection 争同一 position、不同 timestamp 时，成功路径恰好一个 `Marked` 与一个 `AlreadyMarked`，DB 时间等于 winner 传入值且 loser 不覆盖；
 - at-least-once 重投允许同一 event/outbox记录重复投递，但 `outbox_position` 全局唯一且只分配一次；消费者按 dedup_key/event_id 幂等，跨聚合 outbox_position 不被解释为领域因果；
-- AuditRecord v1 是 `agentd` 拥有的不可变本地事实，不带 revision；全部字段 required，无关联事实使用显式 null/空数组；未知字段、未知 audit_type、`policy_context` 未知字段和非 `system_internal` 的 null actor 被 Schema 拒绝；`task.creation_recorded` 必须有 UUID task_id 与严格创建快照（revision=1、goal、origin、proposer），其他 audit_type 的该快照必须为 null；Actor 非空时必须保存完整 revision 快照；
+- AuditRecord v1 是 `agentd` 拥有的不可变本地事实，不带 revision；全部字段 required，无关联事实使用显式 null/空数组；未知字段、未知 audit_type、`policy_context` 未知字段和非 `system_internal` 的 null actor 被 Schema 拒绝；`task.creation_recorded` 必须有 UUID task_id 与严格创建快照（revision=1、goal、origin、proposer），其他 audit_type 的该快照必须为 null；Actor 非空时必须保存完整 revision 快照；v1 `audit_type` 闭集仅七类，不得误当作 v2 完整闭集；
+- AuditRecord v2 active 合同（IC §6.16）：完整 wire 非“v1加字段”；`audit_type` v2 闭集必须精确包含 `task.creation_recorded`、`command.accepted`、`permission.evaluated`、`kernel.invariant_blocked`、`event.published`、`recovery.recorded`、`config.changed`、`approval.requested`、`approval.resolved`、`approval.invalidated`、`identity.challenge_expired`、`identity.credential_registered`、`identity.credential_rotated`、`identity.credential_revoked`、`identity.local_presence_recorded`、`identity.system_authentication_recorded`；未知 type 拒绝；列入闭集不等于 producer 已实现；
+- AuditRecord v2 producer 固定矩阵（IC §6.16.2）逐项断言 approval initial/resolution/invalidation 与 challenge expiry 的 `audit_type`/`level`/actor·entry authority/task·action·PD·approval refs/`external_content_status`/`rollback_capability`/`outcome`/`reason_codes`/`summary`/`details`/null·empty/causation·correlation；禁止把上述业务塞进 `details` 或互相借用 type；Challenge expiry 固定 `identity.challenge_expired` 且 approval/PD refs 全 null；
+- `AuditAllocationV2`（`audit_record_id,correlation_id,occurred_at,causation_ref`）是独立 Audit 路径正式对象；challenge expiry 必须消费该对象且禁止 `ApprovalEventAllocationV1`；root/child/approval 可从 bundle allocation 投影同一四元组语义；CAS loser/replay 不得重分配；
 - AuditRecord 的稳定引用闭包必须结构化回答任务创建原因、Delegation、模型建议/推理、VerificationResult、修改资源、是否外发、回滚能力、Stop Fence/恢复影响，以及匹配规则、排序依据、policy mutation authority 与 auth evidence；`not_sent` 拒绝非空 manifest refs，`sent` 的 producer 至少提供 content origin/artifact/resource/model call/payload manifest/causation 支撑，`unknown` 必须有 reason code；ModelCallRecord/PayloadManifest/Delegation 当前只使用非空 stable ref，不声称已有 source Schema 或 UUID；
 - `permission_decision_ref` 非空时 `policy_context` 必须非空；未来 Audit repository 必须将 nullable matched_rule_ref、policy_set_revision 与不可变 PermissionDecision 比对，失配使 Audit/业务/Outbox 同事务回滚；该跨对象一致性当前只有 Conformance 契约，没有 SQLite 实现或自动化测试；
-- Computer Use Protected Surface/target/Snapshot generation/destination/operation/resource scope 等参与判定事实必须进入当前 PermissionDecision evaluation context；任一事实变化导致 context hash 不再覆盖时，旧 PermissionDecision、派生 ApprovalRecord 与相关 Permission/Privilege Lease 不可继续消费，必须回 Core 重评；Profile 只产出标签/证据，不决定 Policy effect；
+- Computer Use Protected Surface/target/Snapshot generation/destination/operation/resource scope等参与判定事实必须按`MaterialAuthorizationProjectionV1`与`ObservationEvidenceProjectionV1`分层；任一observation变化使旧PermissionDecision/Lease不可消费并要求新decision，material变化必须invalidating Approval；只有Core证明material hash相等才可复用approved resolution，Profile只产出证据且不得写入Core权威字段；
 - `rollback_capability` 必须由 ActionRequest.rollback_policy、Verification、Recovery 权威事实投影且不可独立编辑；事实缺失/不可判定用 unknown，可解析事实冲突使事务失败；`provider_id` 表示实际操作 Provider，`model_call_refs` 表示建议/推理参与者，二者可并存；同一模型操作的 provider 一致性属于未来 repository 检查；
 - AuditRecord 不自动成为首批公开 Event、不自动进入 Outbox；业务契约要求审计时，业务事实、AuditRecord 与该业务事实要求的 Outbox 在同一事务提交，Schema/跨对象一致性/插入失败整体回滚；固定归因必须有顶层 required 字段，不能仅藏进 details，但 Schema 无法完全禁止开放 details 重复这些值；正文默认最小记录但不硬禁 Secret；
-- 首批事件类型及 payload 严格为 `task.created`、`task.state_changed`、`stop_fence.activated`，使用点号小写；
+- SchemaGraph `TaggedUnion`测试必须证明discriminator enum与branch const双射、nested `record_kind`/`subject_kind` union、零/多tag与重复const fail closed、branch unknown field拒绝、collision与recursive layout处理；Rust生成serde enum并完成round-trip/negative decode，未来TypeScript从同一IR生成discriminated union且有narrowing fixture；
+- 所有下述canonical projection与crypto对象都必须有official fixture：原始输入、规范化对象、精确JCS UTF-8 bytes（hex/base64至少一种无歧义编码）、SHA-256 lowercase、字段边界断言；数组顺序/重复、required-null/empty与URI规范化均有tamper向量；
+- `NormalizedChildTaskProposalV1`、`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`与`SubjectProjectionV1`跨Rust/未来TS得到相同JCS与hash；content origin UUID lowercase canonical排序、TaskScope hint authority、observation not_applicable/observed两branch各有fixture；改变纳入字段必须变hash，改变PD id/revision等明确排除字段不得变hash；
+- Approval v2 outer/inner tagged union、完整field table、predecessor required-nullable、新链append-only/replacement-only-through-invalidation与request/resolution/invalidation条件矩阵均由Schema正反例覆盖；五种mode approved/denied专属ref和`evidence_refs` exact set/null/empty逐格测试；invalidation producer对旧head种类分支断言：失效approved resolution时Audit `approval_resolution_ref`精确指该resolution，失效尚未resolution的request时必须为null，禁止伪造resolution ref；
+- Remote signature v1使用RFC8032 Ed25519 primitive vector与项目preimage vector，覆盖algorithm tagged union、SubjectProjection hash、valid/tamper/replay/expiry/revocation和并发；Identity repository register/rotate/revoke/issue/get/consume/**expire-with-expected-issued**/revoke、canonical readback与同BEGIN IMMEDIATE transaction-bound helper均有并发/故障注入测试。Challenge get只读；remote/system resolve与consume的过期并发恰有一个CAS expiry Audit（`audit_type=identity.challenge_expired`，消费独立`AuditAllocationV2`），所有观察expired者均为`challenge_expired`且无Approval event；
+- `action.state_changed`与`approval.state_changed`正式Catalog producer均有同事务fixture，逐字段核对aggregate sequence、ActionTransitionRef/真实外部causation、correlation、allocation IDs/time及Outbox；Approval三CAS方法均消费`ApprovalEventAllocationV1`并投影对应`approval.requested|resolved|invalidated` Audit v2；approval replacement只发一个逻辑head事件；Challenge expiry只写`identity.challenge_expired` Audit而不产生Approval event；consumer未知type/version/payload mismatch不推进cursor；
+- repository hard-gate测试覆盖Action/PD/Approval/Identity/ActionTransition/root/child闭集API、必要unique key、PD↔Approval↔Action authority、current-head/revision/lease CAS、四种child错误判定、commit后重放、corrupt reconciliation、migration provenance与legacy write拒绝；
+- Computer Use负向测试证明Profile只提交observation facts，不能写material fingerprint、Approval resolution/invalidation、PermissionDecision或Lease；Core v2 Schema不得倒灌Snapshot/Coordinate等Profile私有固定字段；
+- 首批事件类型及payload严格为`task.created`、`task.state_changed`、`action.state_changed`、`approval.state_changed`、`stop_fence.activated`，使用点号小写；
 - `stop.activate` 就是首批 Emergency Stop 入口：先持久化 Fence generation 与事件；随后撤销**所有受 Stop 影响且仍活跃的副作用 Action Lease**，并在同一原子状态变更中释放其全部 Resource Lock；撤销所有临时 Permission Lease / Privilege Lease，且后续消费必须拒绝；向**所有 in-flight Extension 调用**发送 cancel。无副作用只读诊断的已取得事实不得被误删或强制转未知，Fence 后仍可发起新的只读诊断；只有已开始且不能安全取消、其副作用结果不确定的 Action 进入 `unknown_side_effect`。重复调用保持同一 active generation；Fence 不因 Security Mode 恢复而解除，KCP 第一版不存在清除方法；
-- PermissionDecision 包含不可变 id、evaluated_at、evaluation_context_hash、policy_set_revision；同一 Action 的 decision_revision 严格递增，ActionRequest 引用当前 decision；
-- ApprovalRecord 使用 supersedes_ref 的不可变决议链；approved/denied 的 resolved_at 必填，deferred 为 null；
-- policy_set_revision 在参与匹配的 PolicyRule、Delegation、Security Mode 投影规则或治理对象启用/修改/撤销事务中单调增加；
+- PermissionDecision v2包含不可变id/evaluated_at/policy_set_revision、material authorization fingerprint与observation evidence fingerprint；同一Action decision_revision严格递增，ActionRequest引用current decision；
+- Approval v2 Schema是真正判别联合：record_kind=request|resolution|invalidation，subject exactly-one operation|task_proposal|plan_revision；错误组合、零/多subject均拒绝；
+- Approval repository不可变append + current-head CAS；并发resolution/invalidation恰好一个成功，失败`approval_head_conflict`；v1 production write拒绝；
+- implicit allow与Delegation authority不生成Approval；operation subject绑定Action、PermissionDecision与material fingerprint；task_proposal/plan_revision绑定对应revision/hash；
+- material fingerprint变化追加invalidation并重评；纯observation fingerprint刷新使旧PD/Lease失效，只有Core证明material等价后新PD可复用旧approved resolution，Profile不得判断；
+- canonical mode映射：generic按Policy入口；local只证明local presence；system_authentication必须覆盖Kernel issue `SystemAuthenticationChallengeV1`、OS authority evidence、同事务current/expiry/binding/evidence/head校验与consume，取消/失败不写resolution；remote_signature要求challenge+nonce+audience+task/SubjectProjection/material+expiry+signature且nonce单次消费；两类challenge过期都以expected-issued CAS持久化、并发观察统一`challenge_expired`且不发Approval event；owner标签不构成认证；
+- plan_revision approved后相关Action全部重新Policy evaluation，不自动继承operation approval；
+- MethodVersionBinding验证active非空、legacy可空、两集合升序唯一互斥、request map keys精确并集、response map keys精确active，八方法request→response选择由manifest生成；
+- namespace migration测试保留旧`$id` bytes、component归属/ref closure并拒绝prefix伪装；
+- V2ProductionWriteCutover测试覆盖source/generated/repository/handler/migration/backup/verify/legacy negative gate及dispatcher+repository原子切换，证明无v1/v2双写；
+- Error Catalog mirror drift测试证明docs不独有code/message/details/retryable，并证明已删除无稳定触发的旧child重复错误码；
+- allocation/producer测试逐项验证RootTaskCreateAllocationV2与ChildTaskMaterializationAllocationV1 ID purpose、互异、opaque correlation/dedup和重放来源，并验证ApprovalEventAllocationV1的五个required字段、ID互异性和三CAS方法消费，以及`AuditAllocationV2`四字段、challenge expiry独立消费与approval路径禁止混用；
 - RecoveryDecisionCandidate 的 retry_original 只在副作用未发生且幂等保障成立时合法；RecoveryAttemptRef 不可变追加；Verification recommendation=retry 不直接执行重放；
 - JSON Schema 全部声明 2020-12，RFC 8785 canonical JSON 测试向量跨 Rust/TypeScript 产生同一 SHA-256；
 - Schema 生成运行两次 byte-for-byte 一致，生成物无手改漂移、`$id` 唯一、`$ref` 可解析；

@@ -1,72 +1,48 @@
-# Task Repository 创建与读取契约
+# Task创建、Child materialization与repository硬合同
 
-> 状态：`kernel-sqlite` create/get repository 与 `kernel-kcp` 的 Value preflight、registration/dispatcher、`system.ping` / `task.create` / `task.get` typed handler 均已实现；server 尚未实现。本文是实现入口摘要；唯一事实源是 [`specs/IMPLEMENTATION_CONTRACTS.md` §5.5](../../specs/IMPLEMENTATION_CONTRACTS.md#55-首批正式-kcp-catalog)、[§5.10](../../specs/IMPLEMENTATION_CONTRACTS.md#510-systemping--taskcreate--taskget-typed-application-handler)、[§5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)、[`specs/CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) 与 [`specs/CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
+> 状态：active v2 contract-only；现有Rust/SQLite只实现legacy TaskCreate v1 create/get，不得进入未来production server。
 
-## 范围
+## Lifecycle矩阵
 
-本批 `kernel-sqlite` 已实现 `task.create` 的本地事务物化，以及 Task、TaskScope、ContentOrigin 的严格读取基础。它仍不是 KCP handler，也不实现 `task.list`。
+| path | active | legacy | 状态 |
+|---|---:|---:|---|
+| KCP `task.create` request | 2 | 1 validation/read | v2未实现；v1 handler已实现但须退出active dispatcher |
+| KCP `task.get/list` | 1 | — | get库级已实现，list未实现 |
+| child create | Kernel Action `kernel.task/task.child.create` proposal v1 | direct child command v1 read/migration | Action/PD/Approval/materializer未实现 |
 
-## 输入规范化
+## Root v2
 
-仅规范化：
+Envelope task_id/expected_revision固定null；payload无parent。`NormalizedRootTaskCreatePayloadV2`完整字段、InputContentOriginV1、数组规则与receipt/idempotency两份preimage均以IC §5.3.1为准：它与TaskCreateRequest v2一一对应，receipt就是该payload的JCS；Envelope context不属于payload，只在idempotency projection出现一次。仅规范化source URI与Scope patterns，保序保重复。root receipt/idempotency各有独立v2 fixture，不能复用legacy或child fixture。
 
-- 非 null `payload.origin.source_uri`；
-- `payload.task_scope.resource_patterns[]`；
-- `payload.task_scope.exclusions[]`。
+单事务创建Origin v2、Scope、root Task、Provenance、Audit v2与一个`task.created` EventEnvelope v2；使用`RootTaskCreateAllocationV2`逐purpose分配**七个**UUID并验证ID互异/opaque correlation-dedup；所有时间来自唯一accepted_at，commit前canonical readback。legacy v1六UUID allocation不属于active root v2。
 
-使用 `domain-policy::{normalize_uri, normalize_uri_pattern}` 公开单项 API：`source_uri` 调用 `normalize_uri`，两个 pattern 数组由 repository 按输入顺序逐项调用 `normalize_uri_pattern`。数组顺序和重复项由 repository 保留，API 不排序、不去重、不聚合错误。该路径已由 fixture 与 repository 测试覆盖。
+## Child Action
 
-## 两个 canonical hash
+固定capability/operation/class：`kernel.task` / `task.child.create` / S1。proposal完整显式声明child facts、Scope、Delegation与Origin input，禁止child ID/parent/status/revision/time/shadow字段。父Task只取Action.task_id。
 
-- receipt hash：规范化后的**完整 TaskCreateRequest payload object**做 RFC 8785 JCS UTF-8 + SHA-256 lowercase。
-- idempotency hash：精确对象 `{actor, entry_point, command_type, task_id, context, expected_revision, payload}` 做同样计算；`command_type` 固定为 `task.create`，payload 使用规范化结果。
+proposal的来源类型是`InputContentOriginV1`，stored事实是`ContentOriginV2`，禁止混名。Kernel构造并hash：
 
-幂等 scope 是 `(actor.id, entry_point, command_type, idempotency_key)`。记录与 Task 同生命周期，v1 不清理；同 hash 返回原 task ID 和当前 revision，不同 hash 冲突。全本地单事务不设置 processing 状态。
+- `NormalizedChildTaskProposalV1`；
+- `ChildTaskDeltaProjectionV1`；
+- `MaterialAuthorizationProjectionV1`；
+- `ObservationEvidenceProjectionV1`。
 
-可执行向量：[`schemas/fixtures/kcp/task_create_normalized_hash.v1.json`](../../schemas/fixtures/kcp/task_create_normalized_hash.v1.json)。这是同时承载 command envelope、唯一 `normalized_payload`、receipt hash 与 idempotency projection/hash 的复合 fixture，不是 schema-tool 通用 `$schema_id`/`instance` example wrapper。fixture 当前固定：
+执行前验证Action revision/status、current PD/可消费Approval、Lease holder/generation/expiry、Stop Fence、Delegation authority与proposal引用。
 
-- receipt content hash：`e700949bc03cba21d834ccce21dc594193456bc4590869230f57c8d14effd272`
-- idempotency projection hash：`2f64e3515bc58dd11fb42d46c0192d7e17a2076e6f06558927601897df7e9ffe`
+### 原子bundle
 
-`kernel-contracts` 测试会重新验证 Schema、投影字段边界、顺序/重复保留、URI 规范化输出和两个 Rust hash；`schema-tool` CLI smoke 还会抽取两条 JSON 路径，实际执行 `validate` 与两次 `canonicalize --hash`，独立断言同一 fixture hash。
+同一事务创建Origin/Scope/Task/Provenance/Verification/Audit、child `task.created`、Action `action.state_changed`，并更新Action completed result/revision。使用`ChildTaskMaterializationAllocationV1`；Action event因果是正式`ActionTransitionRefV1`并先持久化`ActionTransitionIntentV1`，禁止self-causation。Action ID是child-by-action唯一业务键，跨generation最多一个child。
 
-## 单事务物化
+同Action同proposal/material hash且bundle完整为合法重放；同Action不同proposal/material为`child_materialization_conflict`；同execution idempotency key绑定不同Action为`idempotency_conflict`；mapping不完整为`stored_data_invalid`，禁止补半包。
 
-Kernel 上层先用第一次 `KernelClock` 读取同时完成入口 deadline 检查并固定唯一 `accepted_at`；随后由注入 generator 显式提供 Task/TaskScope/ContentOrigin/receipt/Audit/Event 六个合法、两两不同的全局唯一 UUID，以及独立生成的非空 Event correlation/dedup。UUID 版本不固定，测试使用 deterministic fake；correlation/dedup 不从 caller 的 request/idempotency/task 字段推导。repository 在同一 `WriteTransaction` 中：
+## Repository硬门
 
-1. 校验 parent Task、parent origins 与 Delegation 引用；当前非 null Delegation 一律 `delegation_not_found`。
-2. 写幂等记录。
-3. 创建 ContentOrigin；receipt/received 时间均为 `accepted_at`。
-4. 创建 TaskScope，`revision=1`，`source_refs` 恰好为新 origin ID。
-5. 创建 candidate Task，`plan_version=0`、`revision=1`，双时间为 `accepted_at`。
-6. 创建固定 `task.creation_recorded` AuditRecord。
-7. 写唯一 `task.created` Outbox，聚合首序号为 `0`。
+Action、PermissionDecision、Approval、Identity、ActionTransition、RootCreate、ChildMaterialization使用IC规范闭集API，不暴露SQL/transaction。Approval三种CAS操作都必须消费`ApprovalEventAllocationV1`；Challenge读取只读，过期由`expire_challenge_with_expected_state`在resolve/consume事务中CAS持久化为expired并写identity/security Audit，绝不写`approval.state_changed`。必要unique facts和PD↔Approval↔Action一致性以IC §6.10.6为准。
 
-任何 Schema、引用、hash 或 Task/Audit/Event canonical 子事实不一致均回滚。handler/backend adapter 不复制上述逻辑，只在 `SqliteStore::with_write_transaction` 内调用 `WriteTransaction::create_task`。
+读取固定：Schema版本验证→JCS byte equality→typed tagged-union decode→关系镜像/唯一键→current refs→重算projection hash；失败只读返回stored_data_invalid。
 
-## Typed handler 与 commit 后边界
+reconciliation只返回committed/absent/corrupt；migration先preflight+backup，写provenance/current projections，verify后再切active registration。legacy direct-child标`legacy_direct_create_v1`，不造Action/PD/Approval/Verification。
 
-- backend 只暴露高阶 `create_task` / `get_task`，不暴露 `WriteTransaction`、connection、SQL、normalize 或 hash；
-- `Created` / `Replayed` 都返回 repository 严格读取后的当前 Task；
-- SQLite 事务不可中途取消，事务内不重复读 clock；commit 后第二次读 clock。若此时 deadline 到期，响应为 `deadline_exceeded`，但事实与幂等记录保留，客户端用同一 key 重放或查询；
-- 仅 `Created` 产生 `{task_id,event_id}` post-commit notification intent，用于事务外唤醒 Publisher。它不是第二条 Event，也不声明 delivered；commit 后的 deadline/internal/response contract failure 仍必须保留该 intent，通知失败不回滚 Outbox 或 Task。
+## 错误
 
-## 暂不拍板
-
-`task.list` cursor 继续保持 opaque。具体编码和分页键技术选择必须在 repository 实现前通过 ADR 或 API 契约单独拍板。
-
-## 已实现范围
-
-- migration 0002 的 ContentOrigin、parent refs、TaskScope、source refs、TaskSpec 与 task.create idempotency 表；
-- `WriteTransaction::create_task` 内部 SAVEPOINT；
-- `SqliteStore::{get_task,get_task_scope,get_content_origin}` 严格读取；
-- canonical JSON 单一事实、generated column FK/index 投影、关系数组逐项镜像校验；
-- 同 scope 同 projection replay、不同 projection conflict；
-- 固定 `task.creation_recorded` 与唯一 `task.created` 同事务生产。
-
-## 未实现
-
-- Delegation authority 正向查询；非 null Delegation 固定失败；
-- `task.create` / `task.get` Value preflight、registration、dispatcher 与 server；
-- Task 更新、`task.list` cursor/查询；
-- Action、PermissionDecision repository。
+稳定码和safe details见[Error Catalog](error-catalog.md)，覆盖scope/delegation、Action/PD/Approval、lease/fence、child uniqueness/material conflict、observation stale与stored corruption。`task.list` cursor编码仍正交未决。

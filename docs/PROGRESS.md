@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-已完成 Rust/Schema 契约基座、`domain-task`、`domain-policy`、`kernel-sqlite` Task create/get repository，以及不可连接的 `kernel-kcp` `serde_json::Value` preflight、全八方法 typed Accepted、三方法 registration/dispatcher 和 `system.ping` / `task.create` / `task.get` typed application handler。根目录已落地**零依赖** Node 24.18.0 / pnpm 11.3.0 工作区基座（`package.json`、`pnpm-workspace.yaml`、`.npmrc`、`.node-version`、`pnpm-lock.yaml`、`scripts/check-node-toolchain.mjs`），**没有** `ts/*` 包、deps、TS 生成物或 SDK/client。当前仍没有 Task 更新/list、Action/PermissionDecision repository、可连接 KCP server、`agentd`、TypeScript 业务包、桌面客户端、Publisher 循环或 Provider。
+当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。active合同已经是TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Event/Audit/ContentOrigin相关v2；这些均未生成或实现。根Node/pnpm基座存在，但没有TS包、SDK/client、agentd、server、Publisher或Provider。
 
 统一 Extension SDK Base 是基础产品的 Core 阻塞项：目前只有 `contract-only` 规范，没有正式 operation Schema、library、`composition`、public API 或 SDK 包；因此尚未达到 `schema/SDK`。`provider contract` 与 `real-platform` 是可选 Profile claim 的后续成熟度，`distribution_asserted` 则是与 maturity 正交的对外声明事实；当前两者都不存在。Computer Use 已从 Core 必做能力移为 Extension SDK Base 上的 optional Profile；当前同样仅为 `contract-only`，没有专用 Schema、crate、SDK composition、Provider 或真机测试，因而不阻塞 Core 完成。`desktop-client` 也不等同于 Computer Use。
 
@@ -37,7 +37,10 @@
 - [x] 定义 `AuditRecord` v1：增加 `task.creation_recorded` 不可变创建快照，显式 `external_content_status` / PayloadManifest stable refs，并拍板 PermissionDecision/policy context、rollback 权威投影、实际 Provider/模型建议引用的双源一致性；Schema 内条件已有运行时测试，不自动公开为 Event/Outbox。
 - [x] 明确 Event aggregate `sequence`：首条已提交事件为 `0`，后续严格连续 `+1`，回滚事务暂分配不占号。
 
-### Task/Action 纯领域状态机
+### Task/Action纯领域状态机
+
+- [x] 现有v1 generated TaskStatus/ActionStatus与domain-task状态图实现保持代码事实；本轮未修改Rust。
+- [ ] active Action合同需升级：`approval_chain_id`、execution generation、materialized child result与Approval v2消费；现有`approval_record_ref`/deferred文案是legacy实现，不得声称满足v2。
 
 - [x] 新增 `rust/crates/domain-task`，直接使用生成的 TaskStatus/ActionStatus，不复制状态枚举。
 - [x] 实现 CORE §10 Task 状态图、revision 和 plan_version 规则；兼容 `task.create` 的 `plan_version=0`。
@@ -85,7 +88,7 @@
 - [x] 固定成功 payload 方法级 Schema 门、最终 Response Envelope Schema 门、request_id 原样与 ok/error 互斥。
 - [x] 固定可注入 `KernelClock`、UUID/opaque ID generator 和闭集 `BackendError` 高阶 Task backend；实现 `SystemKernelClock` 与使用可失败 OS 随机源的 `RandomKernelIdGenerator`，随机源失败进入 `IdGenerationError` 而非 panic；SQLite adapter 穷举 `StoreErrorCode`，复用 `with_write_transaction` + 现有 repository，不暴露 transaction/SQL。
 - [x] 固定 deadline RFC 3339 UTC instant 比较与两次读取：入口先检查；create 事务不可中途取消，commit 后到期返回 `deadline_exceeded` 但事实保留并以同一 idempotency key 恢复。
-- [x] 固定六个 Kernel UUID（版本不限定）、独立 correlation/dedup 生成，不把 Kernel-owned 标识伪装成 caller-owned 或固定派生规则。
+- [x] 固定 **legacy v1 handler** 六个 Kernel UUID（Task/Scope/Origin/receipt/Audit/Event，版本不限定）与独立 correlation/dedup 生成，不把 Kernel-owned 标识伪装成 caller-owned 或固定派生规则；**active root `task.create` v2** 改由 `RootTaskCreateAllocationV2` 七 UUID（含 `creation_provenance_id`）分配，见 IC §5.10 / §6.10.6，不得与六 UUID 混写。
 - [x] 固定 Created/Replayed 均返回当前 Task；Created 同时返回可信绑定的 committed Event ID，只有 Created 产生 durable Outbox 的 post-commit Publisher wake-up intent，通知失败不回滚、不声明 delivered。
 - [x] 固定三个方法按 backend/`StoreErrorCode` 的 KCP code、safe message、details=null、retryable 映射，不匹配错误 message。
 - [x] 增加完整 fake backend/clock/ID、deadline pre/post、Created/Replayed/get/notfound、每项错误与 payload/envelope Schema 的 Conformance 矩阵。
@@ -108,9 +111,21 @@
 - [x] `kernel-contracts` 101 项测试（lib 52，含 47 个自动 string enum 合同；contract_validation 49）；`schema-tool` 89 项测试（lib unit 29 + graph_projection 24 + cli_smoke 36）；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
 - [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
 
+## 新接受的contract-only架构（ADR-0006/0007）
+
+- [x] 接受ADR-0006：active KCP TaskCreate v2 root-only；v1 legacy冻结；Child Task唯一通过父Task的`kernel.task/task.child.create` S1 Action创建；child事实直接Action causation，Action自身状态事件使用transition anchor；显式Scope/Delegation delta；原子materialization与legacy provenance。
+- [x] 接受ADR-0007：Approval v2 request/resolution/invalidation判别联合、subject exactly-one、不可变current-head CAS、material/observation fingerprint分离、真实身份/remote challenge证据与plan re-evaluation。
+- [x] 接受ADR-0006/0007并补齐完整contract：JSON Schema TaggedUnion source profile与TypeShape lowering、MethodVersionBinding完整lifecycle/namespace migration、四投影与SubjectProjection hash、canonical confirmation词表、Approval evidence/chain/identity repositories与`approval.state_changed`、ActionTransition intent、allocation/producer/Audit exact wire、全量IC Error Catalog、V2ProductionWriteCutover及repository hard gates。
+- [x] 本轮只改文档/manifest元数据，不修改Schema、generated Rust或业务Rust；因此上述active合同全部仍为contract-only。
+
 ## 未完成
 
-- [ ] 实现 Task 更新/list、Action、PermissionDecision repository，以及 Audit 的 PermissionDecision/policy context 字段相等、rollback 权威投影、ModelCall provider 一致性；Task create/get 与 task creation Audit/Event canonical 一致性已实现。
+- [ ] 新增并生成TaskCreateRequest/Response v2、InputContentOrigin/ChildTaskProposal/四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit v2、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule v2、signature algorithm/credential/challenge/response/local/system evidence；当前41个Schema/生成类型均为v1但按对象lifecycle判断。
+- [ ] 将Value preflight改为method-aware payload version；active `task.create`只接受2，v1仅migration validator；替换registered v1 handler。
+- [ ] 实现root v2 repository/handler与child Action materializer；同Action最多一child、bundle全有或全无、canonical readback与reconciliation。
+- [ ] 实现Action/PermissionDecision/Approval v2 repositories、current-head CAS、fingerprint失效/复用、身份challenge验证与plan Action重评。
+- [ ] 实现legacy direct-child provenance migration，不伪造历史Action/Approval/Verification。
+
 - [ ] 为其它 Command 实现请求幂等与乐观锁；`task.create` scope/projection/生命周期已持久化。
 - [ ] 为五个已知未注册方法实现正式 handler；完成前 `KnownCatalogMethodNotImplemented` 只作为本地注册完整性结果，server 阶段门保持关闭。
 - [ ] 实现 Unix Domain Socket / Windows Named Pipe KCP server/client（受上述阶段门阻塞）。
@@ -124,8 +139,8 @@
 
 ## 当前阻塞
 
-- Value preflight/registration/dispatcher 已实现，但五个 Catalog 方法仍没有 handler，因此 server 生命周期仍被硬性阻塞。
-- `task.create` repository 已完成；Delegation authority 正向路径仍未实现，任何非 null Delegation 固定返回 `delegation_not_found`。
+- 当前最大阻塞已从“五方法handler”扩展为active contract migration：现有v1 `task.create`必须退出production dispatcher，v2 Schema/handler/repository与method-aware preflight完成前更不能启动server。
+- legacy `task.create v1` repository已完成；其Delegation正向路径未实现，非null固定not found。active v2必须实现真实Delegation authority，不能沿用该行为。
 - Task list cursor 仍保持 opaque；编码技术选择必须在 repository 实现前通过 ADR/API 拍板，不属于三方法 handler。
 - AuditRecord 的 Schema 内条件、SQLite immutable/canonical Store、`sent` 单记录支撑引用检查，以及 Task create 的固定 Audit/Event canonical 一致性已完成。仍缺 PermissionDecision/policy context 跨对象字段相等、rollback 权威投影、Provider/ModelCall 跨对象一致性与其它业务 producer；不得用默认值或单记录校验冒充这些跨对象事实。
 - `system_internal` null actor 的“确无可归因注册主体”仍由上层 producer 证明。
@@ -136,12 +151,11 @@
 
 ## 下一步
 
-1. 实现 Action/PermissionDecision repository，并关闭其余 Audit 跨对象一致性硬门。
-2. 为剩余五个 Catalog 方法逐个提供正式 handler；八方法 registration 完整后再关闭 server 阶段门。
-3. 随后实现本地传输、Task/Event 纵切与 Publisher 循环。
-4. 建立统一 Extension SDK Base 的正式 Schema、library、`composition`、public API 和 Base 验证，使其达到 `schema/SDK`；这是基础产品完整性的阻塞项，但不要求任何真实平台 Provider。
-5. Extension SDK Base 具备组合边界后，再按独立 roadmap 实现 optional Computer Use Profile 的专用契约、Provider 与 `real-platform` 验证；不把它作为 Core 完成门槛。
-6. 再在根基座上建立 TypeScript 包、client/SDK 和 Ant Design 桌面端。
+1. 先落地ADR-0006/0007的v2 Schema与generated method-version catalog，并增加legacy migration-only validator。
+2. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
+3. 实现root TaskCreate v2与child Action原子materializer、provenance migration和reconciliation。
+4. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
+5. 随后实现Publisher、Extension SDK Base与TypeScript/client。
 
 ## 最近验证
 

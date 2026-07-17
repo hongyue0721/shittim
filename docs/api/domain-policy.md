@@ -32,7 +32,7 @@ match result {
 
 `PolicyEvaluationContext` 只接收 Kernel 已观察或已有事实：Actor、当前 EntryPoint、多条 ContentOrigin、Task/Action ID、plan version、URI resource refs、capability/operation、SideEffectClass、structured arguments、Delegation 覆盖 evidence、本地 presence evidence、UTC instant、security mode 上下文与 `KernelInvariantState`。
 
-`owner`、本机入口、security mode、S4/S5 均不产生默认权限或默认确认。
+`owner`、本机入口、security mode、S4/S5均不产生默认权限或默认确认。PermissionDecision v2适配Default Allow：无规则命中仍生成allow decision，但不创建Approval。Child Task Action的context必须加入父子scope/capability/delegation delta；当前`PolicyEvaluationContext`尚无该v2持久shape，属于待升级接口。
 
 ## Invariant 优先
 
@@ -117,15 +117,17 @@ fn check(
 
 ## Decision draft 与哈希边界
 
-`PermissionDecisionDraft` 不是持久对象，不包含：
+`PermissionDecisionDraft`是当前legacy纯领域输出，不是持久v2对象，不包含：
 
 - PermissionDecision ID；
-- `evaluated_at`（只在 canonical input 中保留 Kernel 输入 instant）；
+- `evaluated_at`；
 - `decision_revision`；
 - `policy_set_revision`；
-- 最终 `evaluation_context_hash`。
+- material authorization fingerprint；
+- observation evidence fingerprint；
+- Approval v2 chain/resolution binding。
 
-crate 使用 `kernel-contracts::sha256_canonical`（RFC 8785 + SHA-256）计算 structured arguments 的 `key_params_hash`，并规范化、排序、去重 resource refs。完整判定上下文尚无独立持久 Schema，因此返回 `CanonicalEvaluationInput`；agentd 后续必须加入其拥有的 policy-set revision 等字段，按最终 Schema canonicalize/hash，不得把此草稿冒充持久 PermissionDecision。
+crate使用`kernel-contracts::sha256_canonical`计算structured arguments的`key_params_hash`并规范化resource refs。未来agentd必须基于完整v2 Schema加入parent/child delta、Delegation authority、material/observation分层与policy-set revision后分别hash；不得把当前`CanonicalEvaluationInput`或旧`evaluation_context_hash`冒充v2 PermissionDecision。
 
 ## 内部匹配 outcome（非公开 API）
 

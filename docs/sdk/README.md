@@ -8,15 +8,15 @@
 
 Extension SDK Base 指通用 Extension/Capability 协议与生命周期，是基础产品仍需完成的必做能力；旧草案若出现“SDK Core”，只可视为本层历史别名，不能与 Shittim Core 混淆。Optional Profile package 在源码与 Schema 上依赖 SDK public contracts，再依赖 Core public contracts；Shittim Core/Extension SDK Base 不反向引用 Profile 类型。运行时则由 `Core host -> SDK host boundary -> negotiated Profile implementation` 发起协商、grant、invoke 与 cancel，两张图不可混称为同一依赖方向。Computer Use 只作为未来可选 Extension Profile，不是 Core 能力；当前没有 Computer Use Schema、生成包、Profile composition contract 或 Provider。
 
-SDK 类型必须从 JSON Schema 2020-12 唯一源生成，不能手写一套与 Kernel 契约平行的类型。生成 string enum 已提供 declaration-order `ALL` 闭集与自动合同测试，`domain-task` 也已删除手写状态目录并直接消费该闭集；SDK 侧同样不得平行维护 status/catalog 目录。生成和兼容策略见 [`ADR-0002`](../../adr/0002-schema生成与兼容策略.md)；当前生成命令见 [`../api/schema-generation.md`](../api/schema-generation.md)。
+SDK类型必须从JSON Schema 2020-12唯一源生成，不能手写与Kernel契约平行的类型。生成/兼容策略见[`ADR-0002`](../../adr/0002-schema生成与兼容策略.md)。active KCP SDK只生成TaskCreate v2 root-only；Child Task不新增KCP create方法，而是Kernel-local Action。
 
 ## 未来 KCP SDK 边界
 
-未来客户端 SDK 只能处理已经公开的 KCP Envelope 与方法 payload：在 transport 层编码/解码 frame，发送 Command/Query、按 `request_id` 配对 Response，并依**原请求方法**选择成功 payload Schema，因为 Response 本身没有 method discriminator。`preflight_value`、`narrow_to_registered`、`RegisteredRequest`、`KnownCatalogMethodNotImplemented`、`TypedDispatcher` 和 post-commit Publisher intent 都是 Kernel 内部 API，不得生成进客户端 SDK。SDK 不拥有 Kernel 时钟、Task/Scope/Origin/receipt/Audit/Event ID、correlation/dedup 或 repository transaction。
+未来客户端SDK只生成active KCP method/version。`task.create`只生成v2 root-only payload；v1只能放在明确命名的legacy migration/reader包中，不能与active client入口重载或自动fallback。Child Task没有KCP SDK create方法，调用方只能提交/推进Core Action合同。
 
 SDK 对 `task.create` 的 deadline 恢复必须保留同一 idempotency key 与同一业务投影；收到 `deadline_exceeded` 或 `internal_error` 时不得假定 commit 未发生。`retryable=true` 也不授权换新 key 或盲目创建第二个 Task。
 
-本批不实现 SDK，不提供 raw transport/client，也不把内部 typed handler/backend/preflight/dispatcher trait 或本地结果公开为 SDK API。五个已知未实现方法的本地 registration 结果不是客户端可见 KCP error。
+Extension SDK公开合同若携带PermissionDecision/Approval引用，只能使用Core生成的v2稳定refs/fingerprints；Profile/Extension不得判断material等价、签发Approval或直接物化Child Task。
 
 ## 文档
 

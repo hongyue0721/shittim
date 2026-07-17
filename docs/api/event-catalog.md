@@ -1,30 +1,28 @@
 # Event Catalog
 
-> 状态：EventEnvelope 与三个首批 payload 的契约、Schema、Rust 生成类型、校验及 SQLite Outbox 已完成；task.create 已生产唯一 `task.created`，Publisher 和订阅服务未实现。EventEnvelope 与 Outbox 语义以 [`CORE_ARCHITECTURE.md`](../../specs/CORE_ARCHITECTURE.md) 为准，首批 payload 以 [`IMPLEMENTATION_CONTRACTS.md` 第 5.6 节](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) 为准。
+> 状态：legacy EventEnvelope v1/SQLite Outbox已实现；active EventEnvelope/CausationRef v2以及`action.state_changed`、`approval.state_changed`仍为contract-only。字段与producer唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) 和 §6.14–6.16；本页只导航。
 
-## EventEnvelope 关键语义
+## CausationRef v2
 
-- `type` 使用点号分隔的小写名称；
-- `aggregate_type` + `aggregate_id` 标识聚合；
-- `sequence` 是聚合内已提交事件序号：首条为 `0`，后续严格连续 `+1`，回滚事务的暂分配不占号；
-- `outbox_position` 是全局单调投递位置，不表示跨聚合领域因果；
-- `causation_ref.kind` 只允许 `command_request | event`；
-- cursor 只使用 `outbox_position`；
-- `delivered_at` 只表示 Publisher 已发布，不表示各订阅者已消费；
-- at-least-once 下消费者必须按 `dedup_key` 或 `event_id` 幂等。
+- `command_request{id}`：command直接产生事实。
+- `event{id}`：已提交event触发事实。
+- `action{id}`：Action产生其它aggregate事实，例如child `task.created`。
+- `ActionTransitionRefV1 {kind:"action_transition",action_id,transition_id}`：仅Action自身状态event；CausationRef branch直接`$ref`该正式wire对象。其权威定义（连同Intent、CAS、replay与reconciliation）在IC §6.14，不在Audit合同重复定义。
 
-## 首批正式事件
+## 首批active Catalog
 
-| type | aggregate_type | aggregate_id | payload 状态 |
-|---|---|---|---|
-| `task.created` | `task` | Task ID | schema_version 1 已在规范定义 |
-| `task.state_changed` | `task` | Task ID | schema_version 1 已在规范定义 |
-| `stop_fence.activated` | `stop_fence` | `global` | schema_version 1 已在规范定义 |
+| type | aggregate | 摘要 |
+|---|---|---|
+| `task.created` | task / Task ID | root由command，child由Action产生 |
+| `task.state_changed` | task / Task ID | 合法Task transition |
+| `action.state_changed` | action / Action ID | 使用ActionTransitionRefV1；payload绑定PD/Approval/Verification/result |
+| `approval.state_changed` | approval_chain / chain ID | 每次current-head成功变化恰好一条；atomic replacement无中间head event |
+| `stop_fence.activated` | stop_fence / `global` | generation激活事实 |
 
-AuditRecord 是独立的本地不可变审计对象，不属于这三个事件的 payload，也不会仅因写入 Audit Store 自动成为公开事件或进入 Outbox。参见 [AuditRecord v1](audit-record.md)。
+### Approval可观察性
 
-其他内部事件名称（包括未来 Profile 可能使用的 `snapshot`、`user_takeover` 等 Extension event）只有在加入正式 payload Schema、兼容说明和 Conformance 测试后，才成为对应 Profile 的 Catalog 成员。它们默认不是公共 Kernel Event；只有正式晋升并纳入公共 Schema/Catalog 后，才可成为公共 Kernel Event。
+初始request、resolution、invalidation、invalidation+replacement均由Approval repository固定生产，并各自消费正式`ApprovalEventAllocationV1`。事件payload携带from/to head与record kind、subject kind、canonical confirmation mode、request/resolution/invalidation/replacement refs、PD/Action、reason/time。CAS loser或replay不新增event；Challenge expired只写identity/security Audit，绝不作为Approval head事件。
 
-## 当前状态
+## Consumer gate
 
-目前已有 SQLite Outbox 表、sequence/position 原子分配、历史/未投递读取与 task.create producer；仍没有 Publisher、订阅 server 或消费 SDK，因此不能声称事件已经可外部订阅。未来 Computer Use Profile 的 `snapshot`、`user_takeover` 等名称即使由 Provider 返回，也默认只是 Profile Extension event；Provider 返回的 Event-like JSON 不能自行晋升为 Kernel Event。
+消费者必须按type/version选择payload Schema，校验aggregate、sequence、causation、canonical payload与repository事实；未知type/version或payload mismatch fail closed且不推进cursor。`outbox_position`只表示全局投递顺序，`delivered_at`只表示Publisher已发布。

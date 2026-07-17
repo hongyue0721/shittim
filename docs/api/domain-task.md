@@ -16,7 +16,9 @@
 | 权威转换表 | `specs/CORE_ARCHITECTURE.md` §10（Task）、§11（Action） |
 | 不变量 / 恢复 | `CORE` §10.3 / §11.4 / §12–13；`IMPLEMENTATION_CONTRACTS` §6.3–6.5 / §6.11–6.13 |
 
-## 核心入口
+`ActionRequest.permission_decision_ref`初建pending可空，首次评估后指向current PermissionDecision v2。Policy confirm时持久层还必须关联Approval v2 chain/current request；当前Rust API中的单一`approval_record_ref`只是legacy字段适配，不能表达request/resolution/invalidation head，后续实现必须升级。
+
+`PolicyEvaluationOutcome`及其`approval_record_ref`是legacy Rust v1适配对象；active v2 API必须以`approval_chain_id`和可消费`approval_resolution_ref`表达，禁止继续创建deferred ApprovalRecord。下面示例仅用于当前crate回归，不是active wire/domain shape。
 
 ### Task
 
@@ -75,7 +77,7 @@ let out = apply_policy_evaluation_outcome(
     &PolicyEvaluationOutcome {
         effect: PolicyEvaluationEffect::Confirm,
         permission_decision_ref: "pd-…".into(),
-        approval_record_ref: Some("ar-deferred-…".into()),
+        approval_record_ref: Some("ar-deferred-…".into()), // legacy v1 current crate only
         reason: "matched confirm rule".into(),
     },
 )?;

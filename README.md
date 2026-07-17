@@ -6,7 +6,7 @@
 
 1. `AGENT.md` 是宪法：全局不变量、可信核心边界、依赖方向与编码规则。
 2. `specs/*.md` 是各领域的唯一规范事实源；同一字段、枚举、状态机不得在其他文档复制定义。
-3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。
+3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。ADR-0006/0007 已接受 Child Task/TaskCreate v2 与 Approval v2 合同，但当前仍是 contract-only。
 4. 源码、Schema 与测试必须实现本规范，不能反向改变规范。
 
 `PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据（由 `scripts/update-file-manifest.mjs` 从 Git Markdown source set 生成，禁止手改）；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。
@@ -27,7 +27,7 @@
 
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
-- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；Schema/生成类型、Task create/get repository、不可连接 Value preflight/三方法 dispatcher 与 typed handlers 已实现，`agentd` 与可连接 server 尚未实现。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust只实现legacy TaskCreate v1 create/get与不可连接dispatcher，active TaskCreate v2/child Action/Approval v2仍是contract-only，`agentd`与可连接server尚未实现。
 - [`docs/sdk/README.md`](docs/sdk/README.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 

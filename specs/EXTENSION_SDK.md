@@ -280,6 +280,7 @@ incompatible
 - request id；
 - task id（属于 Task 时；纯 discovery/diagnostic 可为 null）；
 - action id（副作用时）；
+- Core注入的PermissionDecision material/observation fingerprint与可消费Approval resolution ref（适用时）；Profile不得计算material等价、签发/失效Approval或自行决定复用；
 - actor；
 - entry point；
 - granted capability（副作用或其他需要 grant 的调用；无副作用 discovery/observation 可为空，但不能绕过 Schema/scope）；
@@ -418,7 +419,7 @@ CapabilityNeed 至少包含：
 - 已发生哪些副作用；
 - 是否存在回滚。
 
-`approval_required` 仅在 Policy 输出 require_confirmation / require_local_confirmation / require_system_authentication 等匹配结果，或系统机制要求时出现；不是默认安装/首次运行错误。
+`approval_required`仅在Policy输出require_confirmation / require_local_confirmation / require_system_authentication / require_remote_signature / require_plan_revision等匹配结果，或系统机制要求时出现；不是默认安装/首次运行错误。
 
 ## 13. 取消
 
@@ -484,7 +485,7 @@ Extension Manifest 申请的是安装级上限；每次 Task 调用仍需 Kernel
 
 ## 16. 跨扩展协作
 
-禁止扩展直接发现、连接或调用另一个扩展。
+禁止扩展直接发现、连接或调用另一个扩展。Extension/Profile也不得直接物化Child Task；唯一新写入口是Core拥有的`kernel.task/task.child.create` Action，Extension只能返回CapabilityNeed或结构化proposal，由Kernel完成Policy与原子materialization。
 
 正确流程：
 
@@ -492,7 +493,7 @@ Extension Manifest 申请的是安装级上限；每次 Task 调用仍需 Kernel
 Extension A returns CapabilityNeed / candidate
 -> agentd resolves capability via Registry
 -> policy evaluation
--> Extension B invoked in same Task or subtask
+-> Extension B invoked in same Task or Child Task
 ```
 
 这样可以防止权限链和隐藏调用。不允许“指定扩展 id 直接跳转”绕过 Registry。

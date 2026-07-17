@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：Envelope/Schema、`serde_json::Value` preflight、三方法 registration/dispatcher 与 `system.ping` / `task.create` / `task.get` 的不可连接 Rust typed application handler 已实现；仍无可连接 server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第 5 节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
+> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；当前Rust preflight/dispatcher/handler仍实现legacy v1，且无可连接server。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -28,7 +28,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | 方法 | 类型 | 状态/副作用 | 幂等说明 |
 |---|---|---|---|
 | `system.ping` | Query | 只读 | 不适用 |
-| `task.create` | Command | 创建 Task Kernel 事实，不执行外部副作用 | actor.id/entry_point/command_type/idempotency_key scope；精确 projection + JCS hash 见下文 |
+| `task.create` | Command | active v2只创建root Task | v2精确projection；v1 legacy frozen，不进入active dispatcher |
 | `task.get` | Query | 只读 | 不适用 |
 | `task.list` | Query | 只读 | 不适用 |
 | `event.subscribe` | Query | 创建连接级临时订阅句柄，无领域副作用 | 不适用 |
@@ -36,12 +36,13 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应 payload、排序、cursor 与方法专属错误见权威规范。`task.create` 已由 `kernel-sqlite` repository 实现规范化、receipt/idempotency hash 与 Task/Scope/Origin/Audit/Event 单事务物化；`kernel-kcp` 已实现 `system.ping` / `task.create` / `task.get` typed handler 与 SQLite adapter，详见 [`kernel-kcp.md`](kernel-kcp.md) 和 [Task repository 创建与读取契约](task-repository-contract.md)。首批 KCP 没有清除 Stop Fence 的方法；未来解除流程必须有独立恢复契约。
+完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task不通过KCP创建，只通过父Task的`kernel.task/task.child.create` Action原子materialization。当前`kernel-sqlite`/`kernel-kcp`只实现legacy v1 create/get；active v2、child Action、CausationRef/EventEnvelope/Audit v2尚未实现。
 
 ## Value preflight 与 registration 合同
 
 - 输入只接受调用方已经解析的 `serde_json::Value`，不接 bytes/UTF-8/JSON parse/frame。
-- 固定优先级为 request_id 可关联性、message family、protocol、auth、family method、根 payload schema version、完整 Schema/generated decode。
+- 固定优先级为request_id可关联性、message family、protocol、auth、family method、根payload version形状+method-aware active版本、完整Schema/generated decode。
+- active `task.create`只接受v2；v1虽有known legacy Schema，也返回`unsupported_schema_version`且不能进入registration。当前Rust实现尚未完成该升级。
 - request ID 不可关联时本地拒绝且不发响应；可关联的五类 preflight error 使用固定安全 message、`details=null`、`retryable=false`，并经过不可替换 Response Schema 门。
 - 八方法合法请求都必须先成为 generated typed Accepted；三方法 narrow 为 `RegisteredRequest`，其余五个得到本地不可序列化 `KnownCatalogMethodNotImplemented`，不是 wire error。
 - 公开调用分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`，已在 `kernel-kcp` 实现；详细 API 见 [`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。
@@ -53,7 +54,7 @@ KCP 是 `desktop-client`、`agent-runtime` 和其他内部客户端访问 `agent
 - 响应固定 `protocol_version=1.0`、`message_kind=response`、request ID 原样；success/error 互斥。Response 无 method discriminator，调用方依原请求方法校验成功 payload。
 - `KernelClock`、`KernelIdGenerator` 与闭集 `BackendError` 的 Task backend 可注入；backend 只暴露 create/get 高阶操作，不暴露 SQLite transaction 或 SQL。SQLite adapter 必须逐项把 `StoreErrorCode` 转成公开 backend 分类或 Internal，禁止消息匹配。
 - deadline 将 Envelope RFC 3339 文本解析为 UTC instant 后比较，禁止字符串比较；解析失败在 ID/backend 前返回 `internal_error`。
-- `task.create` 的第一次时钟读取同时是入口 deadline 检查和唯一 `accepted_at`。六个对象 ID 是合法、两两不同的唯一 UUID，版本不固定；correlation/dedup 是独立生成的非空 opaque 值，不从 caller 字段派生。
+- `task.create` 的第一次时钟读取同时是入口 deadline 检查和唯一 `accepted_at`。**本段描述的当前已实现 handler 是 legacy v1**：在 backend 前按 purpose 分配六个对象 ID（Task/Scope/Origin/receipt/Audit/Event），为合法、两两不同的唯一 UUID，版本不固定；correlation/dedup 是独立生成的非空 opaque 值，不从 caller 字段派生。**active `task.create` v2 不使用该六 UUID 口径**，必须由 `RootTaskCreateAllocationV2` 分配**七个** UUID（`task_id,task_scope_id,content_origin_id,kernel_receipt_id,creation_provenance_id,audit_record_id,task_created_event_id`，含 provenance）与两个独立 opaque ID；legacy 六 UUID 与 active 七 UUID 不得混写或互相替代。
 - SQLite 创建事务不可中途取消。commit 后到期仍返回 `deadline_exceeded`，但事实保留；客户端用同一 idempotency key 重放或用已知 Task ID 查询。
 - Created/Replayed 都返回当前 Task；Created 的 **backend 结果**还必须返回与本次 operation 中 Event UUID 相等的 `committed_event_id`（它不是 wire `TaskCreateResponse` 字段），仅据此产生一个 post-commit Publisher wake-up intent。它不表示 Event 已 delivered；后续 deadline/internal/response contract failure 仍保留 intent，通知失败不回滚 durable Outbox。
 

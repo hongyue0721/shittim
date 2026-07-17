@@ -523,7 +523,12 @@ Complete Execute Gate
 9. **Protected Surface 证据新鲜度**：Profile 只负责产出当前表面的标签、分类置信度、来源与证据引用，并证明这些事实仍对应当前 Snapshot/generation；本层不得把标签解释成 Policy allow / confirm / deny；
 10. **Reobserve 义务**：Prepare 后已 reobserve；niri 等平台的 `make target interactable → wait → reobserve` 已完成。
 
-Protected Surface 标签、目标、Snapshot/generation、发送目的地、operation、resource scope 或其他参与判定的事实发生变化时，Kernel 必须确认当前 `PermissionDecision.evaluation_context_hash` 覆盖新的完整评估上下文。覆盖不了或 hash 改变时，旧 PermissionDecision、其派生 ApprovalRecord 与相关 Permission/Privilege Lease 立即不再可消费，调用返回 Core 重评流程；Profile 只能报告变化，不能保留旧 allow、替 Kernel 决定 effect，或自行签发新 approval/lease。
+Protected Surface标签、目标、Snapshot/generation、发送目的地、operation、resource scope或其他参与判定的事实发生变化时，Kernel必须把事实分成两类：
+
+- **material authorization facts**：授权对象/语义、operation、资源、目的地、Protected Surface实质分类等；
+- **observation evidence facts**：snapshot/generation/provider ref/坐标transform/观察时间与证据refs等瞬时定位事实。
+
+任一observation变化都使旧PermissionDecision与相关Permission/Privilege Lease不可继续消费，并要求reobserve与新decision。若且仅若Core（不是Profile）证明新的material authorization fingerprint与旧approved Approval v2 resolution绑定值完全等价，且旧resolution未失效/过期，新PermissionDecision可引用复用该resolution。material fingerprint变化必须追加invalidation、重评并在仍需确认时创建新request。Profile只能报告变化和证据，不能判断material等价、保留旧allow、复用Approval或签发lease。
 
 ### 10.3 失败语义
 
@@ -685,9 +690,9 @@ Protected Surface 不是写死的“认证界面绝不上云”硬禁清单 alon
 
 规则：
 
-- Profile 只产出标签、分类置信度、来源、Snapshot/generation 与证据引用；不得决定或缓存 Policy allow / confirm / deny；
-- Kernel 把上述事实纳入当前 PermissionDecision evaluation context；事实变化导致 context hash 不再覆盖时，旧 decision、approval 与相关 permission/privilege lease 失效并回 Core 重评；
-- 默认行为由 Policy 配置；本规范不保留“认证界面绝不上云”的不可配置硬禁作为唯一安全模型；
+- Profile只产出标签、分类置信度、来源、Snapshot/generation与证据引用；不得决定或缓存Policy allow/confirm/deny；
+- Kernel将事实分为material authorization fingerprint与observation evidence fingerprint；observation变化使旧decision/lease失效并reobserve，只有Core证明material等价后新decision可复用旧approved resolution；material变化必须invalidation+重评；
+- 默认行为由Policy配置；本规范不保留“认证界面绝不上云”的不可配置硬禁作为唯一安全模型；
 - 实现可提供安全的出厂推荐规则，但推荐规则不是规范级硬编码 deny；
 - 无匹配规则时 Freedom-first：allow（能力已启用、合同成立且 Kernel 已对当前上下文完成评估的前提下）；匹配规则可 deny / confirm / require_local 等；
 - Computer Use 不得从受保护表面提取 Secret 到普通日志或未授权通道；这属于 Secret / 数据策略，与“是否允许观察存在”分开。

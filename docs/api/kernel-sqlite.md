@@ -1,6 +1,6 @@
 # kernel-sqlite 内部 Rust API
 
-`rust/crates/kernel-sqlite` 是文件型 SQLite 持久化 crate，不是 KCP 或外部 SDK API。它实现 migration、不可变 AuditRecord、原子 Event Outbox、cursor/delivery、transaction-bound Policy rate limit，以及 Task create/get repository。
+`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。它当前实现migration、AuditRecord v1、EventEnvelope v1 Outbox、rate limit与**legacy TaskCreate v1** create/get repository。ADR-0006/0007要求的active v2 repositories尚不存在。
 
 ## 打开与连接配置
 
@@ -35,11 +35,11 @@ store.with_write_transaction(|transaction| {
 - `WriteTransaction` 是受限表面，不公开任意 SQL；也不公开 `WriteTransaction::mark_delivered`（delivery mark 只通过 Store convenience）。
 - open 路径上的 WAL journal-mode 初始化与 `schema_migrations` ledger bootstrap 是基础设施例外，不是 public 业务写 API；pending migration 仍各自使用 `BEGIN IMMEDIATE`。
 
-## Task create/get repository
+## Legacy TaskCreate v1 repository
 
-`WriteTransaction::create_task(TaskCreateCommand)` 接收 Envelope facts、生成的 `TaskCreateRequest` 和上层分配的 Task/Scope/Origin/receipt/Audit/Event identity 与单一 `accepted_at`。repository 只规范化 origin URI 和 scope pattern，计算 receipt/idempotency canonical hash，并在独有内部 SAVEPOINT 中创建 ContentOrigin、TaskScope、Task、幂等记录、固定 Audit 与唯一 Event。相同 scope/hash 返回 `Replayed` 当前 Task；不同 hash 返回 `idempotency_conflict`。调用者即使捕获错误并让外层事务提交，也不会留下该次创建的部分事实。
+现有`WriteTransaction::create_task(TaskCreateCommand)`允许payload `parent_task_id`并实现direct-child；自ADR-0006起仅用于legacy read/validation/migration与代码事实对照，不得由active server路由。
 
-未来 typed handler 的 SQLite adapter 必须只在 `SqliteStore::with_write_transaction(|transaction| transaction.create_task(command))` 中调用本 API；不得把 `WriteTransaction` 或 SQL 暴露给 handler。handler 的第一次时钟读取固定唯一 `accepted_at`，六个两两不同的 UUID 由注入 generator 提供（版本不固定），correlation/dedup 由独立非空生成端口提供且不从 caller 字段派生。事务内不读取 deadline、不取消；commit 后到期只改变 KCP 响应，不能回滚已提交事实。
+后续必须新增独立的root v2 create repository与child materialization repository。child repository以Action ID为唯一业务键，在同一事务写Origin/Scope/Task/provenance/Audit/Event/Verification与Action completion，canonical readback，全有或全无；不能在当前v1 create函数上增加可选分支继续维持双入口。
 
 `SqliteStore::{get_task,get_task_scope,get_content_origin}` 返回 `Result<Option<生成类型>, StoreError>`。读取执行 parse → 正式 Schema → RFC 8785 canonical byte equality → typed decode，并逐项比较关系表 ordinal 与 JSON 数组；关联缺失、关系多/少/乱序、非 canonical JSON 或循环引用不一致均返回 `stored_data_invalid`，不会修复存储。
 
@@ -130,7 +130,7 @@ SQLite adapter 必须按 `StoreErrorCode` 穷举，不匹配 `StoreError.message
 - `invalid_scope_pattern`
 - `idempotency_conflict`
 - `delegation_not_found`
-- `parent_task_not_found`
+- `parent_task_not_found`（仅legacy TaskCreate v1 repository/handler；active v2 root create与child Action不使用此错误）
 - `parent_origin_not_found`
 - `stored_data_invalid`
 - `invalid_cursor`
@@ -139,6 +139,6 @@ SQLite adapter 必须按 `StoreErrorCode` 穷举，不匹配 `StoreError.message
 
 错误消息不包含 SQL 文本、参数或 Audit/Event payload。
 
-## 明确不在范围
+## 明确不在当前实现范围
 
-本 crate 不实现 Task 更新或 list、Action/PermissionDecision repository、KCP、`agentd`、网络、Provider 调用或 Publisher 后台循环。
+active TaskCreate v2、Child Action materialization、Task creation provenance、CausationRef/EventEnvelope/ContentOrigin/Audit v2、Action/PermissionDecision/Approval repositories与migration均未实现。

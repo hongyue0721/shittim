@@ -10,10 +10,10 @@ Extension SDK Base 指通用 Extension/Capability 协议与生命周期；它是
 
 - Extension 默认进程外，不加载进 `agentd` 地址空间；
 - Extension 只能通过公开 Extension protocol 被 Kernel 调用；
-- Extension 不能直接互调、不能直接调用 Privilege Broker、不能写 Task/Policy/Audit Kernel 事实；
+- Extension不能直接互调、不能直接调用Privilege Broker、不能写Task/Policy/Audit Kernel事实，也不能直接创建Child Task；Child Task唯一入口是Core的`kernel.task/task.child.create` Action；
 - Native Extension 的权限声明必须区分 OS-enforced、host-enforced 与 declaration-only；Extension SDK Base 的 enforcement class 仍是真实约束，Profile 不得把 declaration-only 伪装成已执行的权限；
 - Extension RPC 与 KCP 是不同协议，不能共享 Envelope 或混用方法目录；
-- Provider 返回或外形类似 Event 的 JSON 不能升级为 Kernel Event。
+- Profile/Extension只消费Core注入的PermissionDecision/Approval v2引用；不得判断material fingerprint等价、复用/失效Approval或签发Lease；
 
 ## 未来生成物
 
@@ -24,7 +24,7 @@ Extension SDK Base 指通用 Extension/Capability 协议与生命周期；它是
 - Rust/TypeScript/Python SDK 类型与 validator；
 - conformance fixtures 与兼容测试。
 
-这些 Extension SDK Base 生成物目前均不存在；Computer Use Profile 的 Schema、生成包、composition 和 Provider 也均不存在。依赖方不得导入虚构包名，也不得假设已有运行时或真实 Provider。
+PermissionDecision v2的material/observation fingerprint与Approval current-head facts属于Core公共合同。SDK只传递Kernel注入的opaque refs/fingerprints，不导出“isMaterialEquivalent”“approveImplicitly”或直接ChildTask create等越权helper。
 
 ## 实现者阅读顺序
 

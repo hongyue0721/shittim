@@ -1,6 +1,6 @@
 # KCP Value preflight 与注册式 dispatcher
 
-> 状态：已实现不可连接的 Rust 库级边界。唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` §5.11](../../specs/IMPLEMENTATION_CONTRACTS.md#511-serde_jsonvalue-preflight-与三方法注册式-dispatcher)，自动化矩阵见 [`CONFORMANCE.md` §5](../../specs/CONFORMANCE.md#5-kernel-control-protocolschema-与事件)。
+> 状态：当前Rust已实现legacy v1不可连接边界；active合同已升级为method-aware payload version与TaskCreate v2，因此本实现不能作为未来server的active preflight，必须先升级。
 
 ## 范围
 
@@ -46,7 +46,7 @@ preflight_value(value)
 
 顶层 `request_id` 必须是 UUID parser 接受的 string；wire error 中逐字保留原字符串，不重新格式化。非 object、缺失/非 string/非法 UUID 都得到 `UncorrelatableRequest`。
 
-method 判定直接使用 generated `KCP_COMMAND_METHODS` / `KCP_QUERY_METHODS`。跨 family 名称是 `unsupported_method`。根 payload version 只接受 JSON i64/u64 正整数形态的 `1`；`1.0`、非正数、超出 i64/u64 的数值是 `invalid_request`，其它正整数是 `unsupported_schema_version`。嵌套 version 与业务字段错误仍是 `invalid_request`。
+当前Rust实现把根payload version全局固定为1；这只描述legacy代码缺口，不是规范规则。active实现必须读取generated `MethodVersionBinding`：`task.create active=[2], legacy=[1]`，其余首批方法active=[1]；按family+method+version选择request及response Schema。Legacy validator必须与active preflight隔离。
 
 ## 结构化 contract error
 
@@ -77,7 +77,7 @@ response 构造复用 `kernel-kcp` crate-private 通用 validated error finalize
 - registered：`system.ping`、`task.create`、`task.get`；
 - known-unimplemented：`task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`。
 
-`narrow_to_registered` 对 generated payload enum 穷举匹配，无 wildcard。Known 值是本地注册完整性事实，不是 `KcpError`，不会转换为 `unsupported_method`、`method_unavailable` 或 `internal_error`。
+当前narrow把v1 `task.create`列为registered；active升级后必须改为v2 typed variant，v1不得Accepted/registered。其余registered/known集合不变，直到各方法另行升级。
 
 `TypedDispatcher` 只调用现有公共 `handle_system_ping`、`handle_task_create`、`handle_task_get`，不重复 Schema/protocol/auth/method/payload version/deadline 检查，不改写 `HandlerResult` 或 post-commit intents，也不创建平行端口。
 
