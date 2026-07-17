@@ -13,10 +13,10 @@
 - `adr/0005-computer-use可选profile边界.md` — 133 lines
 - `adr/README.md` — 23 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 52 lines
-- `docs/PROGRESS.md` — 175 lines
+- `docs/PROGRESS.md` — 176 lines
 - `docs/api/README.md` — 38 lines
 - `docs/api/audit-record.md` — 84 lines
-- `docs/api/domain-policy.md` — 149 lines
+- `docs/api/domain-policy.md` — 159 lines
 - `docs/api/domain-task.md` — 120 lines
 - `docs/api/error-catalog.md` — 56 lines
 - `docs/api/event-catalog.md` — 30 lines
@@ -29,11 +29,11 @@
 - `docs/sdk/README.md` — 37 lines
 - `docs/sdk/extension-sdk.md` — 39 lines
 - `specs/COMPUTER_USE.md` — 858 lines
-- `specs/CONFORMANCE.md` — 623 lines
+- `specs/CONFORMANCE.md` — 625 lines
 - `specs/CORE_ARCHITECTURE.md` — 833 lines
 - `specs/EXTENSION_SDK.md` — 681 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 1493 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 1495 lines
 - `specs/MODEL_RUNTIME.md` — 355 lines
 - `specs/REFERENCES.md` — 254 lines
 - `specs/SECURITY_PRIVILEGE.md` — 405 lines

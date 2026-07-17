@@ -35,6 +35,16 @@ pub struct Specificity {
     pub condition_constraint_count: i32,
 }
 
+/// Private matcher step outcome. Ordinary non-match is never a [`PolicyError`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MatchOutcome<T> {
+    Matched(T),
+    NotMatched,
+}
+
+/// Private matcher step result: real failures stay in [`PolicyError`]; non-match is typed.
+type MatchResult<T> = Result<MatchOutcome<T>, PolicyError>;
+
 #[derive(Debug, Clone)]
 struct Candidate<'a> {
     rule: &'a PolicyRule,
@@ -92,11 +102,9 @@ fn evaluate_policy_inner(
 
     let mut candidates = Vec::new();
     for rule in rules {
-        match match_rule(rule, context, &normalized_resources, rate_limits) {
-            Ok(Some(candidate)) => candidates.push(candidate),
-            Ok(None) => {}
-            Err(error) if is_not_matched(&error) => {}
-            Err(error) => return Err(error),
+        match match_rule(rule, context, &normalized_resources, rate_limits)? {
+            MatchOutcome::Matched(candidate) => candidates.push(candidate),
+            MatchOutcome::NotMatched => {}
         }
     }
     candidates.sort_by(candidate_cmp);
@@ -139,9 +147,9 @@ fn match_rule<'a>(
     context: &PolicyEvaluationContext,
     resources: &[NormalizedUri],
     rate_limits: &dyn RateLimitPort,
-) -> Result<Option<Candidate<'a>>, PolicyError> {
+) -> MatchResult<Candidate<'a>> {
     if !rule.enabled || is_expired(rule, context)? {
-        return Ok(None);
+        return Ok(MatchOutcome::NotMatched);
     }
     validate_rule_semantics(rule)?;
     let mut score = Specificity::default();
@@ -149,32 +157,47 @@ fn match_rule<'a>(
     if let Some(kind) = rule.actor_match.kind {
         constrain_exact(&mut score);
         if kind.as_str() != context.actor.kind.as_str() {
-            return Ok(None);
+            return Ok(MatchOutcome::NotMatched);
         }
     }
     if let Some(patterns) = nonempty(rule.actor_match.source_patterns.as_deref()) {
         let actor_source = normalize_source_uri(&context.actor.source, "Actor source")?;
-        add_uri_score(&mut score, best_uri_pattern(patterns, &actor_source)?)?;
+        match add_uri_score(&mut score, best_uri_pattern(patterns, &actor_source)?)? {
+            MatchOutcome::Matched(()) => {}
+            MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+        }
     }
     if let Some(entry_point) = rule.actor_match.entry_point {
         constrain_exact(&mut score);
         if entry_point != context.entry_point {
-            return Ok(None);
+            return Ok(MatchOutcome::NotMatched);
         }
     }
     if let Some(minimum) = rule.actor_match.auth_level_min {
         constrain_exact(&mut score);
         if auth_rank(context.actor.authentication_level) < rule_auth_rank(minimum) {
-            return Ok(None);
+            return Ok(MatchOutcome::NotMatched);
         }
     }
 
-    match_content_origins(rule, context, &mut score)?;
-    match_resources(rule, resources, &mut score)?;
-    match_action(rule, context, &mut score)?;
-    let rate_limit = match_conditions(rule, context, resources, rate_limits, &mut score)?;
+    match match_content_origins(rule, context, &mut score)? {
+        MatchOutcome::Matched(()) => {}
+        MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+    }
+    match match_resources(rule, resources, &mut score)? {
+        MatchOutcome::Matched(()) => {}
+        MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+    }
+    match match_action(rule, context, &mut score)? {
+        MatchOutcome::Matched(()) => {}
+        MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+    }
+    let rate_limit = match match_conditions(rule, context, resources, rate_limits, &mut score)? {
+        MatchOutcome::Matched(rate_limit) => rate_limit,
+        MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+    };
 
-    Ok(Some(Candidate {
+    Ok(MatchOutcome::Matched(Candidate {
         rule,
         specificity: score,
         rate_limit,
@@ -232,11 +255,11 @@ fn match_content_origins(
     rule: &PolicyRule,
     context: &PolicyEvaluationContext,
     score: &mut Specificity,
-) -> Result<(), PolicyError> {
+) -> MatchResult<()> {
     let kinds = nonempty(rule.content_origin_match.kinds.as_deref());
     let sources = nonempty(rule.content_origin_match.source_patterns.as_deref());
     if kinds.is_none() && sources.is_none() {
-        return Ok(());
+        return Ok(MatchOutcome::Matched(()));
     }
     if kinds.is_some() {
         constrain_exact(score);
@@ -280,28 +303,28 @@ fn match_content_origins(
         }
     }
     if !matched {
-        return Err(not_matched());
+        return Ok(MatchOutcome::NotMatched);
     }
     if let Some(source_score) = best_source {
         accumulate_uri_score(score, &source_score);
     }
-    Ok(())
+    Ok(MatchOutcome::Matched(()))
 }
 
 fn match_resources(
     rule: &PolicyRule,
     resources: &[NormalizedUri],
     score: &mut Specificity,
-) -> Result<(), PolicyError> {
+) -> MatchResult<()> {
     let includes = nonempty(Some(&rule.resource_match.scope_patterns));
     let excludes = nonempty(Some(&rule.resource_match.exclude_patterns));
     if (includes.is_some() || excludes.is_some()) && resources.is_empty() {
-        return Err(not_matched());
+        return Ok(MatchOutcome::NotMatched);
     }
     if let Some(patterns) = excludes {
         for resource in resources {
             if any_uri_pattern(patterns, resource)? {
-                return Err(not_matched());
+                return Ok(MatchOutcome::NotMatched);
             }
         }
     }
@@ -318,32 +341,41 @@ fn match_resources(
                 }
             }
         }
-        add_uri_score(score, best)?;
+        match add_uri_score(score, best)? {
+            MatchOutcome::Matched(()) => {}
+            MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+        }
     }
-    Ok(())
+    Ok(MatchOutcome::Matched(()))
 }
 
 fn match_action(
     rule: &PolicyRule,
     context: &PolicyEvaluationContext,
     score: &mut Specificity,
-) -> Result<(), PolicyError> {
+) -> MatchResult<()> {
     if let Some(patterns) = nonempty(Some(&rule.action_match.capability_ids)) {
-        add_action_score(
+        match add_action_score(
             score,
             best_action_pattern(patterns, &context.capability_id)?,
-        )?;
+        )? {
+            MatchOutcome::Matched(()) => {}
+            MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+        }
     }
     if let Some(patterns) = nonempty(Some(&rule.action_match.operation_patterns)) {
-        add_action_score(score, best_action_pattern(patterns, &context.operation)?)?;
+        match add_action_score(score, best_action_pattern(patterns, &context.operation)?)? {
+            MatchOutcome::Matched(()) => {}
+            MatchOutcome::NotMatched => return Ok(MatchOutcome::NotMatched),
+        }
     }
     if let Some(ceiling) = rule.action_match.side_effect_max {
         constrain_exact(score);
         if side_effect_rank(context.side_effect_class) > side_effect_rank(ceiling) {
-            return Err(not_matched());
+            return Ok(MatchOutcome::NotMatched);
         }
     }
-    Ok(())
+    Ok(MatchOutcome::Matched(()))
 }
 
 fn match_conditions(
@@ -352,12 +384,12 @@ fn match_conditions(
     resources: &[NormalizedUri],
     rate_limits: &dyn RateLimitPort,
     score: &mut Specificity,
-) -> Result<Option<RateLimitCandidate>, PolicyError> {
+) -> MatchResult<Option<RateLimitCandidate>> {
     if let Some(window) = &rule.condition.time_window {
         score.constrained_dimension_count += 1;
         score.condition_constraint_count += 1;
         if !time_window_matches(window, context)? {
-            return Err(not_matched());
+            return Ok(MatchOutcome::NotMatched);
         }
     }
     let mut rate_limit_candidate = None;
@@ -380,23 +412,23 @@ fn match_conditions(
             instant: context.evaluation_instant,
         };
         if rate_limits.preview(&request)? == RateLimitPreview::Exceeded {
-            return Err(not_matched());
+            return Ok(MatchOutcome::NotMatched);
         }
         rate_limit_candidate = Some(candidate);
     }
     if let Some(required) = rule.condition.delegation_required {
         constrain_condition_boolean(score);
         if context.delegation.is_some() != required {
-            return Err(not_matched());
+            return Ok(MatchOutcome::NotMatched);
         }
     }
     if let Some(required) = rule.condition.local_presence_required {
         constrain_condition_boolean(score);
         if context.local_presence.is_some() != required {
-            return Err(not_matched());
+            return Ok(MatchOutcome::NotMatched);
         }
     }
-    Ok(rate_limit_candidate)
+    Ok(MatchOutcome::Matched(rate_limit_candidate))
 }
 
 fn time_window_matches(
@@ -647,14 +679,13 @@ fn constrain_condition_boolean(score: &mut Specificity) {
     score.condition_constraint_count += 1;
 }
 
-fn add_uri_score(
-    score: &mut Specificity,
-    selected: Option<UriPatternScore>,
-) -> Result<(), PolicyError> {
+fn add_uri_score(score: &mut Specificity, selected: Option<UriPatternScore>) -> MatchResult<()> {
     score.constrained_dimension_count += 1;
-    let selected = selected.ok_or_else(not_matched)?;
+    let Some(selected) = selected else {
+        return Ok(MatchOutcome::NotMatched);
+    };
     accumulate_uri_score(score, &selected);
-    Ok(())
+    Ok(MatchOutcome::Matched(()))
 }
 
 fn accumulate_uri_score(score: &mut Specificity, selected: &UriPatternScore) {
@@ -667,14 +698,16 @@ fn accumulate_uri_score(score: &mut Specificity, selected: &UriPatternScore) {
 fn add_action_score(
     score: &mut Specificity,
     selected: Option<(i32, usize, String)>,
-) -> Result<(), PolicyError> {
+) -> MatchResult<()> {
     score.constrained_dimension_count += 1;
-    let (exact, _, _) = selected.ok_or_else(not_matched)?;
+    let Some((exact, _, _)) = selected else {
+        return Ok(MatchOutcome::NotMatched);
+    };
     score.exact_dimension_count += exact;
     if exact == 0 {
         score.negative_single_segment_glob_count -= 1;
     }
-    Ok(())
+    Ok(MatchOutcome::Matched(()))
 }
 
 fn nonempty<T>(value: Option<&[T]>) -> Option<&[T]> {
@@ -766,14 +799,6 @@ fn normalize_source_uri(value: &str, field: &str) -> Result<NormalizedUri, Polic
             ),
         )
     })
-}
-
-fn not_matched() -> PolicyError {
-    PolicyError::new(PolicyErrorCode::InvalidRule, "__not_matched__")
-}
-
-fn is_not_matched(error: &PolicyError) -> bool {
-    error.code == PolicyErrorCode::InvalidRule && error.message == "__not_matched__"
 }
 
 fn unsupported(message: impl Into<String>) -> PolicyError {

@@ -109,6 +109,8 @@
 - time_window 使用 IANA timezone、weekday 和本地半开区间，覆盖同日、跨午夜、全天及 DST；
 - rate_limit 的 count/window_seconds/key_scope 原子检查与消费；delegation/local presence 布尔条件精确匹配；
 - 未知或不支持 condition 返回 `unsupported_policy_condition` 并 fail closed，不能当作无规则匹配而 Default Allow；
+- 普通 URI/action/condition/resource 未匹配是 typed NotMatched，不是错误；不得用 magic message / `invalid_policy_rule` 哨兵表示未匹配；真实评估错误（含外部 RateLimitPort 返回的任意 `PolicyError`，即使 message 撞上历史 sentinel 文本）仍 fail closed；
+- enabled 规则语义非法 fail closed；disabled 规则在语义校验前忽略；
 - S0-S5 只作为风险、匹配、审计与恢复标签，不隐式产生 allow/confirm/deny；
 - 无匹配规则时每个 Side-effect Class 均为 allow；
 - ContentOrigin 完整 Schema、kind 闭集、Actor kind 保留 `owner` 预留值但它不产生认证或默认权限、外部伪造 Kernel receipt 被拒绝且 Kernel 为已接受内容创建 receipt、parent origin 链和缺失 upstream ID 使用 null；

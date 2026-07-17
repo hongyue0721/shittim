@@ -826,6 +826,118 @@ fn enabled_invalid_uri_pattern_fails_closed() {
     }
 }
 
+/// Historical production debt used `PolicyErrorCode::InvalidRule` + magic message
+/// `"__not_matched__"` as an ordinary non-match sentinel. After the typed-outcome fix,
+/// a real `RateLimitPort` (crate-external authority) that returns that same code/message
+/// pair must still surface as `PolicyEvaluationResult::Error`, never Default Allow.
+#[test]
+fn legacy_not_matched_sentinel_from_rate_limit_port_still_propagates_as_error() {
+    struct SentinelCollisionPort;
+
+    impl RateLimitPort for SentinelCollisionPort {
+        fn preview(
+            &self,
+            _request: &RateLimitRequest<'_>,
+        ) -> Result<RateLimitPreview, PolicyError> {
+            Err(PolicyError {
+                code: PolicyErrorCode::InvalidRule,
+                message: "__not_matched__".into(),
+            })
+        }
+
+        fn check_and_consume(
+            &self,
+            _request: &RateLimitRequest<'_>,
+        ) -> Result<domain_policy::RateLimitConsume, PolicyError> {
+            unreachable!("preview fails first")
+        }
+    }
+
+    let candidate = rate_rule("sentinel-collision", 1);
+    match evaluate_policy(
+        &[candidate],
+        &context(SideEffectClass::S2),
+        &SentinelCollisionPort,
+    ) {
+        PolicyEvaluationResult::Error(error) => {
+            assert_eq!(error.code, PolicyErrorCode::InvalidRule);
+            assert_eq!(error.message, "__not_matched__");
+        }
+        other => panic!(
+            "legacy sentinel message from RateLimitPort must fail closed, not Default Allow: {other:?}"
+        ),
+    }
+}
+
+/// Ordinary non-match paths (URI include, action capability, condition, resource exclude)
+/// must remain Freedom-first Default Allow and must not be routed through PolicyError.
+#[test]
+fn ordinary_uri_action_condition_resource_nonmatches_default_allow() {
+    let mut uri_nonmatch = rule("uri-nonmatch", 9, PolicyRuleEffect::Deny);
+    uri_nonmatch.resource_match.scope_patterns = vec!["https://other.example/doc".into()];
+
+    let mut action_nonmatch = rule("action-nonmatch", 9, PolicyRuleEffect::Deny);
+    action_nonmatch.action_match.capability_ids = vec!["mail.send".into()];
+
+    let mut condition_nonmatch = rule("condition-nonmatch", 9, PolicyRuleEffect::Deny);
+    condition_nonmatch.condition.delegation_required = Some(true);
+
+    let mut exclude_nonmatch = rule("exclude-nonmatch", 9, PolicyRuleEffect::Deny);
+    exclude_nonmatch.resource_match.scope_patterns = vec!["https://example.com/**".into()];
+    exclude_nonmatch.resource_match.exclude_patterns = vec!["https://example.com/doc/%2F".into()];
+
+    for candidate in [
+        uri_nonmatch,
+        action_nonmatch,
+        condition_nonmatch,
+        exclude_nonmatch,
+    ] {
+        match evaluate_policy(
+            &[candidate],
+            &context(SideEffectClass::S5),
+            &RejectRateLimits,
+        ) {
+            PolicyEvaluationResult::Allowed(draft) => {
+                assert_eq!(draft.decision, PermissionDecisionDecision::Allow);
+                assert_eq!(draft.reason_codes, ["default_allow"]);
+                assert_eq!(draft.matched_rule_ref, None);
+            }
+            other => panic!("ordinary non-match must Default Allow: {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn enabled_invalid_effect_mode_fails_closed_while_disabled_invalid_is_ignored() {
+    let mut enabled_invalid = rule("enabled-invalid-mode", 99, PolicyRuleEffect::Allow);
+    enabled_invalid.confirmation_mode = Some(PolicyRuleConfirmationMode::Generic);
+    match evaluate_policy(
+        &[enabled_invalid],
+        &context(SideEffectClass::S2),
+        &RejectRateLimits,
+    ) {
+        PolicyEvaluationResult::Error(error) => {
+            assert_eq!(error.code, PolicyErrorCode::InvalidRule);
+        }
+        other => panic!("enabled invalid rule must fail closed: {other:?}"),
+    }
+
+    let mut disabled_invalid = rule("disabled-invalid-mode", 99, PolicyRuleEffect::Allow);
+    disabled_invalid.enabled = false;
+    disabled_invalid.confirmation_mode = Some(PolicyRuleConfirmationMode::Generic);
+    match evaluate_policy(
+        &[disabled_invalid],
+        &context(SideEffectClass::S2),
+        &RejectRateLimits,
+    ) {
+        PolicyEvaluationResult::Allowed(draft) => {
+            assert_eq!(draft.reason_codes, ["default_allow"]);
+            assert_eq!(draft.matched_rule_ref, None);
+        }
+        other => panic!("disabled invalid rule must be ignored: {other:?}"),
+    }
+}
+
 proptest! {
     #[test]
     fn sorting_is_invariant_to_input_permutation(order in prop::collection::vec(0usize..4, 4)) {

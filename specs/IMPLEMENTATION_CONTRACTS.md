@@ -906,6 +906,8 @@ source: user_defined | companion_generated | system
 
 排序、Pattern、Condition、Specificity 和 Default Allow 语义只由 `SECURITY_PRIVILEGE.md` 定义。`actor_match.source_patterns[]` 使用与 ContentOrigin source 相同的规范化 URI segment-glob 语法；空数组表示不限制。Schema 必须实施 `effect = confirm` 与 `confirmation_mode` 的条件约束。Read-only/Restricted 等命名 Mode 若产生限制，必须投影为可见 PolicyRule；Safe Recovery 与 Stop Fence 只在维护 Kernel 一致性和禁止未知副作用盲目重放的范围内作为不可覆盖 Recovery Invariant，不构成第二套通用权限矩阵。
 
+实现约束（`domain-policy` matcher 内部）：普通未匹配与真实评估错误必须用 typed outcome 分离（Matched / NotMatched / `PolicyError`）。禁止用 `invalid_policy_rule` 或任意 magic message 充当“未匹配”哨兵；真实 `PolicyError` 一律 fail closed，不得落入 Default Allow。该约束不改变公开 API、错误码、排序、求值顺序或 winner-only rate-limit 语义。
+
 ### 6.8 ExplorationScope
 
 ```text

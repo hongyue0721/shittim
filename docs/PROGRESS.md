@@ -61,6 +61,7 @@
 - [x] Stop Fence/Recovery invariant 优先返回独立 Blocked，不创建隐藏 deny；S0–S5 无规则均 Default Allow。
 - [x] 生成非持久 `PermissionDecisionDraft`、RFC 8785 key params hash 与 `CanonicalEvaluationInput`，不伪造持久 revision/hash。
 - [x] 补充 ContentOrigin 多值同一-origin 匹配语义及 Conformance 锚点。
+- [x] matcher 内部以私有 typed `MatchOutcome`/`MatchResult` 区分 Matched / NotMatched / 真实 `PolicyError`；删除用 `InvalidRule` + magic message 表示普通未匹配的架构债；公开 API/错误码/Default Allow/排序/winner-only rate-limit 不变；回归覆盖旧 sentinel 经 `RateLimitPort` 仍 fail closed，以及 URI/action/condition/resource 普通未匹配 Default Allow。
 - [x] 新增 [`api/domain-policy.md`](api/domain-policy.md)。
 
 ### Kernel SQLite 文件持久化基座

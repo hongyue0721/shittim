@@ -127,6 +127,16 @@ fn check(
 
 crate 使用 `kernel-contracts::sha256_canonical`（RFC 8785 + SHA-256）计算 structured arguments 的 `key_params_hash`，并规范化、排序、去重 resource refs。完整判定上下文尚无独立持久 Schema，因此返回 `CanonicalEvaluationInput`；agentd 后续必须加入其拥有的 policy-set revision 等字段，按最终 Schema canonicalize/hash，不得把此草稿冒充持久 PermissionDecision。
 
+## 内部匹配 outcome（非公开 API）
+
+`evaluate_policy` 的公开结果表面不变。crate 内部用私有 typed outcome 区分：
+
+- **Matched(T)**：规则在当前上下文下适用，进入候选集；
+- **NotMatched**：普通未匹配（URI/action/condition/resource 等），不进入候选，最终可落到 Freedom-first Default Allow；
+- **`PolicyError`**：真实评估失败，始终映射为 `PolicyEvaluationResult::Error` 并 fail closed。
+
+普通未匹配**不是**错误：不得用 `PolicyError`、magic message 或 sentinel 字符串表示。公开 API、错误码、Default Allow、排序、求值顺序与 winner-only rate-limit 语义均不受影响。
+
 ## 错误
 
 | code | 含义 |
@@ -139,7 +149,7 @@ crate 使用 `kernel-contracts::sha256_canonical`（RFC 8785 + SHA-256）计算 
 | `canonicalization_failed` | RFC 8785 输入失败 |
 | `rate_limit_failed` | authoritative port 缺失或失败 |
 
-Policy matcher 错误均返回 `PolicyEvaluationResult::Error`，不得转成 Default Allow。
+Policy matcher 错误均返回 `PolicyEvaluationResult::Error`，不得转成 Default Allow。即使外部 `RateLimitPort` 返回历史上曾被误作 sentinel 的 `invalid_policy_rule` + 任意 message，也必须作为真实错误传播。
 
 TaskScope containment 另有独立错误码（不进入 PolicyEvaluationResult）：
 
