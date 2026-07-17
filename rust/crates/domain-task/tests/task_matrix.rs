@@ -3,7 +3,6 @@
 use domain_task::{
     apply_task_transition, is_task_transition_allowed, DomainTaskErrorCode, SideEffectRef,
     SuccessCriterionEvidence, TaskTransitionCommand, VerificationEvidenceSummary,
-    TASK_STATUS_CATALOG,
 };
 use kernel_contracts::{TaskStatus, VerificationResultOutcome};
 
@@ -73,8 +72,8 @@ fn prepare(cmd: TaskTransitionCommand) -> TaskTransitionCommand {
 
 #[test]
 fn task_nxn_matrix_matches_graph_and_apply() {
-    for &from in TASK_STATUS_CATALOG {
-        for &to in TASK_STATUS_CATALOG {
+    for &from in TaskStatus::ALL {
+        for &to in TaskStatus::ALL {
             let allowed = is_task_transition_allowed(from, to);
             let cmd = prepare(base_cmd(from, to));
             let result = apply_task_transition(&cmd);
@@ -290,7 +289,7 @@ fn archived_only_from_terminal_success_failure_cancel_rollback() {
 #[test]
 fn rejected_and_archived_are_terminal() {
     for from in [TaskStatus::Rejected, TaskStatus::Archived] {
-        for &to in TASK_STATUS_CATALOG {
+        for &to in TaskStatus::ALL {
             assert!(!is_task_transition_allowed(from, to));
         }
     }

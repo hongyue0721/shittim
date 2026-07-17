@@ -1,21 +1,20 @@
-//! Property tests over Task/Action status catalogs (proptest).
+//! Property tests over generated Task/Action status closed sets (proptest).
 
 use domain_task::{
     apply_action_transition, apply_task_transition, is_action_transition_allowed,
     is_task_transition_allowed, ActionEvidence, ActionTransitionCommand, DispatchCertainty,
     DomainTaskErrorCode, SideEffectRef, SuccessCriterionEvidence, TaskTransitionCommand,
-    UncertainOutcomeReason, VerificationEvidenceSummary, ACTION_STATUS_CATALOG,
-    TASK_STATUS_CATALOG,
+    UncertainOutcomeReason, VerificationEvidenceSummary,
 };
 use kernel_contracts::{ActionStatus, TaskStatus, VerificationResultOutcome};
 use proptest::prelude::*;
 
 fn task_status_strategy() -> impl Strategy<Value = TaskStatus> {
-    prop::sample::select(TASK_STATUS_CATALOG.to_vec())
+    prop::sample::select(TaskStatus::ALL.to_vec())
 }
 
 fn action_status_strategy() -> impl Strategy<Value = ActionStatus> {
-    prop::sample::select(ACTION_STATUS_CATALOG.to_vec())
+    prop::sample::select(ActionStatus::ALL.to_vec())
 }
 
 fn prepare_task(from: TaskStatus, to: TaskStatus) -> TaskTransitionCommand {

@@ -544,7 +544,6 @@ fn enforce_failed_verification(cmd: &ActionTransitionCommand) -> Result<(), Doma
 #[cfg(test)]
 mod graph_tests {
     use super::*;
-    use crate::catalog::ACTION_STATUS_CATALOG;
 
     #[test]
     fn legal_edges_match_core_section_11() {
@@ -584,8 +583,8 @@ mod graph_tests {
     #[test]
     fn nxn_counts() {
         let mut legal = 0usize;
-        for &from in ACTION_STATUS_CATALOG {
-            for &to in ACTION_STATUS_CATALOG {
+        for &from in ActionStatus::ALL {
+            for &to in ActionStatus::ALL {
                 if is_action_transition_allowed(from, to) {
                     legal += 1;
                 }

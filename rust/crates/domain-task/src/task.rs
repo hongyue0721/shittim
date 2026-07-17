@@ -338,7 +338,6 @@ fn validate_non_empty_side_effect_refs(
 #[cfg(test)]
 mod graph_tests {
     use super::*;
-    use crate::catalog::TASK_STATUS_CATALOG;
 
     #[test]
     fn legal_edges_match_core_section_10() {
@@ -394,8 +393,8 @@ mod graph_tests {
     fn nxn_illegal_count_is_stable() {
         let mut legal = 0usize;
         let mut illegal = 0usize;
-        for &from in TASK_STATUS_CATALOG {
-            for &to in TASK_STATUS_CATALOG {
+        for &from in TaskStatus::ALL {
+            for &to in TaskStatus::ALL {
                 if is_task_transition_allowed(from, to) {
                     legal += 1;
                 } else {
@@ -403,14 +402,16 @@ mod graph_tests {
                 }
             }
         }
-        // 14x14 = 196; 36 legal edges from CORE §10.2; self-loops are illegal
+        // CORE §10.2 defines 36 legal edges. Matrix size follows the generated
+        // status closed set so adding a Schema variant expands this test automatically.
+        let matrix_size = TaskStatus::ALL.len() * TaskStatus::ALL.len();
         assert_eq!(legal, 36);
-        assert_eq!(illegal, 196 - 36);
+        assert_eq!(illegal, matrix_size - legal);
     }
 
     #[test]
     fn self_loops_are_not_graph_edges() {
-        for &status in TASK_STATUS_CATALOG {
+        for &status in TaskStatus::ALL {
             assert!(!is_task_transition_allowed(status, status));
         }
     }

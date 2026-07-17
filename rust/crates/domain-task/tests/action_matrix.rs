@@ -5,7 +5,7 @@ use domain_task::{
     validate_compensation_action_draft, validate_retry_original_candidate, ActionEvidence,
     ActionTransitionCommand, CompensationActionDraft, DispatchCertainty, DomainTaskErrorCode,
     PolicyEvaluationEffect, PolicyEvaluationOutcome, RetryOriginalFacts, UncertainOutcomeReason,
-    VerificationEvidenceSummary, ACTION_STATUS_CATALOG,
+    VerificationEvidenceSummary,
 };
 use kernel_contracts::{ActionStatus, VerificationResultOutcome};
 
@@ -70,8 +70,8 @@ fn prepare(mut cmd: ActionTransitionCommand) -> ActionTransitionCommand {
 #[test]
 fn action_graph_nxn_no_self_loops() {
     let mut legal = 0usize;
-    for &from in ACTION_STATUS_CATALOG {
-        for &to in ACTION_STATUS_CATALOG {
+    for &from in ActionStatus::ALL {
+        for &to in ActionStatus::ALL {
             let allowed = is_action_transition_allowed(from, to);
             if from == to {
                 assert!(
@@ -94,8 +94,8 @@ fn action_graph_nxn_no_self_loops() {
 
 #[test]
 fn action_nxn_illegal_graph_edges_are_illegal_transition() {
-    for &from in ACTION_STATUS_CATALOG {
-        for &to in ACTION_STATUS_CATALOG {
+    for &from in ActionStatus::ALL {
+        for &to in ActionStatus::ALL {
             if is_action_transition_allowed(from, to) {
                 continue;
             }
@@ -115,8 +115,8 @@ fn action_nxn_illegal_graph_edges_are_illegal_transition() {
 
 #[test]
 fn action_legal_edges_prepared_apply_ok() {
-    for &from in ACTION_STATUS_CATALOG {
-        for &to in ACTION_STATUS_CATALOG {
+    for &from in ActionStatus::ALL {
+        for &to in ActionStatus::ALL {
             if !is_action_transition_allowed(from, to) {
                 continue;
             }
@@ -522,7 +522,7 @@ fn terminals_have_no_exits() {
         ActionStatus::RollbackFailed,
         ActionStatus::Cancelled,
     ] {
-        for &to in ACTION_STATUS_CATALOG {
+        for &to in ActionStatus::ALL {
             assert!(
                 !is_action_transition_allowed(from, to),
                 "terminal {} must not go to {}",

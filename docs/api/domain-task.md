@@ -4,7 +4,7 @@
 >
 > 不持久化、不分配 `EventEnvelope` / `outbox_position`、不连接 SQLite / Tokio / Policy matcher / Extension。
 >
-> 状态枚举唯一来源：`kernel-contracts` 生成的 `TaskStatus` / `ActionStatus` 等类型。
+> 状态枚举与完整闭集唯一来源：`kernel-contracts` 生成的 `TaskStatus` / `ActionStatus` 及其 Schema declaration-order `ALL`；`domain-task` 不维护手写状态目录。
 
 ## 定位
 
@@ -110,6 +110,10 @@ let out = apply_policy_evaluation_outcome(
 | `invalid_input` | 输入非法（含 parent_action_id 空/等于自身） |
 
 图合法但缺证据 → `missing_evidence` / `invariant_violation`。
+
+## 状态闭集与测试边界
+
+`domain-task` 的 NxN、terminal 与 proptest 直接遍历 `TaskStatus::ALL` / `ActionStatus::ALL`。生成层负责“有哪些状态”，领域层只负责合法边、证据和不变量；因此不再导出 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG` 或平行 exhaustiveness helper。CORE 权威合法边数组与稳定边数断言仍保留，它们编码的是状态机业务语义，不是完整状态目录。
 
 ## 非目标
 

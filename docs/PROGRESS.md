@@ -26,7 +26,7 @@
 - [x] 实现 `schema-tool generate/check/validate/canonicalize`。
 - [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> TargetPlan/TargetSchemaSet -> TargetContractGraph(ContractTypeId=$id+严格 RFC6901 Pointer) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；`manifest.id_base` 权威 namespace（canonical absolute http(s)+trailing `/`+组件归属；default-port/dot-segment 非 canonical，double-slash/percent path 按 Url 序列化语义）；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；envelope 唯一分析（0 payload ref => untyped；≥1 双射，mixed branch fail）；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；当前 41 无环输出与 HEAD byte-identical；TS renderer 仍未实现（声明即整体 fail，无部分写）。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
-- [x] string enum 生成 declaration-order `pub const ALL: &'static [Self]`（通用 `ProjectedShape::StringEnum` 路径；与 variants/`as_str` 共用有序 mapping；const 不生成 ALL；nullable 过滤 null）；`types.rs` 自动 `string_enum_contracts` 覆盖全部 string enum；**domain-task 手写 `TASK_STATUS_CATALOG`/`ACTION_STATUS_CATALOG` 仍未删除（下一 commit）**。
+- [x] string enum 生成 declaration-order `pub const ALL: &'static [Self]`（通用 `ProjectedShape::StringEnum` 路径；与 variants/`as_str` 共用有序 mapping；const 不生成 ALL；nullable 过滤 null）；`types.rs` 自动 `string_enum_contracts` 覆盖全部 string enum；`domain-task` 已删除手写 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG` 与平行 exhaustiveness match，NxN、terminal 和 proptest 直接消费 `TaskStatus::ALL` / `ActionStatus::ALL`。
 - [x] optional/non-null 字段由 Schema 元数据生成 `skip_serializing_if = "Option::is_none"`；required-nullable 仍输出显式 `null`；optional-nullable 保持 `None -> null` 不改 wire。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
@@ -46,7 +46,7 @@
 - [x] Lease 过期与确定未派发取消返回绑定 action_id 的原子释放意图。
 - [x] 补偿身份只由 `ActionRequest.parent_action_id` 推导，不存在平行 ActionRole。
 - [x] `retry_original` 仅在副作用明确未发生且幂等保障成立时合法。
-- [x] 新增 NxN 矩阵、证据测试与 proptest；`domain-task` 共 47 项测试。
+- [x] 新增 NxN 矩阵、证据测试与 proptest；全部状态遍历由生成的 `TaskStatus::ALL` / `ActionStatus::ALL` 驱动，不维护平行状态闭集；`domain-task` 共 45 项测试。
 - [x] 新增 [`api/domain-task.md`](api/domain-task.md)；本批无外部 SDK API 变化。
 
 ### Freedom-first Policy matcher
@@ -102,7 +102,7 @@
 - [x] `narrow_to_registered` 对 generated payload enum 穷举，无 wildcard：三 registered + 五不可序列化 Known enum。
 - [x] 实现 borrowing `TypedDispatcher<C,G,B>`，直接调用三个 public `handle_*`，不增加平行 ports、不重复 deadline/Schema、不改写 `HandlerResult` 或 intent。
 - [x] 增加 static negative Serialize assertions、八方法合法 Value、priority/field/cross-family/root/nested version、known malformed/valid、固定 error response、private unknown-schema/final-response fault seam、dispatcher response/ContractFailure/Created intent 与 clock 路由测试。
-- [x] `kernel-contracts` 53 项测试；`schema-tool` 85 项测试（lib unit 29 + graph_projection 24 + cli_smoke 32）；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
+- [x] `kernel-contracts` 101 项测试（lib 52，含 47 个自动 string enum 合同；contract_validation 49）；`schema-tool` 89 项测试（lib unit 29 + graph_projection 24 + cli_smoke 36）；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
 - [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
 
 ## 未完成

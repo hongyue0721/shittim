@@ -9,7 +9,6 @@
 #![deny(missing_docs)]
 
 mod action;
-mod catalog;
 mod error;
 mod event_intent;
 mod policy_outcome;
@@ -21,10 +20,6 @@ pub use action::{
     apply_action_transition, evaluate_policy_on_pending, is_action_transition_allowed,
     validate_compensation_action_draft, ActionEvidence, ActionTransitionCommand,
     CompensationActionDraft, DispatchCertainty, LeaseReleaseEffect, UncertainOutcomeReason,
-};
-pub use catalog::{
-    assert_action_catalog_exhaustive, assert_task_catalog_exhaustive, ACTION_STATUS_CATALOG,
-    TASK_STATUS_CATALOG,
 };
 pub use error::{DomainTaskError, DomainTaskErrorCode};
 pub use event_intent::{ActionEventIntent, EventIntent, TaskEventIntent};

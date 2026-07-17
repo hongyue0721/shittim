@@ -16,7 +16,7 @@
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 149 lines
-- `docs/api/domain-task.md` — 116 lines
+- `docs/api/domain-task.md` — 120 lines
 - `docs/api/error-catalog.md` — 56 lines
 - `docs/api/event-catalog.md` — 30 lines
 - `docs/api/kcp-preflight-dispatcher.md` — 86 lines

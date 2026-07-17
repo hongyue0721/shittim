@@ -66,7 +66,7 @@ cargo run --manifest-path rust/Cargo.toml -p schema-tool -- --repo-root "$PWD" \
 - 支持：`object`、`properties`、`required`、`array/items`、string `enum`、string/integer/boolean/null `const`、`$ref`、单一非 null 类型与 `null` 的联合、nullable `oneOf: [null, T]`。
 - **String enum 闭集 `ALL`**（已完成）：在通用 `ProjectedShape::StringEnum` 路径生成 `pub const ALL: &'static [Self]`，顺序严格为 Schema enum declaration order；variants / `ALL` / `as_str` 共用 renderer-local 有序 mapping，禁止按字典序重排，也不硬编码 `TaskStatus`/`ActionStatus`/schema id。string const 不生成 `ALL`。nullable string enum 在 lowering 已过滤 `null`，`ALL` 只含非 null 成员，字段仍是 `Option<Enum>`，`None` 序列化为显式 `null`。wire→variant 碰撞 fail closed，错误含 type/wire/variant。
 - **自动合同测试**：`types.rs` 尾部 `#[cfg(test)] mod string_enum_contracts` 按 projection 为每个 string enum 生成调用；共享 `assert_string_enum_contract` 验证 ALL 长度/顺序、`as_str` 唯一、serde `to_value` 等于 wire string、`from_value` roundtrip。**不**手写类型目录。
-- **domain-task 手写 catalog 仍未删除**（下一 commit）：`domain-task` 的 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG` 仍存在；本批只交付生成侧 `ALL`，不改 catalog/typed/mod，也不替换 domain-task 消费点。
+- **domain-task 直接消费生成闭集**（已完成）：`domain-task` 已删除 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG`、对应平行 exhaustiveness match 和 catalog-only 测试；NxN、terminal 与 proptest 直接遍历 `TaskStatus::ALL` / `ActionStatus::ALL`。状态合法边、证据准备和稳定边数断言仍是领域语义测试，不属于状态闭集重复。
 - Serde omission 由 Schema 元数据确定性推导，不手改 generated：
   - `required=false` 且属性类型不允许 `null` → `Option<T>` + `#[serde(skip_serializing_if = "Option::is_none")]`，`None` 省略字段；
   - `required=true` 且允许 `null` → `Option<T>` 且**不** skip，`None` 仍输出显式 `null`；
