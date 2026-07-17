@@ -882,7 +882,6 @@ pub struct EventEnvelope {
 
 /// Generated from `https://schemas.shittim.local/v1/event/event_envelope.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct EventEnvelopePayload {
     pub schema_version: i64,
 }
@@ -1063,7 +1062,6 @@ pub enum KcpCommandEnvelopeMessageKind {
 
 /// Generated from `https://schemas.shittim.local/v1/kcp/command_envelope.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct KcpCommandEnvelopePayload {
     pub schema_version: i64,
 }
@@ -1117,7 +1115,6 @@ pub enum KcpQueryEnvelopeMessageKind {
 
 /// Generated from `https://schemas.shittim.local/v1/kcp/query_envelope.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct KcpQueryEnvelopePayload {
     pub schema_version: i64,
 }

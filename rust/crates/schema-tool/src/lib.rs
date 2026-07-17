@@ -22,7 +22,8 @@ pub mod validate;
 pub use contract_model::{
     lower_target_contract_graph, CatalogFacts, ConstJson, ContractTypeId, ContractTypeNode,
     EnvelopeWireBinding, Nullability, ObjectField, Presence, ScalarKind, SourceSchemaMetadata,
-    SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
+    SourceUseSite, TaggedUnionBranch, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
+    UnknownFieldPolicy,
 };
 pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
 pub use manifest::{GenerationTarget, Manifest, ManifestEntry, SchemaRegistry};

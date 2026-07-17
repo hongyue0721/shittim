@@ -115,7 +115,7 @@ fn production_graph_keeps_single_defs_node_and_two_policy_rule_clones() {
         .nodes
         .get(&schema_tool::ContractTypeId::root(policy_id))
         .expect("PolicyRule root");
-    let TypeShape::Object { fields } = &policy.shape else {
+    let TypeShape::Object { fields, .. } = &policy.shape else {
         panic!("PolicyRule must be object");
     };
     let created = fields
@@ -448,7 +448,7 @@ fn inline_oneof_branch_and_items_use_real_pointers() {
         .nodes
         .get(&schema_tool::ContractTypeId::root(response))
         .expect("response root");
-    let TypeShape::Object { fields } = &response_root.shape else {
+    let TypeShape::Object { fields, .. } = &response_root.shape else {
         panic!("response must be object");
     };
     let error_field = fields

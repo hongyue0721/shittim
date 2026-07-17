@@ -26,7 +26,7 @@
 
 use crate::contract_model::{
     ConstJson, ContractTypeId, EnvelopeWireBinding, Nullability, Presence, ScalarKind,
-    SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
+    SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse, UnknownFieldPolicy,
 };
 use crate::error::SchemaToolError;
 use crate::names::{to_pascal_case, to_snake_case, to_upper_snake_case};
@@ -117,9 +117,20 @@ enum RustTypeExpr {
 /// One projected declaration body.
 #[derive(Debug, Clone)]
 enum ProjectedShape {
-    Object { fields: Vec<ProjectedField> },
-    StringEnum { values: Vec<String> },
-    Const { value: ConstJson },
+    Object {
+        fields: Vec<ProjectedField>,
+        unknown_field_policy: UnknownFieldPolicy,
+    },
+    TaggedUnion {
+        discriminator: String,
+        variants: Vec<ProjectedVariant>,
+    },
+    StringEnum {
+        values: Vec<String>,
+    },
+    Const {
+        value: ConstJson,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +139,15 @@ struct ProjectedField {
     ty: RustTypeExpr,
     presence: Presence,
     nullability: Nullability,
+}
+
+#[derive(Debug, Clone)]
+struct ProjectedVariant {
+    tag: String,
+    object_type_id: ContractTypeId,
+    source: SourceUseSite,
+    rust_name: String,
+    fields: Vec<ProjectedField>,
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +234,7 @@ impl RustProjection {
                     "projection has no declaration named {decl_rust_name}"
                 ))
             })?;
-        let ProjectedShape::Object { fields } = &decl.shape else {
+        let ProjectedShape::Object { fields, .. } = &decl.shape else {
             return Err(SchemaToolError::msg(format!(
                 "declaration {decl_rust_name} is not an object"
             ))
@@ -411,7 +431,10 @@ impl<'a> Projector<'a> {
         doc_schema_id: &str,
     ) -> Result<ProjectedShape> {
         match shape {
-            TypeShape::Object { fields } => {
+            TypeShape::Object {
+                fields,
+                unknown_field_policy,
+            } => {
                 let mut projected = Vec::new();
                 for field in fields {
                     let field_name = format!("{rust_name}{}", to_pascal_case(&field.json_name));
@@ -433,7 +456,82 @@ impl<'a> Projector<'a> {
                         nullability: field.nullability,
                     });
                 }
-                Ok(ProjectedShape::Object { fields: projected })
+                Ok(ProjectedShape::Object {
+                    fields: projected,
+                    unknown_field_policy: *unknown_field_policy,
+                })
+            }
+            TypeShape::TaggedUnion {
+                discriminator,
+                branches,
+                unknown_field_policy,
+            } => {
+                if *unknown_field_policy != UnknownFieldPolicy::Forbid {
+                    return Err(SchemaToolError::msg(format!(
+                        "unsupported tagged-union unknown-field policy at {}",
+                        canonical.display()
+                    ))
+                    .into());
+                }
+                let mut variants = Vec::new();
+                for branch in branches {
+                    let branch_node =
+                        self.graph
+                            .nodes
+                            .get(&branch.object_type_id)
+                            .ok_or_else(|| {
+                                SchemaToolError::msg(format!(
+                                    "missing tagged-union branch {} at {} (arm {})",
+                                    branch.tag,
+                                    branch.object_type_id.display(),
+                                    branch.source.display()
+                                ))
+                            })?;
+                    let TypeShape::Object { fields, .. } = &branch_node.shape else {
+                        return Err(SchemaToolError::msg(format!(
+                            "tagged-union branch {} at {} (arm {}) is not an object",
+                            branch.tag,
+                            branch.object_type_id.display(),
+                            branch.source.display()
+                        ))
+                        .into());
+                    };
+                    let variant_name = rust_enum_variant(&branch.tag);
+                    let mut projected = Vec::new();
+                    for field in fields
+                        .iter()
+                        .filter(|field| field.json_name != *discriminator)
+                    {
+                        let field_name = format!(
+                            "{rust_name}{variant_name}{}",
+                            to_pascal_case(&field.json_name)
+                        );
+                        let mut lineage = use_site_lineage.to_vec();
+                        lineage.push(field.ty.source.clone());
+                        projected.push(ProjectedField {
+                            json_name: field.json_name.clone(),
+                            ty: self.project_type_use(
+                                &field.ty,
+                                &field_name,
+                                &lineage,
+                                doc_schema_id,
+                            )?,
+                            presence: field.presence,
+                            nullability: field.nullability,
+                        });
+                    }
+                    variants.push(ProjectedVariant {
+                        tag: branch.tag.clone(),
+                        object_type_id: branch.object_type_id.clone(),
+                        source: branch.source.clone(),
+                        rust_name: variant_name,
+                        fields: projected,
+                    });
+                }
+                Ok(ProjectedShape::TaggedUnion {
+                    discriminator: discriminator.clone(),
+                    variants,
+                })
             }
             TypeShape::StringEnum { values } => Ok(ProjectedShape::StringEnum {
                 values: values.clone(),
@@ -536,13 +634,14 @@ impl<'a> Projector<'a> {
             TypeShape::Nullable { inner } => Ok(RustTypeExpr::Nullable(Box::new(
                 self.project_type_use(inner, rust_name, use_site_lineage, doc_schema_id)?,
             ))),
-            TypeShape::Object { .. } | TypeShape::StringEnum { .. } | TypeShape::Const { .. } => {
-                Err(SchemaToolError::msg(format!(
-                    "internal renderer error: named shape for {} fell through without declaration",
-                    id.display()
-                ))
-                .into())
-            }
+            TypeShape::Object { .. }
+            | TypeShape::TaggedUnion { .. }
+            | TypeShape::StringEnum { .. }
+            | TypeShape::Const { .. } => Err(SchemaToolError::msg(format!(
+                "internal renderer error: named shape for {} fell through without declaration",
+                id.display()
+            ))
+            .into()),
         }
     }
 }
@@ -559,22 +658,44 @@ fn apply_recursive_layout(decls: &mut BTreeMap<RustDeclarationId, ProjectedDecl>
         edges.entry(id.clone()).or_default();
     }
     for (id, decl) in decls.iter() {
-        if let ProjectedShape::Object { fields } = &decl.shape {
-            for field in fields {
-                for dep in direct_named_deps(&field.ty) {
-                    edges.entry(id.clone()).or_default().insert(dep);
+        match &decl.shape {
+            ProjectedShape::Object { fields, .. } => {
+                for field in fields {
+                    for dep in direct_named_deps(&field.ty) {
+                        edges.entry(id.clone()).or_default().insert(dep);
+                    }
                 }
             }
+            ProjectedShape::TaggedUnion { variants, .. } => {
+                for variant in variants {
+                    for field in &variant.fields {
+                        for dep in direct_named_deps(&field.ty) {
+                            edges.entry(id.clone()).or_default().insert(dep);
+                        }
+                    }
+                }
+            }
+            ProjectedShape::StringEnum { .. } | ProjectedShape::Const { .. } => {}
         }
     }
 
     let scc_of = deterministic_sccs(&edges);
     for (id, decl) in decls.iter_mut() {
         let owner_scc = scc_of.get(id).copied().unwrap_or(0);
-        if let ProjectedShape::Object { fields } = &mut decl.shape {
-            for field in fields {
-                box_direct_scc_named(&mut field.ty, owner_scc, &scc_of);
+        match &mut decl.shape {
+            ProjectedShape::Object { fields, .. } => {
+                for field in fields {
+                    box_direct_scc_named(&mut field.ty, owner_scc, &scc_of);
+                }
             }
+            ProjectedShape::TaggedUnion { variants, .. } => {
+                for variant in variants {
+                    for field in &mut variant.fields {
+                        box_direct_scc_named(&mut field.ty, owner_scc, &scc_of);
+                    }
+                }
+            }
+            ProjectedShape::StringEnum { .. } | ProjectedShape::Const { .. } => {}
         }
     }
     Ok(())
@@ -685,7 +806,10 @@ fn deterministic_sccs(
 fn shape_is_named(shape: &TypeShape) -> bool {
     matches!(
         shape,
-        TypeShape::Object { .. } | TypeShape::StringEnum { .. } | TypeShape::Const { .. }
+        TypeShape::Object { .. }
+            | TypeShape::TaggedUnion { .. }
+            | TypeShape::StringEnum { .. }
+            | TypeShape::Const { .. }
     )
 }
 
@@ -709,7 +833,7 @@ fn type_name_from_schema_id(id: &str) -> String {
 
 fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
     match &decl.shape {
-        ProjectedShape::Object { fields } => {
+        ProjectedShape::Object { fields, .. } => {
             let mut rust_fields: BTreeMap<String, String> = BTreeMap::new();
             for field in fields {
                 let rust_name = rust_field_name(&field.json_name);
@@ -724,6 +848,47 @@ fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
                         field.json_name
                     ))
                     .into());
+                }
+            }
+        }
+        ProjectedShape::TaggedUnion { variants, .. } => {
+            let mut names = BTreeMap::new();
+            for variant in variants {
+                if let Some(previous) = names.insert(variant.rust_name.clone(), variant.tag.clone())
+                {
+                    return Err(SchemaToolError::msg(format!(
+                        "Rust tagged-union variant collision in `{}` ({}): tags {previous:?} (canonical {}, arm {}) and {:?} (canonical {}, arm {}) both map to `{}`",
+                        decl.rust_name,
+                        decl.id.display(),
+                        variants
+                            .iter()
+                            .find(|candidate| candidate.tag == previous)
+                            .map(|candidate| candidate.object_type_id.display())
+                            .unwrap_or_else(|| "<missing canonical identity>".to_string()),
+                        variants
+                            .iter()
+                            .find(|candidate| candidate.tag == previous)
+                            .map(|candidate| candidate.source.display())
+                            .unwrap_or_else(|| "<missing arm>".to_string()),
+                        variant.tag,
+                        variant.object_type_id.display(),
+                        variant.source.display(),
+                        variant.rust_name
+                    ))
+                    .into());
+                }
+                let mut fields = BTreeMap::new();
+                for field in &variant.fields {
+                    let rust_name = rust_field_name(&field.json_name);
+                    if let Some(previous) =
+                        fields.insert(rust_name.clone(), field.json_name.clone())
+                    {
+                        return Err(SchemaToolError::msg(format!(
+                            "Rust tagged-union field collision in `{}` variant `{}`: json fields {previous:?} and {:?} both map to `{rust_name}`",
+                            decl.rust_name, variant.rust_name, field.json_name
+                        ))
+                        .into());
+                    }
                 }
             }
         }
@@ -870,9 +1035,26 @@ fn render_projected_decl(
     names: &BTreeMap<RustDeclarationId, String>,
 ) -> Result<String> {
     match &decl.shape {
-        ProjectedShape::Object { fields } => {
-            render_struct(&decl.rust_name, &decl.doc_schema_id, fields, names)
-        }
+        ProjectedShape::Object {
+            fields,
+            unknown_field_policy,
+        } => render_struct(
+            &decl.rust_name,
+            &decl.doc_schema_id,
+            fields,
+            *unknown_field_policy,
+            names,
+        ),
+        ProjectedShape::TaggedUnion {
+            discriminator,
+            variants,
+        } => render_tagged_union(
+            &decl.rust_name,
+            &decl.doc_schema_id,
+            discriminator,
+            variants,
+            names,
+        ),
         ProjectedShape::StringEnum { values } => Ok(render_string_enum(
             &decl.rust_name,
             &decl.doc_schema_id,
@@ -890,10 +1072,15 @@ fn render_struct(
     type_name: &str,
     schema_id: &str,
     fields: &[ProjectedField],
+    unknown_field_policy: UnknownFieldPolicy,
     names: &BTreeMap<RustDeclarationId, String>,
 ) -> Result<String> {
+    let serde_attribute = match unknown_field_policy {
+        UnknownFieldPolicy::Forbid => "\n#[serde(deny_unknown_fields)]",
+        UnknownFieldPolicy::Allow => "",
+    };
     let mut body = format!(
-        "/// Generated from `{schema_id}`\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]\n#[serde(deny_unknown_fields)]\npub struct {type_name} {{\n"
+        "/// Generated from `{schema_id}`\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]{serde_attribute}\npub struct {type_name} {{\n"
     );
     for field in fields {
         let rust_name = rust_field_name(&field.json_name);
@@ -913,6 +1100,46 @@ fn render_struct(
             body.push_str(&format!("    #[serde({})]\n", serde_attrs.join(", ")));
         }
         body.push_str(&format!("    pub {rust_name}: {rendered},\n"));
+    }
+    body.push_str("}\n");
+    Ok(body)
+}
+
+fn render_tagged_union(
+    type_name: &str,
+    schema_id: &str,
+    discriminator: &str,
+    variants: &[ProjectedVariant],
+    names: &BTreeMap<RustDeclarationId, String>,
+) -> Result<String> {
+    let mut body = format!(
+        "/// Generated internally tagged union from `{schema_id}`\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]\n#[serde(tag = {discriminator:?}, deny_unknown_fields)]\npub enum {type_name} {{\n"
+    );
+    for variant in variants {
+        body.push_str(&format!(
+            "    #[serde(rename = {:?})]\n    {} {{\n",
+            variant.tag, variant.rust_name
+        ));
+        for field in &variant.fields {
+            let rust_name = rust_field_name(&field.json_name);
+            let mut rendered =
+                render_rust_type_expr(&field.ty, names, TypeRenderContext::TypesModule)?;
+            if field.presence == Presence::Optional && !rendered.starts_with("Option<") {
+                rendered = format!("Option<{rendered}>");
+            }
+            let mut serde_attrs = Vec::new();
+            if rust_name != field.json_name {
+                serde_attrs.push(format!("rename = {:?}", field.json_name));
+            }
+            if field.presence == Presence::Optional && field.nullability == Nullability::NonNull {
+                serde_attrs.push("skip_serializing_if = \"Option::is_none\"".to_string());
+            }
+            if !serde_attrs.is_empty() {
+                body.push_str(&format!("        #[serde({})]\n", serde_attrs.join(", ")));
+            }
+            body.push_str(&format!("        {rust_name}: {rendered},\n"));
+        }
+        body.push_str("    },\n");
     }
     body.push_str("}\n");
     Ok(body)
@@ -1126,7 +1353,7 @@ fn render_typed_envelope(
             binding.schema_id
         ))
     })?;
-    let ProjectedShape::Object { fields } = &root_decl.shape else {
+    let ProjectedShape::Object { fields, .. } = &root_decl.shape else {
         return Err(SchemaToolError::msg(format!(
             "internal renderer error: envelope root is not an object projection: {}",
             binding.schema_id
@@ -1441,6 +1668,7 @@ mod tests {
                             schema_location: status_cap.clone(),
                         },
                     ],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
                 },
             },
         );
@@ -1536,6 +1764,7 @@ mod tests {
                             schema_location: updated,
                         },
                     ],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
                 },
             },
         );
@@ -1561,6 +1790,7 @@ mod tests {
                         nullability: Nullability::NonNull,
                         schema_location: defs.child("properties").child("actor"),
                     }],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
                 },
             },
         );

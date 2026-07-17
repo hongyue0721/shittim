@@ -4,16 +4,17 @@ use kernel_contracts::{
     sha256_canonical, validate_json, ActionStatus, Actor, ActorAuthenticationLevel, ActorKind,
     ActorSchemaVersion, ApprovalRecord, ApprovalRecordApprovalType, ApprovalRecordDecision,
     ApprovalRecordSchemaVersion, ApprovalRecordTarget, ContractError,
-    ContractFailureClassification, ContractFailureStage, EntryPoint, EventPayload,
-    KcpCommandEnvelopeProtocolVersion, KcpCommandPayload, NullOnly, PermissionDecision,
-    PermissionDecisionBinding, PermissionDecisionDecision, PermissionDecisionSchemaVersion,
-    PolicyRule, PolicyRuleActionMatch, PolicyRuleActorMatch, PolicyRuleCondition,
-    PolicyRuleConfirmationMode, PolicyRuleContentOriginMatch, PolicyRuleCreatedBy,
-    PolicyRuleEffect, PolicyRuleResourceMatch, PolicyRuleSchemaVersion, PolicyRuleSource,
-    PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest, TaskListRequestParentFilter,
-    TaskListRequestParentFilterMode, TaskListRequestProposer, TaskListRequestSchemaVersion,
-    TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope, EVENT_V1_TYPES,
-    KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
+    ContractFailureClassification, ContractFailureStage, EntryPoint, EventEnvelope,
+    EventEnvelopePayload, EventPayload, KcpCommandEnvelope, KcpCommandEnvelopePayload,
+    KcpCommandEnvelopeProtocolVersion, KcpCommandPayload, KcpQueryEnvelope,
+    KcpQueryEnvelopePayload, NullOnly, PermissionDecision, PermissionDecisionBinding,
+    PermissionDecisionDecision, PermissionDecisionSchemaVersion, PolicyRule, PolicyRuleActionMatch,
+    PolicyRuleActorMatch, PolicyRuleCondition, PolicyRuleConfirmationMode,
+    PolicyRuleContentOriginMatch, PolicyRuleCreatedBy, PolicyRuleEffect, PolicyRuleResourceMatch,
+    PolicyRuleSchemaVersion, PolicyRuleSource, PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest,
+    TaskListRequestParentFilter, TaskListRequestParentFilterMode, TaskListRequestProposer,
+    TaskListRequestSchemaVersion, TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope,
+    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
 };
 use serde_json::{json, Value};
 
@@ -25,6 +26,7 @@ const POLICY_RULE_ID: &str = "https://schemas.shittim.local/v1/policy/policy_rul
 const PERMISSION_DECISION_ID: &str =
     "https://schemas.shittim.local/v1/policy/permission_decision.json";
 const APPROVAL_RECORD_ID: &str = "https://schemas.shittim.local/v1/policy/approval_record.json";
+const EVENT_ID: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
 const COMMAND_ID: &str = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
 const QUERY_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
 const RESPONSE_ID: &str = "https://schemas.shittim.local/v1/kcp/response_envelope.json";
@@ -505,6 +507,48 @@ fn generated_const_and_null_types_reject_other_values() {
         serde_json::to_value(null).expect("serialize null"),
         Value::Null
     );
+}
+
+#[test]
+fn envelope_payloads_remain_open_but_envelope_roots_remain_closed() {
+    let mut event: Value = serde_json::from_str(include_str!(
+        "../../../../schemas/examples/event/task_created.valid.json"
+    ))
+    .expect("event fixture");
+    let event = event.get_mut("instance").expect("event instance");
+    event["payload"]["future_event_payload_field"] = json!(true);
+
+    let mut command = sample_stop_activate_command();
+    command["payload"]["future_command_payload_field"] = json!(true);
+
+    let mut query = sample_ping_query();
+    query["payload"]["future_query_payload_field"] = json!(true);
+
+    assert!(serde_json::from_value::<EventEnvelopePayload>(event["payload"].clone()).is_ok());
+    assert!(
+        serde_json::from_value::<KcpCommandEnvelopePayload>(command["payload"].clone()).is_ok()
+    );
+    assert!(serde_json::from_value::<KcpQueryEnvelopePayload>(query["payload"].clone()).is_ok());
+
+    for (schema_id, mut envelope) in [
+        (EVENT_ID, event.clone()),
+        (COMMAND_ID, command.clone()),
+        (QUERY_ID, query.clone()),
+    ] {
+        envelope
+            .as_object_mut()
+            .expect("envelope object")
+            .insert("unexpected_root_field".into(), json!(true));
+        assert!(validate_json(schema_id, &envelope).is_err());
+        match schema_id {
+            EVENT_ID => assert!(serde_json::from_value::<EventEnvelope>(envelope).is_err()),
+            COMMAND_ID => {
+                assert!(serde_json::from_value::<KcpCommandEnvelope>(envelope).is_err())
+            }
+            QUERY_ID => assert!(serde_json::from_value::<KcpQueryEnvelope>(envelope).is_err()),
+            _ => unreachable!("only envelope schema IDs are listed"),
+        }
+    }
 }
 
 #[test]

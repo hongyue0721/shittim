@@ -38,6 +38,21 @@ fn run_tool(args: &[&str]) -> (i32, String, String) {
     run_tool_for_root(args, &repo_root())
 }
 
+fn all_generated_artifact_bytes(root: &Path) -> Vec<(String, Vec<u8>)> {
+    ["types.rs", "catalog.rs", "typed.rs", "mod.rs"]
+        .into_iter()
+        .map(|name| {
+            let path = root
+                .join("rust/crates/kernel-contracts/src/generated")
+                .join(name);
+            (
+                name.to_string(),
+                std::fs::read(path).expect("read generated artifact"),
+            )
+        })
+        .collect()
+}
+
 #[test]
 fn generate_is_byte_stable_across_two_runs() {
     let root = repo_root();
@@ -833,8 +848,7 @@ fn set_generation_targets_for_id(temp: &Path, id: &str, targets: serde_json::Val
 fn typescript_only_fails_before_any_write() {
     let temp = temporary_repo("ts-only-no-partial");
     set_all_generation_targets(&temp, &serde_json::json!(["typescript"]));
-    let types_path = temp.join("rust/crates/kernel-contracts/src/generated/types.rs");
-    let before = std::fs::read(&types_path).expect("read types before");
+    let before = all_generated_artifact_bytes(&temp);
     // Marker file that must remain untouched proves no partial write path ran.
     let marker = temp.join("rust/crates/kernel-contracts/src/generated/DO_NOT_TOUCH");
     std::fs::write(&marker, b"keep").expect("write marker");
@@ -846,8 +860,8 @@ fn typescript_only_fails_before_any_write() {
             && stderr.to_ascii_lowercase().contains("not implemented"),
         "expected typescript unimplemented: {stderr}"
     );
-    let after = std::fs::read(&types_path).expect("read types after");
-    assert_eq!(before, after, "TS-only must not rewrite Rust artifacts");
+    let after = all_generated_artifact_bytes(&temp);
+    assert_eq!(before, after, "TS-only must not rewrite any Rust artifact");
     assert_eq!(
         std::fs::read(&marker).expect("marker"),
         b"keep",
@@ -860,18 +874,17 @@ fn typescript_only_fails_before_any_write() {
 fn both_targets_fail_closed_without_partial_rust_rewrite_when_ts_declared() {
     let temp = temporary_repo("both-targets-no-partial");
     set_all_generation_targets(&temp, &serde_json::json!(["rust", "typescript"]));
-    let types_path = temp.join("rust/crates/kernel-contracts/src/generated/types.rs");
-    let before = std::fs::read(&types_path).expect("read types before");
+    let before = all_generated_artifact_bytes(&temp);
     let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
     assert_ne!(code, 0);
     assert!(
         stderr.to_ascii_lowercase().contains("typescript"),
         "expected typescript unimplemented: {stderr}"
     );
-    let after = std::fs::read(&types_path).expect("read types after");
+    let after = all_generated_artifact_bytes(&temp);
     assert_eq!(
         before, after,
-        "declaring typescript must fail before writing any artifact"
+        "declaring typescript must fail before writing any Rust artifact"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
 }

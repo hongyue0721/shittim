@@ -203,6 +203,31 @@ pub struct ObjectField {
     pub schema_location: ContractTypeId,
 }
 
+/// A branch of a source-profile tagged union. `object_type_id` is the canonical
+/// identity of the closed branch object, never a renderer-specific declaration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaggedUnionBranch {
+    pub tag: String,
+    /// Canonical identity of the branch object. This is distinct from the arm
+    /// source because a `$ref` branch lives at `/oneOf/N` but denotes another node.
+    pub object_type_id: ContractTypeId,
+    /// Concrete `oneOf` arm that declared this branch, retained for diagnostics
+    /// and renderer collision reports.
+    pub source: SourceUseSite,
+}
+
+/// Unknown-field policy carried by object and tagged-union graph nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnknownFieldPolicy {
+    /// JSON object accepts no properties not declared in `properties`.
+    Forbid,
+    /// JSON object retains the source Schema's open-object semantics. This is
+    /// intentionally distinct from `AnyJson`: declared fields remain modeled
+    /// while Serde ignores unknown fields during standalone projection.
+    Allow,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConstJson {
@@ -239,6 +264,17 @@ pub enum TypeShape {
     },
     Object {
         fields: Vec<ObjectField>,
+        /// `additionalProperties` controls standalone object decoding. `true` and
+        /// omission are both open under JSON Schema; only `false` is strict.
+        unknown_field_policy: UnknownFieldPolicy,
+    },
+    /// Object `oneOf` that satisfies the closed discriminator source profile.
+    /// Branch identities and wire facts remain language-neutral; renderers choose
+    /// symbols and variant spellings locally.
+    TaggedUnion {
+        discriminator: String,
+        branches: Vec<TaggedUnionBranch>,
+        unknown_field_policy: UnknownFieldPolicy,
     },
     /// Closed string enum. Only wire values; no language variant names.
     StringEnum {
@@ -432,7 +468,11 @@ fn ensure_node_from_schema(
         return Ok(());
     }
 
-    validate_supported_schema_node(schema, &type_id.display())?;
+    let allows_unevaluated_properties = schema
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .is_some_and(|variants| nullable_one_of_indices(variants).is_none());
+    validate_supported_schema_node(schema, &type_id.display(), allows_unevaluated_properties)?;
     let schema_title = schema_title_of(schema).or_else(|| {
         if type_id.is_root() && !root_title_hint.is_empty() {
             Some(root_title_hint.to_string())
@@ -500,18 +540,15 @@ fn lower_shape(
         });
     }
 
+    if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
+        return lower_one_of_shape(registry, state, type_id, schema, variants);
+    }
+
     if is_object_schema(schema) {
         return Ok(TypeShape::Object {
             fields: lower_object_fields(registry, state, type_id, schema)?,
+            unknown_field_policy: object_unknown_field_policy(schema, type_id)?,
         });
-    }
-
-    if schema.get("oneOf").is_some() && type_id.is_root() {
-        return Err(unsupported(
-            "oneOf",
-            &type_id.display(),
-            "top-level non-nullable oneOf is ambiguous",
-        ));
     }
 
     match schema.get("type") {
@@ -567,6 +604,7 @@ fn lower_shape(
         }
         None if schema.get("properties").is_some() => Ok(TypeShape::Object {
             fields: lower_object_fields(registry, state, type_id, schema)?,
+            unknown_field_policy: object_unknown_field_policy(schema, type_id)?,
         }),
         None => Err(unsupported(
             "type",
@@ -579,6 +617,251 @@ fn lower_shape(
             &format!("unsupported type form: {other}"),
         )),
     }
+}
+
+fn lower_one_of_shape(
+    registry: &SchemaRegistry,
+    state: &mut LoweringState,
+    type_id: &ContractTypeId,
+    schema: &Value,
+    variants: &[Value],
+) -> Result<TypeShape> {
+    if nullable_one_of_indices(variants).is_some() {
+        return Err(unsupported(
+            "oneOf",
+            &type_id.display(),
+            "nullable oneOf is only valid at a type use, not as a standalone declaration",
+        ));
+    }
+    lower_tagged_union(
+        registry,
+        state,
+        &type_id.schema_id,
+        type_id,
+        schema,
+        variants,
+    )
+}
+
+/// The sole `oneOf` classifier. A union is either nullable, a proven tagged
+/// union, or unsupported; object lowering never gets a chance to swallow it.
+fn classify_one_of_use(
+    registry: &SchemaRegistry,
+    state: &mut LoweringState,
+    base_id: &str,
+    schema: &Value,
+    variants: &[Value],
+    preferred_id: &ContractTypeId,
+    source: SourceUseSite,
+) -> Result<TypeUse> {
+    if nullable_one_of_indices(variants).is_some() {
+        return nullable_one_of_use(registry, state, base_id, variants, preferred_id, source);
+    }
+    ensure_node_from_schema(registry, state, preferred_id, schema, "")?;
+    let node = state.nodes.get(preferred_id).ok_or_else(|| {
+        SchemaToolError::msg(format!(
+            "missing tagged union node {}",
+            preferred_id.display()
+        ))
+    })?;
+    if !matches!(node.shape, TypeShape::TaggedUnion { .. }) {
+        return Err(unsupported(
+            "oneOf",
+            &preferred_id.display(),
+            "non-null oneOf is not a valid tagged union",
+        ));
+    }
+    Ok(TypeUse {
+        expr: TypeExpr::Reference {
+            id: preferred_id.clone(),
+        },
+        source,
+    })
+}
+
+fn nullable_one_of_indices(variants: &[Value]) -> Option<usize> {
+    if variants.len() != 2 {
+        return None;
+    }
+    let non_null: Vec<_> = variants
+        .iter()
+        .enumerate()
+        .filter_map(|(index, variant)| (!is_null_type(variant)).then_some(index))
+        .collect();
+    (non_null.len() == 1 && variants.iter().any(is_null_type)).then_some(non_null[0])
+}
+
+fn lower_tagged_union(
+    registry: &SchemaRegistry,
+    state: &mut LoweringState,
+    base_id: &str,
+    union_id: &ContractTypeId,
+    union_schema: &Value,
+    variants: &[Value],
+) -> Result<TypeShape> {
+    if variants.is_empty() {
+        return Err(unsupported(
+            "oneOf",
+            &union_id.display(),
+            "tagged union needs at least one branch",
+        ));
+    }
+    let union_properties = union_schema.get("properties").and_then(Value::as_object);
+    let enum_candidates: Vec<(String, Vec<String>)> = union_properties
+        .into_iter()
+        .flat_map(|properties| properties.iter())
+        .filter(|(_, property)| is_string_enum(property))
+        .map(|(name, property)| string_enum_values(property).map(|values| (name.clone(), values)))
+        .collect::<Result<_>>()?;
+    if enum_candidates.len() != 1 {
+        return Err(unsupported(
+            "oneOf",
+            &union_id.display(),
+            "tagged union requires exactly one union-level string enum discriminator",
+        ));
+    }
+    let (discriminator, enum_values) = enum_candidates.into_iter().next().expect("one candidate");
+    if enum_values.is_empty()
+        || BTreeSet::<_>::from_iter(enum_values.iter()).len() != enum_values.len()
+    {
+        return Err(unsupported(
+            "oneOf",
+            &union_id.display(),
+            "discriminator enum must be non-empty and unique",
+        ));
+    }
+
+    let union_required = required_set(union_schema);
+    if !union_required.contains(&discriminator) {
+        return Err(unsupported(
+            "required",
+            &union_id.display(),
+            "tagged union discriminator must be required at union level",
+        ));
+    }
+
+    let union_unevaluated_closed = match union_schema.get("unevaluatedProperties") {
+        None => false,
+        Some(Value::Bool(false)) => true,
+        Some(_) => {
+            return Err(unsupported(
+                "unevaluatedProperties",
+                &union_id.display(),
+                "tagged unions only support unevaluatedProperties: false",
+            ));
+        }
+    };
+    let mut branches = Vec::new();
+    let mut tags = BTreeSet::new();
+    for (index, branch_schema) in variants.iter().enumerate() {
+        let branch_id = union_id.child("oneOf").index(index);
+        let branch_source =
+            SourceUseSite::new(union_id.schema_id.clone(), branch_id.pointer.clone());
+        let (object_id, object_schema) =
+            resolve_union_branch(registry, base_id, branch_schema, &branch_id)?;
+        let object = object_schema.as_object().ok_or_else(|| {
+            unsupported(
+                "oneOf",
+                &branch_id.display(),
+                "branch must resolve to an object schema",
+            )
+        })?;
+        if !is_object_schema(object_schema) {
+            return Err(unsupported(
+                "oneOf",
+                &branch_id.display(),
+                "branch must resolve to an object schema",
+            ));
+        }
+        match object.get("additionalProperties") {
+            Some(Value::Bool(false)) => {}
+            Some(_) => {
+                return Err(unsupported(
+                    "additionalProperties",
+                    &branch_source.display(),
+                    "tagged union branch must not override union unevaluatedProperties:false with a non-false additionalProperties policy",
+                ));
+            }
+            None if union_unevaluated_closed => {}
+            None => {
+                return Err(unsupported(
+                    "additionalProperties",
+                    &branch_source.display(),
+                    "tagged union branches must be closed by branch additionalProperties:false or union unevaluatedProperties:false",
+                ));
+            }
+        }
+        let required = required_set(object_schema);
+        if !required.contains(&discriminator) {
+            return Err(unsupported(
+                "oneOf",
+                &branch_id.display(),
+                "branch discriminator must be required",
+            ));
+        }
+        let tag = object_schema
+            .pointer(&format!("/properties/{discriminator}/const"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                unsupported(
+                    "oneOf",
+                    &branch_id.display(),
+                    "branch discriminator must be a single string const",
+                )
+            })?
+            .to_owned();
+        let discriminator_schema = object_schema
+            .pointer(&format!("/properties/{discriminator}"))
+            .expect("const was found beneath property");
+        if discriminator_schema.get("type").and_then(Value::as_str) != Some("string") {
+            return Err(unsupported(
+                "oneOf",
+                &branch_id.display(),
+                "branch discriminator const must declare type string",
+            ));
+        }
+        if !tags.insert(tag.clone()) {
+            return Err(unsupported(
+                "oneOf",
+                &branch_id.display(),
+                "duplicate tagged-union discriminator const",
+            ));
+        }
+        ensure_node_from_schema(registry, state, &object_id, object_schema, "")?;
+        branches.push(TaggedUnionBranch {
+            tag,
+            object_type_id: object_id,
+            source: branch_source,
+        });
+    }
+    let tag_values: BTreeSet<_> = branches.iter().map(|branch| branch.tag.clone()).collect();
+    let enum_set: BTreeSet<_> = enum_values.into_iter().collect();
+    if tag_values != enum_set {
+        return Err(unsupported(
+            "oneOf",
+            &union_id.display(),
+            "discriminator enum and branch const tags must be bijective",
+        ));
+    }
+    Ok(TypeShape::TaggedUnion {
+        discriminator,
+        branches,
+        unknown_field_policy: UnknownFieldPolicy::Forbid,
+    })
+}
+
+fn resolve_union_branch<'a>(
+    registry: &'a SchemaRegistry,
+    base_id: &str,
+    branch: &'a Value,
+    branch_id: &ContractTypeId,
+) -> Result<(ContractTypeId, &'a Value)> {
+    if let Some(reference) = branch.get("$ref").and_then(Value::as_str) {
+        ensure_ref_has_only_annotation_siblings(branch, &branch_id.display())?;
+        let resolved = resolve_ref(registry, base_id, reference)?;
+        return Ok((resolved.type_id, resolved.node));
+    }
+    Ok((branch_id.clone(), branch))
 }
 
 fn lower_primitive_shape(
@@ -621,6 +904,7 @@ fn lower_primitive_shape(
         }
         "object" if schema.get("properties").is_some() => Ok(TypeShape::Object {
             fields: lower_object_fields(registry, state, type_id, schema)?,
+            unknown_field_policy: object_unknown_field_policy(schema, type_id)?,
         }),
         "object" if schema.get("additionalProperties") == Some(&Value::Bool(true)) => {
             Ok(TypeShape::AnyJson)
@@ -634,6 +918,21 @@ fn lower_primitive_shape(
             "type",
             &type_id.display(),
             &format!("unsupported type `{other}`"),
+        )),
+    }
+}
+
+fn object_unknown_field_policy(
+    schema: &Value,
+    type_id: &ContractTypeId,
+) -> Result<UnknownFieldPolicy> {
+    match schema.get("additionalProperties") {
+        Some(Value::Bool(false)) => Ok(UnknownFieldPolicy::Forbid),
+        Some(Value::Bool(true)) | None => Ok(UnknownFieldPolicy::Allow),
+        Some(_) => Err(unsupported(
+            "additionalProperties",
+            &type_id.display(),
+            "schema-valued additionalProperties is not supported",
         )),
     }
 }
@@ -708,7 +1007,15 @@ fn schema_to_type_use(
             "false schema has no inhabited type",
         ));
     }
-    validate_supported_schema_node(schema, &preferred_id.display())?;
+    let allows_unevaluated_properties = schema
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .is_some_and(|variants| nullable_one_of_indices(variants).is_none());
+    validate_supported_schema_node(
+        schema,
+        &preferred_id.display(),
+        allows_unevaluated_properties,
+    )?;
 
     if schema.get("$ref").is_some() {
         ensure_ref_has_only_annotation_siblings(schema, &preferred_id.display())?;
@@ -727,7 +1034,41 @@ fn schema_to_type_use(
     }
 
     if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
-        return nullable_one_of_use(registry, state, base_id, variants, preferred_id, source);
+        return classify_one_of_use(
+            registry,
+            state,
+            base_id,
+            schema,
+            variants,
+            preferred_id,
+            source,
+        );
+    }
+
+    if schema.get("properties").is_some() {
+        ensure_node_from_schema(registry, state, preferred_id, schema, "")?;
+        let named = TypeUse {
+            expr: TypeExpr::Reference {
+                id: preferred_id.clone(),
+            },
+            source: source.clone(),
+        };
+        return Ok(
+            if schema
+                .get("type")
+                .and_then(Value::as_array)
+                .is_some_and(|kinds| kinds.iter().any(|value| value == "null"))
+            {
+                TypeUse {
+                    expr: TypeExpr::Nullable {
+                        inner: Box::new(named),
+                    },
+                    source,
+                }
+            } else {
+                named
+            },
+        );
     }
 
     if let Some(value) = schema.get("const") {
@@ -764,32 +1105,6 @@ fn schema_to_type_use(
             },
             source,
         });
-    }
-
-    if schema.get("properties").is_some() {
-        ensure_node_from_schema(registry, state, preferred_id, schema, "")?;
-        let named = TypeUse {
-            expr: TypeExpr::Reference {
-                id: preferred_id.clone(),
-            },
-            source: source.clone(),
-        };
-        return Ok(
-            if schema
-                .get("type")
-                .and_then(Value::as_array)
-                .is_some_and(|kinds| kinds.iter().any(|value| value == "null"))
-            {
-                TypeUse {
-                    expr: TypeExpr::Nullable {
-                        inner: Box::new(named),
-                    },
-                    source,
-                }
-            } else {
-                named
-            },
-        );
     }
 
     match schema.get("type") {
@@ -1264,7 +1579,7 @@ fn parse_envelope_binding(
         )
     })?;
     match &node.shape {
-        TypeShape::Object { fields } => {
+        TypeShape::Object { fields, .. } => {
             // Structural check: graph must already hold every non-payload field.
             for field in fields {
                 if field.json_name == discriminator || field.json_name == "payload" {
@@ -1335,7 +1650,7 @@ fn audit_shape_refs(
         | TypeShape::Const { .. } => Ok(()),
         TypeShape::Array { items } => audit_type_use_refs(nodes, owner, items),
         TypeShape::Nullable { inner } => audit_type_use_refs(nodes, owner, inner),
-        TypeShape::Object { fields } => {
+        TypeShape::Object { fields, .. } => {
             for field in fields {
                 if field.schema_location.schema_id != owner.schema_id {
                     return Err(SchemaToolError::msg(format!(
@@ -1346,6 +1661,21 @@ fn audit_shape_refs(
                     .into());
                 }
                 audit_type_use_refs(nodes, owner, &field.ty)?;
+            }
+            Ok(())
+        }
+        TypeShape::TaggedUnion { branches, .. } => {
+            for branch in branches {
+                if !nodes.contains_key(&branch.object_type_id) {
+                    return Err(SchemaToolError::msg(format!(
+                        "graph integrity: {} tagged-union branch {:?} at {} references missing node {}",
+                        owner.display(),
+                        branch.tag,
+                        branch.source.display(),
+                        branch.object_type_id.display()
+                    ))
+                    .into());
+                }
             }
             Ok(())
         }
@@ -1405,7 +1735,11 @@ fn audit_schema_tree(schema: &Value, schema_id: &str, pointer: &JsonPointer) -> 
         .into());
     }
 
-    validate_supported_schema_node(schema, &location)?;
+    let allows_unevaluated_properties = object
+        .get("oneOf")
+        .and_then(Value::as_array)
+        .is_some_and(|variants| nullable_one_of_indices(variants).is_none());
+    validate_supported_schema_node(schema, &location, allows_unevaluated_properties)?;
 
     for container in ["properties", "$defs"] {
         if let Some(children) = object.get(container).and_then(Value::as_object) {
@@ -1415,7 +1749,14 @@ fn audit_schema_tree(schema: &Value, schema_id: &str, pointer: &JsonPointer) -> 
             }
         }
     }
-    for keyword in ["items", "additionalProperties", "if", "then", "else"] {
+    for keyword in [
+        "items",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "if",
+        "then",
+        "else",
+    ] {
         if let Some(child) = object.get(keyword) {
             if keyword != "additionalProperties" || !child.is_boolean() {
                 let child_ptr = pointer.child(keyword);
@@ -1434,7 +1775,11 @@ fn audit_schema_tree(schema: &Value, schema_id: &str, pointer: &JsonPointer) -> 
     Ok(())
 }
 
-fn validate_supported_schema_node(schema: &Value, location: &str) -> Result<()> {
+fn validate_supported_schema_node(
+    schema: &Value,
+    location: &str,
+    allows_unevaluated_properties: bool,
+) -> Result<()> {
     let Some(object) = schema.as_object() else {
         return Err(unsupported(
             "schema",
@@ -1458,6 +1803,7 @@ fn validate_supported_schema_node(schema: &Value, location: &str) -> Result<()> 
         "const",
         "oneOf",
         "allOf",
+        "unevaluatedProperties",
         "if",
         "then",
         "else",
@@ -1487,7 +1833,6 @@ fn validate_supported_schema_node(schema: &Value, location: &str) -> Result<()> 
         "prefixItems",
         "contains",
         "propertyNames",
-        "unevaluatedProperties",
         "unevaluatedItems",
         "contentSchema",
     ];
@@ -1497,6 +1842,22 @@ fn validate_supported_schema_node(schema: &Value, location: &str) -> Result<()> 
                 keyword,
                 location,
                 "shape keyword is not supported by restricted codegen",
+            ));
+        }
+    }
+    if let Some(unevaluated) = object.get("unevaluatedProperties") {
+        if !allows_unevaluated_properties {
+            return Err(unsupported(
+                "unevaluatedProperties",
+                location,
+                "unevaluatedProperties is only supported on a non-null tagged-union classifier",
+            ));
+        }
+        if unevaluated != &Value::Bool(false) {
+            return Err(unsupported(
+                "unevaluatedProperties",
+                location,
+                "tagged unions only support unevaluatedProperties: false",
             ));
         }
     }
@@ -1741,6 +2102,7 @@ mod tests {
                         .child("properties")
                         .child("x"),
                 }],
+                unknown_field_policy: UnknownFieldPolicy::Forbid,
             },
         };
         let text = serde_json::to_string(&node).expect("serialize");

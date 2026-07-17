@@ -15,7 +15,7 @@
 - `adr/0007-approval-v2不可变联合身份与失效.md` — 146 lines
 - `adr/README.md` — 25 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 57 lines
-- `docs/PROGRESS.md` — 190 lines
+- `docs/PROGRESS.md` — 191 lines
 - `docs/api/README.md` — 39 lines
 - `docs/api/approval-contract.md` — 41 lines
 - `docs/api/audit-record.md` — 80 lines
