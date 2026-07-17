@@ -6,6 +6,10 @@ license.workspace = true
 rust-version.workspace = true
 description = "Deterministic JSON Schema codegen and check CLI for Shittim contracts"
 
+[lib]
+name = "schema_tool"
+path = "src/lib.rs"
+
 [[bin]]
 name = "schema-tool"
 path = "src/main.rs"
@@ -16,12 +20,15 @@ clap.workspace = true
 hex.workspace = true
 jsonschema.workspace = true
 kernel-contracts = { path = "../kernel-contracts" }
+percent-encoding = "2.3"
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+url = { workspace = true }
 walkdir.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
 walkdir.workspace = true

@@ -9,7 +9,7 @@
 3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。
 4. 源码、Schema 与测试必须实现本规范，不能反向改变规范。
 
-`PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。
+`PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据（由 `scripts/update-file-manifest.mjs` 从 Git Markdown source set 生成，禁止手改）；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。
 
 ## 规范索引
 

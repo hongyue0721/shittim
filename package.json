@@ -7,6 +7,9 @@
     "pnpm": "11.3.0"
   },
   "scripts": {
-    "check:toolchain": "node scripts/check-node-toolchain.mjs"
+    "check:toolchain": "node scripts/check-node-toolchain.mjs",
+    "check:file-manifest": "node scripts/update-file-manifest.mjs --check",
+    "write:file-manifest": "node scripts/update-file-manifest.mjs --write",
+    "test:file-manifest": "node scripts/update-file-manifest.mjs --self-test"
   }
 }

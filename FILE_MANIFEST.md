@@ -1,18 +1,18 @@
 # FILE_MANIFEST
 
-> 非规范元数据。完整列出当前工作树全部 Markdown；行数以 UTF-8 文本 `wc -l` 等价结果为准。修改文档后必须重新生成本清单。
+> 非规范元数据。列出 Git source set 中的 Markdown（tracked `git ls-files '*.md'` + 标准 ignore 下 untracked source）；不含 ignored build 产物（如 target/、node_modules/）。行数以 UTF-8 文本 `wc -l` 等价结果为准。由 `scripts/update-file-manifest.mjs` 生成，禁止手改。
 
-- `AGENT.md` — 32 lines
+- `AGENT.md` — 34 lines
 - `FILE_MANIFEST.md` — 38 lines
 - `PROJECT_OVERVIEW.md` — 296 lines
 - `README.md` — 40 lines
 - `adr/0001-shittim工作区与工具链.md` — 44 lines
-- `adr/0002-schema生成与兼容策略.md` — 51 lines
+- `adr/0002-schema生成与兼容策略.md` — 52 lines
 - `adr/0003-kcp本地传输.md` — 32 lines
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/README.md` — 22 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 45 lines
-- `docs/PROGRESS.md` — 160 lines
+- `docs/PROGRESS.md` — 165 lines
 - `docs/api/README.md` — 34 lines
 - `docs/api/audit-record.md` — 84 lines
 - `docs/api/domain-policy.md` — 149 lines
@@ -23,7 +23,7 @@
 - `docs/api/kernel-control-protocol.md` — 84 lines
 - `docs/api/kernel-kcp.md` — 53 lines
 - `docs/api/kernel-sqlite.md` — 143 lines
-- `docs/api/schema-generation.md` — 88 lines
+- `docs/api/schema-generation.md` — 123 lines
 - `docs/api/task-repository-contract.md` — 72 lines
 - `docs/sdk/README.md` — 33 lines
 - `docs/sdk/extension-sdk.md` — 35 lines

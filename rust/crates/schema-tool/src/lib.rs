@@ -1,0 +1,60 @@
+//! Library surface for `schema-tool`.
+//!
+//! The CLI binary is the primary interface. This library exposes the target-scoped
+//! pipeline so integration tests can assert graph identity and Rust projection
+//! without scraping generated source strings as the only oracle.
+
+pub mod canonicalize;
+pub mod check;
+pub mod codegen;
+pub mod contract_model;
+pub mod error;
+pub mod generate;
+pub mod json_pointer;
+pub mod manifest;
+pub mod names;
+pub mod paths;
+pub mod resolve;
+pub mod rust_codegen;
+pub mod target;
+pub mod validate;
+
+pub use contract_model::{
+    lower_target_contract_graph, CatalogFacts, ConstJson, ContractTypeId, ContractTypeNode,
+    EnvelopeWireBinding, Nullability, ObjectField, Presence, ScalarKind, SourceSchemaMetadata,
+    SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
+};
+pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
+pub use manifest::{GenerationTarget, Manifest, ManifestEntry, SchemaRegistry};
+pub use resolve::{
+    require_canonical_id_base, require_canonical_schema_id, resolve_ref, schema_at,
+    schema_at_document, schema_id_in_id_base_namespace, ResolvedSchemaRef,
+};
+pub use rust_codegen::{
+    project_rust, render_catalog_module, render_typed_module_from_projection,
+    render_types_module_from_projection, RustProjection, GENERATED_MOD_RS, RUST_GENERATED_DIR,
+};
+pub use target::{build_target_plan, TargetPlan, TargetSchemaSet};
+
+use anyhow::Result;
+use std::path::Path;
+
+/// Load the registry, build the rust target graph, and render types/catalog/typed modules.
+pub fn lower_and_render_rust(
+    repo_root: &Path,
+) -> Result<(TargetContractGraph, String, String, String)> {
+    let registry = SchemaRegistry::load(repo_root)?;
+    resolve::check_all_refs(&registry)?;
+    let plan = target::build_target_plan(&registry)?;
+    let set = plan
+        .targets
+        .iter()
+        .find(|set| set.target == GenerationTarget::Rust)
+        .ok_or_else(|| error::SchemaToolError::msg("no rust generation target in plan"))?;
+    let graph = lower_target_contract_graph(&registry, set)?;
+    let projection = project_rust(&graph)?;
+    let types = render_types_module_from_projection(&projection)?;
+    let catalog = render_catalog_module(&graph)?;
+    let typed = render_typed_module_from_projection(&projection, &graph)?;
+    Ok((graph, types, catalog, typed))
+}

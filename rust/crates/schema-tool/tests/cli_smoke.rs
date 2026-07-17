@@ -367,20 +367,7 @@ fn optional_non_null_fields_emit_skip_serializing_if() {
 
 #[test]
 fn validate_example_actor() {
-    let (c, o, e) = run_tool(&[
-        "validate",
-        "--schema",
-        "https://schemas.shittim.local/v1/common/actor.json",
-        "--instance",
-        repo_root()
-            .join("schemas/examples/common/actor.valid.json")
-            .to_str()
-            .expect("utf8 path"),
-    ]);
-    // examples wrap instance; validate CLI expects bare instance. Use a temp bare file.
-    // If this fails, the dedicated bare-instance path below covers the contract.
-    let _ = (c, o, e);
-
+    // validate CLI expects a bare instance document (not the examples wrapper envelope).
     let bare = sample_actor_path();
     let (c, o, e) = run_tool(&[
         "validate",
@@ -553,10 +540,12 @@ fn copy_tree(source: &Path, target: &Path) {
         .into_iter()
         .filter_map(Result::ok)
         .filter(|entry| {
-            !entry
-                .path()
-                .components()
-                .any(|part| part.as_os_str() == "target")
+            !entry.path().components().any(|part| {
+                matches!(
+                    part.as_os_str().to_str(),
+                    Some("target" | "node_modules" | ".git")
+                )
+            })
         })
     {
         let relative = entry.path().strip_prefix(source).expect("relative path");
@@ -567,15 +556,815 @@ fn copy_tree(source: &Path, target: &Path) {
             if let Some(parent) = destination.parent() {
                 std::fs::create_dir_all(parent).expect("create copied parent");
             }
-            std::fs::copy(entry.path(), destination).expect("copy file");
+            // Retry once: parallel temp-repo copies can race with concurrent test cleanup.
+            if let Err(first) = std::fs::copy(entry.path(), &destination) {
+                std::fs::create_dir_all(destination.parent().unwrap_or(target))
+                    .expect("recreate parent");
+                std::fs::copy(entry.path(), &destination).unwrap_or_else(|second| {
+                    panic!(
+                        "copy file {} -> {}: first={first}, second={second}",
+                        entry.path().display(),
+                        destination.display()
+                    )
+                });
+            }
         }
     }
 }
 
 #[test]
 fn manifest_unique_ids_enforced_by_check() {
-    // check already loads manifest uniqueness; this asserts repo_root discovery works.
-    assert!(Path::new(&repo_root())
-        .join("schemas/manifest.json")
-        .is_file());
+    let temp = temporary_repo("manifest-duplicate-id");
+    let actor_id = "https://schemas.shittim.local/v1/common/actor.json";
+    let dup_source = "schemas/source/common/actor_dup.v1.json";
+    let original = temp.join("schemas/source/common/actor.v1.json");
+    std::fs::copy(&original, temp.join(dup_source)).expect("copy actor source under new path");
+
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let original_entry = manifest["schemas"]
+        .as_array()
+        .expect("schemas")
+        .iter()
+        .find(|entry| entry["id"].as_str() == Some(actor_id))
+        .cloned()
+        .expect("actor manifest entry");
+    let mut duplicate = original_entry;
+    duplicate["source"] = serde_json::json!(dup_source);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("schemas")
+        .push(duplicate);
+    write_json(&manifest_path, &manifest);
+
+    let (code, stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0, "duplicate $id must fail check: {stdout}\n{stderr}");
+    assert!(
+        stderr.contains("duplicate $id in manifest"),
+        "expected exact duplicate $id topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(actor_id),
+        "duplicate $id error must name the colliding id: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn generation_targets_accept_rust_typescript_and_both() {
+    for targets in [
+        serde_json::json!(["rust"]),
+        serde_json::json!(["typescript"]),
+        serde_json::json!(["rust", "typescript"]),
+    ] {
+        let temp = temporary_repo(&format!(
+            "targets-accept-{}",
+            targets
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_str().unwrap())
+                .collect::<Vec<_>>()
+                .join("-")
+        ));
+        set_all_generation_targets(&temp, &targets);
+        // typescript-only / both currently fail later at unimplemented TS codegen, but
+        // manifest load + target validation itself must accept the list shape first.
+        // For accept of load path we only need check's first stages; use a unit-style
+        // generate attempt and distinguish validation vs unimplemented errors.
+        let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+        let lower = stderr.to_ascii_lowercase();
+        let only_rust = targets == serde_json::json!(["rust"]);
+        if only_rust {
+            assert_eq!(code, 0, "rust-only must generate: {stderr}");
+        } else {
+            // accepted by target validation; fails because TS renderer is not implemented
+            // OR succeeds only if no TS path is taken — must not fail on empty/duplicate/order.
+            assert!(
+                lower.contains("typescript") || lower.contains("not implemented"),
+                "expected unimplemented typescript path, got: {stderr}"
+            );
+            assert_ne!(code, 0);
+        }
+        std::fs::remove_dir_all(temp).expect("clean temp repo");
+    }
+}
+
+#[test]
+fn generation_targets_reject_empty_duplicate_reverse_unknown() {
+    let cases: Vec<(&str, serde_json::Value, &str)> = vec![
+        ("empty", serde_json::json!([]), "non-empty"),
+        (
+            "duplicate",
+            serde_json::json!(["rust", "rust"]),
+            "duplicate",
+        ),
+        (
+            "reverse",
+            serde_json::json!(["typescript", "rust"]),
+            "canonical order",
+        ),
+        ("unknown", serde_json::json!(["python"]), "unknown"),
+    ];
+    for (label, targets, expected) in cases {
+        let temp = temporary_repo(&format!("targets-reject-{label}"));
+        set_all_generation_targets(&temp, &targets);
+        let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+        assert_ne!(code, 0, "{label} must fail");
+        assert!(
+            stderr
+                .to_ascii_lowercase()
+                .contains(&expected.to_ascii_lowercase())
+                || stderr.to_ascii_lowercase().contains("unknown variant")
+                || stderr.to_ascii_lowercase().contains("python"),
+            "expected {expected:?} in: {stderr}"
+        );
+        std::fs::remove_dir_all(temp).expect("clean temp repo");
+    }
+}
+
+#[test]
+fn generation_target_closure_rejects_missing_dependency_target() {
+    let temp = temporary_repo("targets-closure-missing");
+    let envelope_id = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
+    let stop_activate_id = "https://schemas.shittim.local/v1/kcp/stop_activate_request.json";
+    // Target command envelope with typescript while $ref/payload dependencies stay rust-only.
+    set_generation_targets_for_id(
+        &temp,
+        envelope_id,
+        serde_json::json!(["rust", "typescript"]),
+    );
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0, "closure missing must fail: {stderr}");
+    assert!(
+        stderr.contains("generation target closure error"),
+        "expected exact closure topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(envelope_id),
+        "closure error must name the from schema: {stderr}"
+    );
+    assert!(
+        stderr.contains(stop_activate_id),
+        "closure error must name the missing-target dependency: {stderr}"
+    );
+    assert!(
+        stderr.contains("typescript"),
+        "closure error must name the missing target: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn relative_external_ref_missing_target_fails_closure() {
+    let temp = temporary_repo("relative-external-missing-target");
+    let parent_id = "https://schemas.shittim.local/v1/kcp/rel_parent.json";
+    let child_id = "https://schemas.shittim.local/v1/kcp/rel_child.json";
+    let parent_source = "schemas/source/kcp/rel_parent.v1.json";
+    let child_source = "schemas/source/kcp/rel_child.v1.json";
+
+    write_json(
+        &temp.join(child_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": child_id,
+            "title": "RelChild",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "label"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "label": {"type": "string"}
+            }
+        }),
+    );
+    // Parent uses a *relative* external $ref (not absolute id) to the sibling schema.
+    write_json(
+        &temp.join(parent_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": parent_id,
+            "title": "RelParent",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "child"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "child": {"$ref": "./rel_child.json"}
+            }
+        }),
+    );
+
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    schemas.push(serde_json::json!({
+        "id": parent_id,
+        "title": "RelParent",
+        "version": 1,
+        "source": parent_source,
+        "domain": "kcp",
+        "kind": "object",
+        "compatibility": "test-only",
+        "generation_targets": ["rust"],
+        "schema_version_field": "schema_version"
+    }));
+    // Child is on the registry but deliberately missing the rust target.
+    schemas.push(serde_json::json!({
+        "id": child_id,
+        "title": "RelChild",
+        "version": 1,
+        "source": child_source,
+        "domain": "kcp",
+        "kind": "object",
+        "compatibility": "test-only",
+        "generation_targets": ["typescript"],
+        "schema_version_field": "schema_version"
+    }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(
+        code, 0,
+        "relative external missing target must fail: {stderr}"
+    );
+    assert!(
+        stderr.contains("generation target closure error"),
+        "expected exact closure topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(child_id),
+        "closure error must name the dependency schema id: {stderr}"
+    );
+    assert!(
+        stderr.contains("rust"),
+        "closure error must name the required target: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+fn set_all_generation_targets(temp: &std::path::Path, targets: &serde_json::Value) {
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    for entry in manifest["schemas"]
+        .as_array_mut()
+        .expect("manifest schemas")
+    {
+        entry["generation_targets"] = targets.clone();
+    }
+    write_json(&manifest_path, &manifest);
+}
+
+fn set_generation_targets_for_id(temp: &Path, id: &str, targets: serde_json::Value) {
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let entry = manifest["schemas"]
+        .as_array_mut()
+        .expect("schemas")
+        .iter_mut()
+        .find(|entry| entry["id"].as_str() == Some(id))
+        .unwrap_or_else(|| panic!("missing schema {id}"));
+    entry["generation_targets"] = targets;
+    write_json(&manifest_path, &manifest);
+}
+
+#[test]
+fn typescript_only_fails_before_any_write() {
+    let temp = temporary_repo("ts-only-no-partial");
+    set_all_generation_targets(&temp, &serde_json::json!(["typescript"]));
+    let types_path = temp.join("rust/crates/kernel-contracts/src/generated/types.rs");
+    let before = std::fs::read(&types_path).expect("read types before");
+    // Marker file that must remain untouched proves no partial write path ran.
+    let marker = temp.join("rust/crates/kernel-contracts/src/generated/DO_NOT_TOUCH");
+    std::fs::write(&marker, b"keep").expect("write marker");
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.to_ascii_lowercase().contains("typescript")
+            && stderr.to_ascii_lowercase().contains("not implemented"),
+        "expected typescript unimplemented: {stderr}"
+    );
+    let after = std::fs::read(&types_path).expect("read types after");
+    assert_eq!(before, after, "TS-only must not rewrite Rust artifacts");
+    assert_eq!(
+        std::fs::read(&marker).expect("marker"),
+        b"keep",
+        "generate must not touch unrelated files on TS failure"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn both_targets_fail_closed_without_partial_rust_rewrite_when_ts_declared() {
+    let temp = temporary_repo("both-targets-no-partial");
+    set_all_generation_targets(&temp, &serde_json::json!(["rust", "typescript"]));
+    let types_path = temp.join("rust/crates/kernel-contracts/src/generated/types.rs");
+    let before = std::fs::read(&types_path).expect("read types before");
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.to_ascii_lowercase().contains("typescript"),
+        "expected typescript unimplemented: {stderr}"
+    );
+    let after = std::fs::read(&types_path).expect("read types after");
+    assert_eq!(
+        before, after,
+        "declaring typescript must fail before writing any artifact"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn mixed_target_closure_requires_dependency_on_same_target() {
+    let temp = temporary_repo("mixed-target-closure");
+    let envelope_id = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
+    let stop_activate_id = "https://schemas.shittim.local/v1/kcp/stop_activate_request.json";
+    // Keep dependencies rust-only; put command_envelope on rust+typescript — typescript closure fails.
+    set_generation_targets_for_id(
+        &temp,
+        envelope_id,
+        serde_json::json!(["rust", "typescript"]),
+    );
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0, "mixed-target closure must fail: {stderr}");
+    assert!(
+        stderr.contains("generation target closure error"),
+        "expected exact closure topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(envelope_id),
+        "closure error must name the from schema: {stderr}"
+    );
+    assert!(
+        stderr.contains(stop_activate_id),
+        "closure error must name the dependency missing typescript: {stderr}"
+    );
+    assert!(
+        stderr.contains("typescript"),
+        "closure error must name the missing target: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn deep_local_fragment_external_ref_joins_target_closure() {
+    let temp = temporary_repo("deep-fragment-external");
+    // Create parent (rust) with $defs that $ref an external child; child must list rust.
+    let parent_id = "https://schemas.shittim.local/v1/kcp/deep_parent.json";
+    let child_id = "https://schemas.shittim.local/v1/kcp/deep_child.json";
+    let parent_source = "schemas/source/kcp/deep_parent.v1.json";
+    let child_source = "schemas/source/kcp/deep_child.v1.json";
+    write_json(
+        &temp.join(child_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": child_id,
+            "title": "DeepChild",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "label"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "label": {"type": "string"}
+            }
+        }),
+    );
+    write_json(
+        &temp.join(parent_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": parent_id,
+            "title": "DeepParent",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "nested"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "nested": {"$ref": "#/$defs/wrapper"}
+            },
+            "$defs": {
+                "wrapper": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["child"],
+                    "properties": {
+                        "child": {"$ref": child_id}
+                    }
+                }
+            }
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    schemas.push(serde_json::json!({
+        "id": parent_id,
+        "title": "DeepParent",
+        "version": 1,
+        "source": parent_source,
+        "domain": "kcp",
+        "kind": "kcp_request",
+        "compatibility": "test-only",
+        "generation_targets": ["rust"],
+        "schema_version_field": "schema_version"
+    }));
+    schemas.push(serde_json::json!({
+        "id": child_id,
+        "title": "DeepChild",
+        "version": 1,
+        "source": child_source,
+        "domain": "kcp",
+        "kind": "kcp_request",
+        "compatibility": "test-only",
+        "generation_targets": ["rust"],
+        "schema_version_field": "schema_version"
+    }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(
+        code, 0,
+        "deep fragment external ref must generate: {stderr}"
+    );
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("types");
+    assert!(types.contains("pub struct DeepParent"));
+    assert!(types.contains("pub struct DeepChild"));
+    assert!(types.contains("pub nested: DeepParentNested"));
+
+    // Child without rust target must fail closure with exact topic + ids.
+    set_generation_targets_for_id(&temp, child_id, serde_json::json!(["typescript"]));
+    // Parent stays rust-only; child ts-only => rust closure error (before any TS render).
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(
+        code, 0,
+        "deep fragment missing rust target must fail: {stderr}"
+    );
+    assert!(
+        stderr.contains("generation target closure error"),
+        "expected exact closure topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(child_id),
+        "closure error must name the dependency schema id: {stderr}"
+    );
+    assert!(
+        stderr.contains("rust"),
+        "closure error must name the required target: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn cyclic_refs_do_not_hang_and_generate() {
+    let temp = temporary_repo("cyclic-refs");
+    // Self-cycle via optional property $ref to self is enough to exercise seen-set.
+    // Restricted codegen forbids most recursive shapes if they aren't simple $ref roots.
+    // Use two schemas that $ref each other at the root property level.
+    let a_id = "https://schemas.shittim.local/v1/kcp/cycle_a.json";
+    let b_id = "https://schemas.shittim.local/v1/kcp/cycle_b.json";
+    let a_source = "schemas/source/kcp/cycle_a.v1.json";
+    let b_source = "schemas/source/kcp/cycle_b.v1.json";
+    write_json(
+        &temp.join(a_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": a_id,
+            "title": "CycleA",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "other": {"$ref": b_id}
+            }
+        }),
+    );
+    write_json(
+        &temp.join(b_source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": b_id,
+            "title": "CycleB",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "other": {"$ref": a_id}
+            }
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    for (id, title, source) in [(a_id, "CycleA", a_source), (b_id, "CycleB", b_source)] {
+        schemas.push(serde_json::json!({
+            "id": id,
+            "title": title,
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "object",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }));
+    }
+    write_json(&manifest_path, &manifest);
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "cyclic refs must not hang: {stderr}");
+    let types =
+        std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
+            .expect("types");
+    assert!(types.contains("pub struct CycleA"));
+    assert!(types.contains("pub struct CycleB"));
+    // Direct mutual recursion must be boxed by the recursive layout pass.
+    assert!(
+        types.contains("Box<CycleA>") && types.contains("Box<CycleB>"),
+        "mutual recursion must insert Box: {types}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn envelope_payload_closure_requires_payload_target() {
+    let temp = temporary_repo("envelope-payload-closure");
+    let envelope_id = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
+    let payload_id = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
+    // Remove rust target from task_create_request while command_envelope stays rust.
+    set_generation_targets_for_id(&temp, payload_id, serde_json::json!(["typescript"]));
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0, "payload missing rust target must fail: {stderr}");
+    assert!(
+        stderr.contains("generation target closure error"),
+        "expected exact closure topic: {stderr}"
+    );
+    assert!(
+        stderr.contains(envelope_id),
+        "closure error must name the envelope (from) schema: {stderr}"
+    );
+    assert!(
+        stderr.contains(payload_id),
+        "closure error must name the payload dependency: {stderr}"
+    );
+    assert!(
+        stderr.contains("rust"),
+        "closure error must name the required target: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn off_manifest_source_file_fails_load() {
+    let temp = temporary_repo("off-manifest");
+    write_json(
+        &temp.join("schemas/source/kcp/not_in_manifest.v1.json"),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://schemas.shittim.local/v1/kcp/not_in_manifest.json",
+            "title": "NotInManifest",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+        }),
+    );
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("not listed in manifest") || stderr.contains("not_in_manifest"),
+        "expected off-manifest error: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn same_title_collision_fails_with_both_identities() {
+    let temp = temporary_repo("title-collision");
+    let a_id = "https://schemas.shittim.local/v1/kcp/title_collision_a.json";
+    let b_id = "https://schemas.shittim.local/v1/kcp/title_collision_b.json";
+    let a_source = "schemas/source/kcp/title_collision_a.v1.json";
+    let b_source = "schemas/source/kcp/title_collision_b.v1.json";
+    for (id, source) in [(a_id, a_source), (b_id, b_source)] {
+        write_json(
+            &temp.join(source),
+            &serde_json::json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": id,
+                "title": "SharedTitle",
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["schema_version", "value"],
+                "properties": {
+                    "schema_version": {"type": "integer", "const": 1},
+                    "value": {"type": "string"}
+                }
+            }),
+        );
+    }
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    for (id, source) in [(a_id, a_source), (b_id, b_source)] {
+        schemas.push(serde_json::json!({
+            "id": id,
+            "title": "SharedTitle",
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "object",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }));
+    }
+    write_json(&manifest_path, &manifest);
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("collision") || stderr.contains("SharedTitle"),
+        "expected name collision: {stderr}"
+    );
+    assert!(
+        stderr.contains(a_id) && stderr.contains(b_id),
+        "collision must list both identities: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn nested_hint_collision_fails_with_both_identities() {
+    let temp = temporary_repo("nested-hint-collision");
+    // One schema with two properties whose PascalCase path both become XyzItem under the
+    // same parent title prefix is hard; instead use two roots that both emit a nested
+    // type with the same logical title via identical nested property names under same title.
+    // Simpler: two schemas titled differently but each has property "status" with inline
+    // string enum — names Status collide only if logical titles are empty. With titles
+    // RootA/RootB they become RootAStatus/RootBStatus.
+    // Force collision by giving both schemas the same title and same nested property path
+    // — that is the same-title case. For nested-only collision across different roots with
+    // different titles, hand-craft two schemas that both produce logical_title "SharedNested"
+    // via property path Parent + SharedNested field name under different parents with titles
+    // that yield the same concatenation... Use identical titles for two different $ids.
+    // Covered by same_title_collision. Here force two nested const types under one schema
+    // with property names that PascalCase collide ("status" and "Status") — JSON property
+    // names are case-sensitive; "status" and "Status" both become Status under the parent.
+    let schema_id = "https://schemas.shittim.local/v1/kcp/nested_hint_collision.json";
+    let source = "schemas/source/kcp/nested_hint_collision.v1.json";
+    write_json(
+        &temp.join(source),
+        &serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": schema_id,
+            "title": "NestedHintCollision",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "status", "Status"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "status": {"type": "string", "enum": ["a", "b"]},
+                "Status": {"type": "string", "enum": ["c", "d"]}
+            }
+        }),
+    );
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["schemas"]
+        .as_array_mut()
+        .expect("schemas")
+        .push(serde_json::json!({
+            "id": schema_id,
+            "title": "NestedHintCollision",
+            "version": 1,
+            "source": source,
+            "domain": "kcp",
+            "kind": "object",
+            "compatibility": "test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("collision"),
+        "expected nested hint collision: {stderr}"
+    );
+    assert!(
+        stderr.contains(schema_id),
+        "collision must mention schema identity: {stderr}"
+    );
+    assert!(
+        stderr.contains("/properties/status") && stderr.contains("/properties/Status")
+            || stderr.contains("NestedHintCollisionStatus"),
+        "collision must identify both property paths or shared name: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn check_rejects_extra_file_under_generated_root() {
+    let temp = temporary_repo("extra-generated-file");
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "setup generate: {stderr}");
+    let extra = temp.join("rust/crates/kernel-contracts/src/generated/extra.rs");
+    std::fs::write(&extra, b"// extra\n").expect("write extra");
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("extra") || stderr.contains("mismatch"),
+        "expected extra file detection: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn check_rejects_unexpected_directory_under_generated_root() {
+    let temp = temporary_repo("extra-generated-dir");
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "setup generate: {stderr}");
+    let nested = temp.join("rust/crates/kernel-contracts/src/generated/nested");
+    std::fs::create_dir_all(&nested).expect("mkdir nested");
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("directory")
+            || stderr.contains("mismatch")
+            || stderr.contains("unexpected"),
+        "expected unexpected directory detection: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[cfg(unix)]
+#[test]
+fn check_rejects_symlink_under_generated_root() {
+    let temp = temporary_repo("generated-symlink");
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "setup generate: {stderr}");
+    let target = temp.join("rust/crates/kernel-contracts/src/generated/types.rs");
+    let link = temp.join("rust/crates/kernel-contracts/src/generated/types.link.rs");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(
+        code, 0,
+        "symlink under generated root must fail check: {stderr}"
+    );
+    assert!(
+        stderr.contains("symlink") || stderr.contains("mismatch") || stderr.contains("unexpected"),
+        "expected symlink detection: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+/// Non-unix platforms cannot create symlinks portably; still assert that a regular
+/// unexpected file under the generated root is rejected (same file-set oracle path).
+#[cfg(not(unix))]
+#[test]
+fn check_rejects_extra_regular_file_under_generated_root_on_non_unix() {
+    let temp = temporary_repo("generated-extra-file-non-unix");
+    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
+    assert_eq!(code, 0, "setup generate: {stderr}");
+    let extra = temp.join("rust/crates/kernel-contracts/src/generated/types.link.rs");
+    std::fs::write(&extra, b"// not a planned artifact\n").expect("write extra");
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0, "extra regular file must fail check: {stderr}");
+    assert!(
+        stderr.contains("extra") || stderr.contains("mismatch") || stderr.contains("unexpected"),
+        "expected extra file detection: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn shared_defs_two_fields_same_ref_generate_two_rust_types() {
+    // Production PolicyRule already has created_by/updated_by -> same $defs node.
+    let (code, _stdout, stderr) = run_tool(&["generate"]);
+    assert_eq!(code, 0, "generate: {stderr}");
+    let types = std::fs::read_to_string(
+        repo_root().join("rust/crates/kernel-contracts/src/generated/types.rs"),
+    )
+    .expect("types");
+    assert!(types.contains("pub struct PolicyRuleCreatedBy"));
+    assert!(types.contains("pub struct PolicyRuleUpdatedBy"));
+    assert!(types.contains("pub created_by: PolicyRuleCreatedBy"));
+    assert!(types.contains("pub updated_by: PolicyRuleUpdatedBy"));
+}
+
+#[test]
+fn response_envelope_remains_untyped() {
+    let (code, _stdout, stderr) = run_tool(&["generate"]);
+    assert_eq!(code, 0, "generate: {stderr}");
+    let typed = std::fs::read_to_string(
+        repo_root().join("rust/crates/kernel-contracts/src/generated/typed.rs"),
+    )
+    .expect("typed");
+    assert!(!typed.contains("TypedKcpResponseEnvelope"));
+    assert!(typed.contains("TypedKcpCommandEnvelope"));
 }

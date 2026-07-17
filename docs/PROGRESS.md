@@ -24,12 +24,13 @@
 - [x] 创建 Rust workspace 与 `rust-toolchain.toml`（1.97.0）。
 - [x] 创建 41 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
 - [x] 实现 `schema-tool generate/check/validate/canonicalize`。
+- [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> TargetPlan/TargetSchemaSet -> TargetContractGraph(ContractTypeId=$id+严格 RFC6901 Pointer) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；`manifest.id_base` 权威 namespace（canonical absolute http(s)+trailing `/`+组件归属；default-port/dot-segment 非 canonical，double-slash/percent path 按 Url 序列化语义）；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；envelope 唯一分析（0 payload ref => untyped；≥1 双射，mixed branch fail）；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；当前 41 无环输出与 HEAD byte-identical；TS renderer 仍未实现（声明即整体 fail，无部分写）。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
 - [x] optional/non-null 字段由 Schema 元数据生成 `skip_serializing_if = "Option::is_none"`；required-nullable 仍输出显式 `null`；optional-nullable 保持 `None -> null` 不改 wire。
 - [x] 执行 meta-schema、跨文件 `$ref`、生成漂移和未知关键字检查。
 - [x] 使用 `serde_json_canonicalizer` 实现 RFC 8785，并提供共享测试向量。
 - [x] 拍板 `task.create` repository 四项阻塞：规范化后的完整 payload receipt hash、精确幂等等价 projection、TaskScope/ContentOrigin 初值、固定 `task.creation_recorded` producer 与 `task.created` 上层 ID 边界；新增独立复合 hash fixture，并由 Rust 契约测试和 schema-tool 实际 CLI 双路径共同验证。
-- [x] `scripts/check-schema.sh` 覆盖重复生成、fmt、Clippy、workspace tests 和生成物 Git 漂移。
+- [x] `scripts/check-schema.sh` 为仓库当前统一门（历史名保留，**不是** Rust-only）：最前 `node scripts/check-node-toolchain.mjs`（调用者 PATH 须已指 Node 24.18.0 / pnpm 11.3.0），再重复生成、fmt、Clippy、workspace tests、生成物 Git 漂移，最后 `FILE_MANIFEST.md` 的 Git Markdown source set 校验（`scripts/update-file-manifest.mjs --check`；路径严格 UTF-8 fail closed；不含 ignored target/node_modules）。不提供跨平台 npm `check:all`；执行方式为 PATH + `./scripts/check-schema.sh`。
 - [x] 定义 `AuditRecord` v1：增加 `task.creation_recorded` 不可变创建快照，显式 `external_content_status` / PayloadManifest stable refs，并拍板 PermissionDecision/policy context、rollback 权威投影、实际 Provider/模型建议引用的双源一致性；Schema 内条件已有运行时测试，不自动公开为 Event/Outbox。
 - [x] 明确 Event aggregate `sequence`：首条已提交事件为 `0`，后续严格连续 `+1`，回滚事务暂分配不占号。
 
@@ -99,7 +100,7 @@
 - [x] `narrow_to_registered` 对 generated payload enum 穷举，无 wildcard：三 registered + 五不可序列化 Known enum。
 - [x] 实现 borrowing `TypedDispatcher<C,G,B>`，直接调用三个 public `handle_*`，不增加平行 ports、不重复 deadline/Schema、不改写 `HandlerResult` 或 intent。
 - [x] 增加 static negative Serialize assertions、八方法合法 Value、priority/field/cross-family/root/nested version、known malformed/valid、固定 error response、private unknown-schema/final-response fault seam、dispatcher response/ContractFailure/Created intent 与 clock 路由测试。
-- [x] `kernel-contracts` 53 项测试；`schema-tool` 14 项测试；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
+- [x] `kernel-contracts` 53 项测试；`schema-tool` 85 项测试（lib unit 29 + graph_projection 24 + cli_smoke 32）；`kernel-kcp` 46 项测试（12 unit + 34 integration）。
 - [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
 
 ## 未完成
@@ -136,14 +137,18 @@
 ```text
 export PATH="$HOME/.local/share/pnpm:$PATH"
 pnpm run check:toolchain
+pnpm run test:file-manifest
+pnpm run write:file-manifest
+pnpm run check:file-manifest
 pnpm install --frozen-lockfile
 pnpm install --no-frozen-lockfile
 # 二次 no-frozen 后 pnpm-lock.yaml 内容 hash 应稳定
+# 统一门（先 Node 硬门，再 Rust，再 FILE_MANIFEST）；无跨平台 npm check:all
 ./scripts/check-schema.sh
 git diff --check
 ```
 
-Node/pnpm 基座：`check:toolchain` 通过；frozen install 通过；二次 no-frozen lockfile hash 稳定。用默认 PATH 的 Node 26 直接 `node scripts/check-node-toolchain.mjs` 应失败（Node 版本不符）。Rust/Schema 全量仍以 `./scripts/check-schema.sh` 为准。
+Node/pnpm 基座：`check:toolchain` 通过；frozen install 通过；二次 no-frozen lockfile hash 稳定。用默认 PATH 的 Node 26 直接 `node scripts/check-node-toolchain.mjs` 或 `./scripts/check-schema.sh` 应早期失败（Node 版本不符，长 Rust 前）。`FILE_MANIFEST.md` 由 `scripts/update-file-manifest.mjs` 从 Git source set 生成（tracked + untracked non-ignored `*.md`，路径严格 UTF-8、禁止手改、不扫 ignored build 产物）；`check-schema.sh` 最前跑 toolchain 硬门，最后跑 `--check`。仓库全量以 `export PATH=...` + `./scripts/check-schema.sh` 为准。
 
 ## 事实来源
 

@@ -21,8 +21,10 @@
 
 ## 3. 编码规则
 
+- **禁止最小修复**：不得以补丁最小、改动行数最少或暂时通过测试为目标。所有修复必须从根因闭合，以职责清晰、易维护、易理解、可验证、可扩展、可持续迭代为完成标准；改动范围只服从方案完整性，不服从补丁大小。临时绕过、降格提交、复制平行语义、把已知结构性债务推迟给未来，均视为未完成。
 - Rust stable/Tokio、SQLite + FTS5、版本化 JSON Schema；TypeScript strict、Node LTS、Pi；Tauri 可直接依赖。
 - 每个持久对象和协议消息带 `schema_version`；可并发对象带 `revision`。Schema 是单一生成源，禁止手写平行类型。
+- Schema 编译铁律：中立 graph 的 `ContractTypeId`（`$id` + 严格 JSON Pointer）与语言侧 `RustDeclarationId` 分离；`manifest.id_base` 是 entry `$id` 权威 URL path 命名空间（canonical absolute http(s)+trailing `/`，组件语义归属）；`$ref` 走 `Url::join`+percent-decode→RFC6901；canonical fragment 在 graph 中唯一，`RustProjection` 只 project 一次，renderer 按 use-site lineage 投影多个 declaration，并用 SCC `Option<Box<T>>` 处理 direct 递归；禁止把 language name/logical_title 写进中立 IR；response envelope intentionally untyped；`ArtifactPlan::try_new` path/root component-safe，外部输入错误走 `Result`，禁止生产路径 panic。
 - 外部调用必须有 deadline、取消、幂等、结构化错误及恢复语义。不可安全重复的外部动作禁止盲目重放。
 - 平台差异留在 Provider；Pi、A_Memorix、OmniParser 是可替换依赖或 Provider，MaiBot、Agent-S、UFO 仅作参考；MCP 是兼容桥，不是 Kernel 内部权威协议。
 - 修改前读取本文件及相关 spec，先找既有状态所有者；修改后更新测试并运行规定检查。影响新常驻进程、核心协议、状态所有者、Core 边界或特权 Action 时写 ADR。

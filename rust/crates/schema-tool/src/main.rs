@@ -1,17 +1,8 @@
 //! schema-tool — deterministic JSON Schema check/codegen/validate/canonicalize CLI.
 
-mod canonicalize;
-mod check;
-mod codegen;
-mod error;
-mod generate;
-mod manifest;
-mod paths;
-mod resolve;
-mod validate;
-
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use schema_tool::{canonicalize, check, generate, paths, validate};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -31,7 +22,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Generate Rust types from schemas/source into kernel-contracts.
+    /// Generate contract artifacts from schemas/source (currently Rust only).
     Generate,
     /// Validate schemas, refs, manifest and generation drift without writing.
     Check,

@@ -1,9 +1,33 @@
 use crate::error::SchemaToolError;
 use crate::paths;
+use crate::resolve::{
+    require_canonical_id_base, require_canonical_schema_id, schema_id_in_id_base_namespace,
+};
+use crate::target;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+/// Supported code generation targets. Serde names are lowercase wire values.
+///
+/// There is intentionally **no** `ALL` constant: callers must not invent a closed
+/// set of targets. Target discovery walks the manifest and collects declared values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum GenerationTarget {
+    Rust,
+    Typescript,
+}
+
+impl GenerationTarget {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rust => "rust",
+            Self::Typescript => "typescript",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
@@ -22,7 +46,7 @@ pub struct ManifestEntry {
     pub domain: String,
     pub kind: String,
     pub compatibility: String,
-    pub generation_targets: Vec<String>,
+    pub generation_targets: Vec<GenerationTarget>,
     #[serde(default)]
     pub schema_version_field: Option<String>,
 }
@@ -63,6 +87,8 @@ impl SchemaRegistry {
                 manifest.draft
             );
         }
+        // id_base is the authoritative URL path namespace for every entry $id.
+        let id_base_url = require_canonical_id_base(&manifest.id_base)?;
         const ALLOWED_KINDS: &[&str] = &[
             "enum",
             "object",
@@ -85,13 +111,7 @@ impl SchemaRegistry {
                 ))
                 .into());
             }
-            if entry.generation_targets != ["rust"] {
-                return Err(SchemaToolError::msg(format!(
-                    "manifest entry {} must currently target only rust",
-                    entry.id
-                ))
-                .into());
-            }
+            target::validate_generation_targets(&entry.id, &entry.generation_targets)?;
             if !seen_ids.insert(entry.id.clone()) {
                 return Err(SchemaToolError::msg(format!(
                     "duplicate $id in manifest: {}",
@@ -134,6 +154,10 @@ impl SchemaRegistry {
                 ))
                 .into());
             }
+            require_canonical_schema_id(id, &entry.source)?;
+            require_canonical_schema_id(&entry.id, "manifest entry id")?;
+            schema_id_in_id_base_namespace(&id_base_url, id)?;
+            schema_id_in_id_base_namespace(&id_base_url, &entry.id)?;
             if let Some(field) = &entry.schema_version_field {
                 let has_field = document
                     .get("properties")

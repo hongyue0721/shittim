@@ -51,10 +51,6 @@ pub fn examples_dir(repo_root: &Path) -> PathBuf {
     schemas_dir(repo_root).join("examples")
 }
 
-pub fn generated_dir(repo_root: &Path) -> PathBuf {
-    repo_root.join("rust/crates/kernel-contracts/src/generated")
-}
-
 pub fn require_file(path: &Path) -> Result<()> {
     if !path.is_file() {
         bail!("required file missing: {}", path.display());

@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Deterministic schema generation and contract checks (Rust-only; no Node).
+# Repository gate: Node/pnpm toolchain hard gate, schema generate/check (Rust),
+# cargo fmt/clippy/test, generated-tree drift, and FILE_MANIFEST metadata check.
+# Script name is historical; this is the current Schema/Rust + Node metadata gate.
+# Requires caller's PATH to resolve Node 24.18.0 (and pnpm 11.3.0) before the long
+# Rust steps — wrong/missing Node fails early.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CARGO_MANIFEST="${ROOT}/rust/Cargo.toml"
 TOOL=(cargo run --manifest-path "${CARGO_MANIFEST}" -p schema-tool --)
+
+echo "==> Node/pnpm toolchain hard gate"
+node "${ROOT}/scripts/check-node-toolchain.mjs"
 
 echo "==> schema-tool generate (1/2)"
 "${TOOL[@]}" --repo-root "${ROOT}" generate
@@ -29,5 +36,8 @@ if ! git -C "${ROOT}" diff --exit-code -- rust/crates/kernel-contracts/src/gener
   echo "generated Rust files drifted; run schema-tool generate and commit the result" >&2
   exit 1
 fi
+
+echo "==> FILE_MANIFEST check"
+node "${ROOT}/scripts/update-file-manifest.mjs" --check
 
 echo "check-schema: ok"
