@@ -12,6 +12,7 @@ use crate::contract_model::ContractTypeId;
 use crate::error::SchemaToolError;
 use crate::json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
 use crate::manifest::SchemaRegistry;
+use crate::schema_walk::walk_schema_nodes;
 use anyhow::Result;
 use percent_encoding::percent_decode;
 use serde_json::Value;
@@ -68,7 +69,15 @@ pub fn resolve_ref<'a>(
     }
 
     let loaded = registry.get(&schema_id)?;
-    let node = schema_at_document(&loaded.document, &pointer).ok_or_else(|| {
+    registry.component_allows_ref(base_id, &schema_id)?;
+    if !registry.is_schema_node_pointer(&schema_id, &pointer)? {
+        return Err(SchemaToolError::msg(format!(
+            "$ref target is not an authoritative SchemaNode: {reference} from {base_id} -> {schema_id}#{}",
+            pointer.as_str()
+        ))
+        .into());
+    }
+    let node = raw_json_at_pointer(&loaded.document, &pointer).ok_or_else(|| {
         SchemaToolError::msg(format!(
             "unresolved $ref {reference} from {base_id} -> {schema_id}#{}",
             pointer.as_str()
@@ -83,7 +92,14 @@ pub fn resolve_ref<'a>(
 /// Locate a node by [`ContractTypeId`] inside the registry.
 pub fn schema_at<'a>(registry: &'a SchemaRegistry, type_id: &ContractTypeId) -> Result<&'a Value> {
     let loaded = registry.get(&type_id.schema_id)?;
-    schema_at_document(&loaded.document, &type_id.pointer).ok_or_else(|| {
+    if !registry.is_schema_node_pointer(&type_id.schema_id, &type_id.pointer)? {
+        return Err(SchemaToolError::msg(format!(
+            "identity is not an authoritative SchemaNode: {}",
+            type_id.display()
+        ))
+        .into());
+    }
+    raw_json_at_pointer(&loaded.document, &type_id.pointer).ok_or_else(|| {
         SchemaToolError::msg(format!(
             "schema node not found for identity {}",
             type_id.display()
@@ -92,8 +108,12 @@ pub fn schema_at<'a>(registry: &'a SchemaRegistry, type_id: &ContractTypeId) -> 
     })
 }
 
-/// Walk a document with a strict JSON Pointer.
-pub fn schema_at_document<'a>(document: &'a Value, pointer: &JsonPointer) -> Option<&'a Value> {
+/// Crate-private raw JSON lookup. This does not establish Schema identity; callers requiring a
+/// Schema must first validate the pointer against `SchemaRegistry`'s authoritative index.
+pub(crate) fn raw_json_at_pointer<'a>(
+    document: &'a Value,
+    pointer: &JsonPointer,
+) -> Option<&'a Value> {
     if pointer.is_root() {
         return Some(document);
     }
@@ -112,47 +132,43 @@ pub fn schema_at_document<'a>(document: &'a Value, pointer: &JsonPointer) -> Opt
     Some(current)
 }
 
-/// Validate that every `$ref` in the registry can be resolved.
+/// Validate every `$ref` in the registry before it is exposed to public callers.
 ///
-/// Seen-set is keyed by resolved [`ContractTypeId`] so graph cycles close on
-/// identity, not on raw `$ref` text.
-pub fn check_all_refs(registry: &SchemaRegistry) -> Result<()> {
-    for (id, loaded) in &registry.by_id {
+/// The registry is constructed only after this walk succeeds; no deferred public
+/// reference-validation phase exists.
+pub(crate) fn validate_registry_references(registry: &SchemaRegistry) -> Result<()> {
+    for (id, loaded) in registry.loaded_schemas() {
         let mut seen = BTreeSet::new();
-        walk_refs(registry, id, &loaded.document, &mut seen)?;
+        walk_reachable_refs(registry, id, &loaded.document, &mut seen)?;
     }
     Ok(())
 }
 
-fn walk_refs(
+fn walk_reachable_refs(
     registry: &SchemaRegistry,
     base_id: &str,
-    node: &Value,
+    schema: &Value,
     seen: &mut BTreeSet<ContractTypeId>,
 ) -> Result<()> {
-    match node {
-        Value::Object(map) => {
-            if let Some(Value::String(reference)) = map.get("$ref") {
-                let resolved = resolve_ref(registry, base_id, reference)?;
-                if seen.insert(resolved.type_id.clone()) {
-                    walk_refs(registry, &resolved.type_id.schema_id, resolved.node, seen)?;
-                }
-            }
-            for (key, value) in map {
-                if key == "$ref" {
-                    continue;
-                }
-                walk_refs(registry, base_id, value, seen)?;
-            }
+    walk_schema_nodes(schema, |pointer, _, node| {
+        let Some(object) = node.as_object() else {
+            return Ok(());
+        };
+        let Some(reference_value) = object.get("$ref") else {
+            return Ok(());
+        };
+        let reference = reference_value.as_str().ok_or_else(|| {
+            SchemaToolError::msg(format!(
+                "$ref must be a string at {base_id}#{}",
+                pointer.as_str()
+            ))
+        })?;
+        let resolved = resolve_ref(registry, base_id, reference)?;
+        if seen.insert(resolved.type_id.clone()) {
+            walk_reachable_refs(registry, &resolved.type_id.schema_id, resolved.node, seen)?;
         }
-        Value::Array(items) => {
-            for item in items {
-                walk_refs(registry, base_id, item, seen)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Parse a schema `$id` as an absolute URL that may serve as a join base.
@@ -238,6 +254,64 @@ pub fn require_canonical_id_base(id_base: &str) -> Result<Url> {
         );
     }
     Ok(url)
+}
+
+/// Require a canonical component namespace under root `id_base`.
+///
+/// Components are direct, unencoded path segments under the root. This deliberately
+/// rejects paths that URL serialization alone could preserve (`//`, `%xx`) because
+/// those forms make component ownership ambiguous.
+pub fn validate_component_namespace(
+    id_base: &Url,
+    component_name: &str,
+    namespace: &str,
+) -> Result<Url> {
+    let url = require_canonical_id_base(namespace)?;
+    if url.scheme() != id_base.scheme()
+        || url.host_str() != id_base.host_str()
+        || url.port_or_known_default() != id_base.port_or_known_default()
+    {
+        return Err(namespace_error(
+            id_base,
+            namespace,
+            "component authority mismatch",
+        ));
+    }
+    let path = url.path();
+    if !path.starts_with(id_base.path()) {
+        return Err(namespace_error(
+            id_base,
+            namespace,
+            "component path is outside root namespace",
+        ));
+    }
+    let remainder = &path[id_base.path().len()..];
+    let Some(segment) = remainder.strip_suffix('/') else {
+        return Err(SchemaToolError::msg(format!(
+            "component namespace must end in '/': {namespace}"
+        ))
+        .into());
+    };
+    if segment != component_name
+        || segment.is_empty()
+        || segment.contains('/')
+        || segment == "."
+        || segment == ".."
+        || segment.contains('%')
+    {
+        return Err(SchemaToolError::msg(format!(
+            "component namespace must be exactly root/<component>/ with an unencoded direct component segment: component={component_name}, namespace={namespace}"
+        )).into());
+    }
+    Ok(url)
+}
+
+/// True when `entry_id` lies under a component namespace.
+///
+/// This is distinct from root `id_base` membership and intentionally has no
+/// retained-ID exception; callers decide that exception explicitly.
+pub fn schema_id_in_namespace(namespace: &Url, entry_id: &str) -> Result<()> {
+    schema_id_in_id_base_namespace(namespace, entry_id)
 }
 
 /// True when `entry_id` is under the `id_base` URL path namespace.
@@ -338,7 +412,7 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn schema_at_document_respects_escaping_and_rejects_bad_index() {
+    fn raw_json_at_pointer_respects_escaping_and_rejects_bad_index() {
         let doc = json!({
             "properties": {
                 "a/b": {"type": "string"},
@@ -348,18 +422,18 @@ mod tests {
         });
         let p = JsonPointer::root().child("properties").child("a/b");
         assert_eq!(
-            schema_at_document(&doc, &p).and_then(|v| v.get("type")),
+            raw_json_at_pointer(&doc, &p).and_then(|v| v.get("type")),
             Some(&json!("string"))
         );
         let p2 = JsonPointer::root().child("properties").child("c~d");
         assert_eq!(
-            schema_at_document(&doc, &p2).and_then(|v| v.get("type")),
+            raw_json_at_pointer(&doc, &p2).and_then(|v| v.get("type")),
             Some(&json!("integer"))
         );
         let bad = JsonPointer::parse("/oneOf/01").unwrap();
-        assert!(schema_at_document(&doc, &bad).is_none());
+        assert!(raw_json_at_pointer(&doc, &bad).is_none());
         let dash = JsonPointer::parse("/oneOf/-").unwrap();
-        assert!(schema_at_document(&doc, &dash).is_none());
+        assert!(raw_json_at_pointer(&doc, &dash).is_none());
     }
 
     #[test]

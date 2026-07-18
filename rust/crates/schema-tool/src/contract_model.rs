@@ -362,7 +362,7 @@ pub fn lower_target_contract_graph(
 
     for schema_id in &schema_set.closure {
         let loaded = registry.get(schema_id)?;
-        audit_schema_tree(&loaded.document, schema_id, &JsonPointer::root())?;
+        audit_schema_tree(&loaded.document, schema_id)?;
         let root_id = ContractTypeId::root(schema_id);
         ensure_node_from_schema(
             registry,
@@ -400,7 +400,7 @@ fn build_catalog_facts(
     let mut embedded_sources = Vec::new();
     for schema_id in &schema_set.closure {
         let loaded = registry.get(schema_id)?;
-        embedded_sources.push((schema_id.clone(), loaded.entry.source.clone()));
+        embedded_sources.push((schema_id.clone(), loaded.source().as_str().to_owned()));
     }
     embedded_sources.sort_by(|left, right| left.0.cmp(&right.0));
 
@@ -434,9 +434,13 @@ fn envelope_discriminators_in_set(
     id_suffix: &str,
     property: &str,
 ) -> Result<Vec<String>> {
-    let Some(loaded) = registry.by_id.values().find(|loaded| {
-        loaded.entry.id.ends_with(id_suffix) && schema_set.closure.contains(&loaded.entry.id)
-    }) else {
+    let Some(loaded) = registry
+        .loaded_schemas()
+        .map(|(_, loaded)| loaded)
+        .find(|loaded| {
+            loaded.entry.id.ends_with(id_suffix) && schema_set.closure.contains(&loaded.entry.id)
+        })
+    else {
         return Ok(Vec::new());
     };
     string_enum_values(
@@ -1709,70 +1713,26 @@ fn audit_type_use_refs(
 // Schema audit / support surface
 // ---------------------------------------------------------------------------
 
-fn audit_schema_tree(schema: &Value, schema_id: &str, pointer: &JsonPointer) -> Result<()> {
-    let location = if pointer.is_root() {
-        schema_id.to_string()
-    } else {
-        format!("{schema_id}#{}", pointer.as_str())
-    };
-
-    let Some(object) = schema.as_object() else {
-        if schema.is_boolean() {
+fn audit_schema_tree(schema: &Value, schema_id: &str) -> Result<()> {
+    crate::schema_walk::walk_schema_nodes(schema, |pointer, _, node| {
+        let location = if pointer.is_root() {
+            schema_id.to_string()
+        } else {
+            format!("{schema_id}#{}", pointer.as_str())
+        };
+        let Some(object) = node.as_object() else {
+            // The support profile historically accepts boolean Schema nodes as terminal controls
+            // (for example additionalProperties/unevaluatedProperties). The authoritative walker
+            // still visits them so there is no second traversal, but there is no object keyword
+            // surface to audit.
             return Ok(());
-        }
-        return Err(unsupported(
-            "schema",
-            &location,
-            "schema node must be an object or boolean",
-        ));
-    };
-
-    // Nested non-root `$id` is fail-closed (no compound document identity rewrite).
-    if !pointer.is_root() && object.contains_key("$id") {
-        return Err(SchemaToolError::msg(format!(
-            "nested non-root $id is not supported at {location}"
-        ))
-        .into());
-    }
-
-    let allows_unevaluated_properties = object
-        .get("oneOf")
-        .and_then(Value::as_array)
-        .is_some_and(|variants| nullable_one_of_indices(variants).is_none());
-    validate_supported_schema_node(schema, &location, allows_unevaluated_properties)?;
-
-    for container in ["properties", "$defs"] {
-        if let Some(children) = object.get(container).and_then(Value::as_object) {
-            for (name, child) in children {
-                let child_ptr = pointer.child(container).child(name);
-                audit_schema_tree(child, schema_id, &child_ptr)?;
-            }
-        }
-    }
-    for keyword in [
-        "items",
-        "additionalProperties",
-        "unevaluatedProperties",
-        "if",
-        "then",
-        "else",
-    ] {
-        if let Some(child) = object.get(keyword) {
-            if keyword != "additionalProperties" || !child.is_boolean() {
-                let child_ptr = pointer.child(keyword);
-                audit_schema_tree(child, schema_id, &child_ptr)?;
-            }
-        }
-    }
-    for keyword in ["oneOf", "allOf"] {
-        if let Some(children) = object.get(keyword).and_then(Value::as_array) {
-            for (index, child) in children.iter().enumerate() {
-                let child_ptr = pointer.child(keyword).index(index);
-                audit_schema_tree(child, schema_id, &child_ptr)?;
-            }
-        }
-    }
-    Ok(())
+        };
+        let allows_unevaluated_properties = object
+            .get("oneOf")
+            .and_then(Value::as_array)
+            .is_some_and(|variants| nullable_one_of_indices(variants).is_none());
+        validate_supported_schema_node(node, &location, allows_unevaluated_properties)
+    })
 }
 
 fn validate_supported_schema_node(
@@ -2152,11 +2112,11 @@ mod tests {
     }
 
     #[test]
-    fn schema_at_document_roundtrip_with_pointer() {
-        use crate::resolve::schema_at_document;
+    fn raw_json_pointer_roundtrip_for_internal_shape_helper() {
+        use crate::resolve::raw_json_at_pointer;
         let doc = json!({"$defs": {"a": {"type": "string", "enum": ["x"]}}});
         let id = ContractTypeId::root("https://x").child("$defs").child("a");
-        let node = schema_at_document(&doc, &id.pointer).unwrap();
+        let node = raw_json_at_pointer(&doc, &id.pointer).unwrap();
         assert!(is_string_enum(node));
     }
 }

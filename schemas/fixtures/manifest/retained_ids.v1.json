@@ -1,0 +1,251 @@
+{
+  "fixture_version": 1,
+  "entries": [
+    {
+      "id": "https://schemas.shittim.local/v1/audit/audit_record.json",
+      "component": "audit",
+      "source": "schemas/source/audit/audit_record.v1.json",
+      "source_sha256": "16c0ae3f9239e576300ada9a584f3324332bafd0788211721b7deca51506775b"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/action_status.json",
+      "component": "common",
+      "source": "schemas/source/common/action_status.v1.json",
+      "source_sha256": "175885c1711f3369d0e03950fcb1f191bb42d70c7aa933ff0199593b04c0d402"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/actor.json",
+      "component": "common",
+      "source": "schemas/source/common/actor.v1.json",
+      "source_sha256": "d04ff41d74698ad34143e9d72927b2c55bab9144a7f6dbffc1d1bf9f7bbac733"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/causation_ref.json",
+      "component": "common",
+      "source": "schemas/source/common/causation_ref.v1.json",
+      "source_sha256": "661761be8e94dd0324bdd360ec5a46579c006405f45041752b06ea5be0d5ce07"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/content_origin.json",
+      "component": "common",
+      "source": "schemas/source/common/content_origin.v1.json",
+      "source_sha256": "2fb1831a3c824e094d44f2734068d20226b6a7cc2c36ccba02213e28687b9d6d"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/entry_point.json",
+      "component": "common",
+      "source": "schemas/source/common/entry_point.v1.json",
+      "source_sha256": "f64885ffa868c7b95f07c6ac8d9ecec4290d2994c7d58f5d91c1ae6ffaaa5b76"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/side_effect_class.json",
+      "component": "common",
+      "source": "schemas/source/common/side_effect_class.v1.json",
+      "source_sha256": "12a11ad9128418792cbc257d61736b95a4de629e6b30fb2aa8fd6a6ccd27b61c"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/common/task_status.json",
+      "component": "common",
+      "source": "schemas/source/common/task_status.v1.json",
+      "source_sha256": "179c2428fb7c632bbba828d695e07a691e9896a0650eda859b74c2e88d8af3ac"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/event_envelope.json",
+      "component": "event",
+      "source": "schemas/source/event/event_envelope.v1.json",
+      "source_sha256": "ebb22cb33afa7860b16778ec0fbd7383230f88501c08b3969a4517d4cd3a284b"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json",
+      "component": "event",
+      "source": "schemas/source/event/stop_fence_activated_payload.v1.json",
+      "source_sha256": "75ee4f5929491b1934b548364746439a46591c2fa2916a60248da05a41dee3be"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/task_created_payload.json",
+      "component": "event",
+      "source": "schemas/source/event/task_created_payload.v1.json",
+      "source_sha256": "22dca3b0e9a6a080eff71ecb70131050ccd21cb2d5220e7de454f7d264d7e823"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/event/task_state_changed_payload.json",
+      "component": "event",
+      "source": "schemas/source/event/task_state_changed_payload.v1.json",
+      "source_sha256": "dba3c8a595e11a17ab070eb3bdd743b21bb0223eda5b9bc6406e82479b2bb4ed"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/command_envelope.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/command_envelope.v1.json",
+      "source_sha256": "2c7b1ec8def1df43a46d38b29a55bfea7b658e7b0b8fccaec183a06d60bd5bcd"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/error.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/error.v1.json",
+      "source_sha256": "9e6f2de43a40f66b75475d589189a6235a045349bdf258c2e140e7109a0bbfbf"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_poll_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/event_poll_request.v1.json",
+      "source_sha256": "76e427853f4f6baad525bad7f45ea0e3f8ee49b7f50aa0bdb410fa8393173277"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_poll_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/event_poll_response.v1.json",
+      "source_sha256": "dc990c9196f084d66df5cd541848bc0cfa8b41a028916922dab2c1154e09d4b0"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/event_subscribe_request.v1.json",
+      "source_sha256": "0ddef442606779c16bbc87fd440f9bc3aa25b76cb956dc5e0b8e630facf8fc46"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/event_subscribe_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/event_subscribe_response.v1.json",
+      "source_sha256": "321b514df47cc10d770f3177953f9f5cda347cc895d101d8579fd3702ca94537"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/query_envelope.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/query_envelope.v1.json",
+      "source_sha256": "a40c055975c8f7d88addcaa60e60edcc38514f968fa47657760856af1ade61ed"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/response_envelope.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/response_envelope.v1.json",
+      "source_sha256": "b1de6d6c1bcfb9cc25b2b2dde71df3cea9894c39d2f7c5250579a452b0979306"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_activate_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/stop_activate_request.v1.json",
+      "source_sha256": "ed7409516abf097c37eaf096f5de546b9d1db56f5798b92dafdcd8a44b409c18"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_activate_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/stop_activate_response.v1.json",
+      "source_sha256": "310845e7b9a43be4b4f4899640699da588aeb0292c57dc6cef4f69eb125aa325"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_status_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/stop_status_request.v1.json",
+      "source_sha256": "1e2eb443e9951553ecefd9978b77da08f37553e558e428ba715d991775250e9e"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/stop_status_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/stop_status_response.v1.json",
+      "source_sha256": "9be0a29551911611b20573f95432a074762d8e89eb15e27129533a50c9d08347"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/system_ping_request.v1.json",
+      "source_sha256": "19562d5343f5118025b33b9ad953512c2e90263f9c1641909bc1090fec30e3ec"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/system_ping_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/system_ping_response.v1.json",
+      "source_sha256": "474df6226babd6d44fe1cf9b19be96ccf15b0cec380ba25834c5c9fd6265e17b"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_create_request.v1.json",
+      "source_sha256": "6871de90f5caa48b006a9fe67efdd6b9c4997aa755190f44ee118ce496f08daf"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_create_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_create_response.v1.json",
+      "source_sha256": "759c4a27ce1d179c376502f1ace96c7337b362542830be2c228830a07e1ef0c8"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_get_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_get_request.v1.json",
+      "source_sha256": "ccedadc7bae76a038a7e5dbf489298096756bc0e6e4bf82caf872fabc7262010"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_get_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_get_response.v1.json",
+      "source_sha256": "fddf9e4b9af0377f96a667897fff2bbe9d755f87afc648475cee47b96de7783c"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_list_request.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_list_request.v1.json",
+      "source_sha256": "5d1004c8f79d47cfb2d3ea413e6f7587d5585c41afa56f11883c443323f1eb91"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/kcp/task_list_response.json",
+      "component": "kcp",
+      "source": "schemas/source/kcp/task_list_response.v1.json",
+      "source_sha256": "04e60c45ccbd122a359487d19058d58f9d615f875069ba6fab7389b526e3e4bb"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/approval_record.json",
+      "component": "policy",
+      "source": "schemas/source/policy/approval_record.v1.json",
+      "source_sha256": "1f2001fb54002480697171bb9e8a57a06e8d7d540275a119df70333684f54171"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/permission_decision.json",
+      "component": "policy",
+      "source": "schemas/source/policy/permission_decision.v1.json",
+      "source_sha256": "187541031618437819b65eb8251e606d7329d7fdb56de7131284490fd4123a35"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/policy/policy_rule.json",
+      "component": "policy",
+      "source": "schemas/source/policy/policy_rule.v1.json",
+      "source_sha256": "04b0ce5f82fa9ffe367d3d91c4d3f9b8660e01bd4a0e668eadf354c29a64259c"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/action_request.json",
+      "component": "task",
+      "source": "schemas/source/task/action_request.v1.json",
+      "source_sha256": "127146d34cead4a1b6251a3e5eb36b79278809bb203506c82b0576409451cf5e"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/recovery_attempt_ref.json",
+      "component": "task",
+      "source": "schemas/source/task/recovery_attempt_ref.v1.json",
+      "source_sha256": "354bbdf1eba4112c36a8dc076911480b43f42f0e4789256637be903b1449b3f4"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/recovery_decision_candidate.json",
+      "component": "task",
+      "source": "schemas/source/task/recovery_decision_candidate.v1.json",
+      "source_sha256": "770104ad40f588eb34a49a78df11ffd7de0f7d81155bccee581ca43b80fe53b0"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/task_scope.json",
+      "component": "task",
+      "source": "schemas/source/task/task_scope.v1.json",
+      "source_sha256": "41a5fca2d4e7c241353775e1b7f4772b9a7e98aa59b661461fa1c11807c98a8d"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/task_spec.json",
+      "component": "task",
+      "source": "schemas/source/task/task_spec.v1.json",
+      "source_sha256": "5635b224ab0e0c441508669dafb04c39b0f442d16e20213ad22eed2c7db93b7f"
+    },
+    {
+      "id": "https://schemas.shittim.local/v1/task/verification_result.json",
+      "component": "task",
+      "source": "schemas/source/task/verification_result.v1.json",
+      "source_sha256": "f0732a81bdf352c35bd2f88c74ff706c5e1ca6548af9948b2fcdc352d3635d60"
+    }
+  ]
+}

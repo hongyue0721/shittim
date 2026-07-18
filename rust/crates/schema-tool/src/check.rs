@@ -2,14 +2,12 @@ use crate::codegen::{
     artifact_absolute_path, check_artifact_file_set, ensure_trailing_newline, plan_artifacts,
 };
 use crate::manifest::SchemaRegistry;
-use crate::resolve;
 use crate::validate;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
 pub fn run(repo_root: &Path) -> Result<()> {
     let registry = SchemaRegistry::load(repo_root)?;
-    resolve::check_all_refs(&registry)?;
     validate_schema_documents(&registry)?;
 
     let plan = plan_artifacts(&registry)?;
@@ -39,14 +37,14 @@ pub fn run(repo_root: &Path) -> Result<()> {
 
     println!(
         "schema-tool check ok: {} schemas, Draft 2020-12 meta-validation, refs, catalog and generated types stable",
-        registry.manifest.schemas.len()
+        registry.manifest().schemas.len()
     );
     Ok(())
 }
 
 fn validate_schema_documents(registry: &SchemaRegistry) -> Result<()> {
-    for (id, loaded) in &registry.by_id {
-        jsonschema::draft202012::meta::validate(&loaded.document).map_err(|error| {
+    for (id, loaded) in registry.loaded_schemas() {
+        jsonschema::draft202012::meta::validate(loaded.document()).map_err(|error| {
             anyhow::anyhow!("schema {id} fails Draft 2020-12 meta-schema: {error}")
         })?;
     }

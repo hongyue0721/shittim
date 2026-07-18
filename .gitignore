@@ -34,3 +34,4 @@ lcov.info
 # Generated scratch
 /tmp/
 *.tmp
+/.schema-tool-generate.lock

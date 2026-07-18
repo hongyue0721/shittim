@@ -73,7 +73,7 @@ fn manifest_entry(id: &str, title: &str, source: &str) -> serde_json::Value {
         "title": title,
         "version": 1,
         "source": source,
-        "domain": "kcp",
+        "component": "kcp",
         "kind": "object",
         "compatibility": "test-only",
         "generation_targets": ["rust"],
@@ -153,7 +153,7 @@ fn union_probe_schema(id: &str) -> serde_json::Value {
 
 fn lower_union_probe(mutator: impl FnOnce(&mut serde_json::Value)) -> String {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/v1/kcp/tagged_union_invalid_probe.json";
+    let id = "https://schemas.shittim.local/kcp/test/tagged_union_invalid_probe.json";
     let mut schema = union_probe_schema(id);
     mutator(&mut schema);
     write_json(
@@ -184,10 +184,10 @@ fn union_branch(schema: &mut serde_json::Value, index: usize) -> &mut serde_json
 #[test]
 fn tagged_unions_are_neutral_strict_and_serde_faithful() {
     let temp = temporary_repo();
-    let probe_id = "https://schemas.shittim.local/v1/kcp/tagged_union_probe.json";
-    let branch_id = "https://schemas.shittim.local/v1/kcp/tagged_union_ref_branch.json";
-    let nested_id = "https://schemas.shittim.local/v1/kcp/tagged_union_nested_probe.json";
-    let recursive_id = "https://schemas.shittim.local/v1/kcp/tagged_union_recursive_probe.json";
+    let probe_id = "https://schemas.shittim.local/kcp/test/tagged_union_probe.json";
+    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_ref_branch.json";
+    let nested_id = "https://schemas.shittim.local/kcp/test/tagged_union_nested_probe.json";
+    let recursive_id = "https://schemas.shittim.local/kcp/test/tagged_union_recursive_probe.json";
 
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_ref_branch.v1.json"),
@@ -467,7 +467,7 @@ mod tagged_union_raw_json_contracts {
 
 fn assert_nullable_and_non_discriminated_oneof_follow_distinct_contract_paths() {
     let temp = temporary_repo();
-    let nullable_id = "https://schemas.shittim.local/v1/kcp/nullable_oneof_probe.json";
+    let nullable_id = "https://schemas.shittim.local/kcp/test/nullable_oneof_probe.json";
     let mut nullable = union_probe_schema(nullable_id);
     nullable["properties"]["value"] = json!({
         "oneOf": [
@@ -533,8 +533,8 @@ fn assert_tagged_union_rejects_unresolved_and_cross_target_ref_branches() {
     );
 
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/v1/kcp/tagged_union_cross_target_probe.json";
-    let branch_id = "https://schemas.shittim.local/v1/kcp/tagged_union_cross_target_branch.json";
+    let id = "https://schemas.shittim.local/kcp/test/tagged_union_cross_target_probe.json";
+    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_cross_target_branch.json";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_cross_target_branch.v1.json"),
         json!({
@@ -581,7 +581,7 @@ fn assert_tagged_union_does_not_change_envelope_bindings() {
     let temp = temporary_repo();
     add_valid_tagged_union_probe(
         &temp,
-        "https://schemas.shittim.local/v1/kcp/tagged_union_binding_probe.json",
+        "https://schemas.shittim.local/kcp/test/tagged_union_binding_probe.json",
         json!(["rust"]),
     );
     let after = lower_and_render_rust(&temp)
@@ -600,7 +600,7 @@ fn assert_cli_generation_fails_without_partial_artifacts_for_tagged_union_target
     let ts_temp = temporary_repo();
     add_valid_tagged_union_probe(
         &ts_temp,
-        "https://schemas.shittim.local/v1/kcp/tagged_union_ts_probe.json",
+        "https://schemas.shittim.local/kcp/test/tagged_union_ts_probe.json",
         json!(["rust", "typescript"]),
     );
     let before = generated_artifact_bytes(&ts_temp);
@@ -619,7 +619,7 @@ fn assert_cli_generation_fails_without_partial_artifacts_for_tagged_union_target
     let invalid_temp = temporary_repo();
     add_valid_tagged_union_probe(
         &invalid_temp,
-        "https://schemas.shittim.local/v1/kcp/tagged_union_invalid_cli_probe.json",
+        "https://schemas.shittim.local/kcp/test/tagged_union_invalid_cli_probe.json",
         json!(["rust"]),
     );
     let schema_path = invalid_temp.join("schemas/source/kcp/tagged_union_cli_probe.v1.json");
@@ -789,8 +789,8 @@ fn unevaluated_properties_is_tagged_union_only_and_preserves_canonical_ref_objec
     assert!(nullable_error.contains("only supported on a non-null tagged-union classifier"));
 
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/v1/kcp/tagged_union_uep_ref_probe.json";
-    let branch_id = "https://schemas.shittim.local/v1/kcp/tagged_union_uep_ref_branch.json";
+    let id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_ref_probe.json";
+    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_ref_branch.json";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_uep_ref_branch.v1.json"),
         json!({
@@ -899,9 +899,9 @@ mod uep_ref_branch_policy_contracts {
 #[test]
 fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/v1/kcp/tagged_union_uep_explicit_open_probe.json";
+    let id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_explicit_open_probe.json";
     let branch_id =
-        "https://schemas.shittim.local/v1/kcp/tagged_union_uep_explicit_open_branch.json";
+        "https://schemas.shittim.local/kcp/test/tagged_union_uep_explicit_open_branch.json";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_uep_explicit_open_branch.v1.json"),
         json!({
@@ -946,7 +946,7 @@ fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
 #[test]
 fn tagged_union_rejects_open_branches_and_non_bijective_tags() {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/v1/kcp/invalid_tagged_union.json";
+    let id = "https://schemas.shittim.local/kcp/test/invalid_tagged_union.json";
     write_json(
         &temp.join("schemas/source/kcp/invalid_tagged_union.v1.json"),
         json!({

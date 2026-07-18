@@ -1,5 +1,6 @@
 //! schema-tool CLI smoke tests (generate twice, check, validate examples).
 
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -35,7 +36,17 @@ fn run_tool_for_root(args: &[&str], root: &Path) -> (i32, String, String) {
 }
 
 fn run_tool(args: &[&str]) -> (i32, String, String) {
+    let _guard = production_repo_generate_guard();
     run_tool_for_root(args, &repo_root())
+}
+
+fn production_repo_generate_guard() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+    static GUARD: OnceLock<Mutex<()>> = OnceLock::new();
+    GUARD
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("production repo generate test guard")
 }
 
 fn all_generated_artifact_bytes(root: &Path) -> Vec<(String, Vec<u8>)> {
@@ -98,7 +109,7 @@ fn generate_is_byte_stable_across_two_runs() {
 #[test]
 fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
     let temp = temporary_repo("dynamic-typed-binding");
-    let payload_id = "https://schemas.shittim.local/v1/kcp/test_dynamic_request.json";
+    let payload_id = "https://schemas.shittim.local/kcp/test/test_dynamic_request.json";
     let payload_source = "schemas/source/kcp/test_dynamic_request.v1.json";
     write_json(
         &temp.join(payload_source),
@@ -125,7 +136,7 @@ fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
             "title": "TestDynamicRequest",
             "version": 1,
             "source": payload_source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -266,7 +277,7 @@ fn ref_validation_siblings_fail_closed_instead_of_being_ignored() {
 #[test]
 fn optional_non_null_fields_emit_skip_serializing_if() {
     let temp = temporary_repo("optional-non-null-serde");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/test_optional_nullability.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/test_optional_nullability.json";
     let schema_source = "schemas/source/kcp/test_optional_nullability.v1.json";
     write_json(
         &temp.join(schema_source),
@@ -308,7 +319,7 @@ fn optional_non_null_fields_emit_skip_serializing_if() {
             "title": "TestOptionalNullability",
             "version": 1,
             "source": schema_source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -494,11 +505,7 @@ fn check_rejects_meta_schema_invalid_document() {
         serde_json::from_str(&std::fs::read_to_string(&actor_path).expect("read actor schema"))
             .expect("parse actor schema");
     actor["required"] = serde_json::json!("schema_version");
-    std::fs::write(
-        &actor_path,
-        serde_json::to_vec_pretty(&actor).expect("serialize invalid schema"),
-    )
-    .expect("write invalid schema");
+    write_json(&actor_path, &actor);
 
     let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
     assert_ne!(code, 0, "meta-schema-invalid document must fail check");
@@ -510,6 +517,7 @@ fn check_rejects_meta_schema_invalid_document() {
 }
 
 fn temporary_repo(label: &str) -> PathBuf {
+    let _guard = production_repo_generate_guard();
     let temp = std::env::temp_dir().join(format!("shittim-{label}-{}", std::process::id()));
     if temp.exists() {
         std::fs::remove_dir_all(&temp).expect("remove old temp repo");
@@ -530,6 +538,41 @@ fn write_json(path: &Path, value: &serde_json::Value) {
     let mut bytes = serde_json::to_vec_pretty(value).expect("serialize JSON");
     bytes.push(b'\n');
     std::fs::write(path, bytes).expect("write JSON file");
+    refresh_retained_source_hash(path);
+}
+
+fn refresh_retained_source_hash(source_path: &Path) {
+    let Some(root) = source_path.ancestors().find(|ancestor| {
+        ancestor.join("schemas/manifest.json").is_file()
+            && ancestor
+                .join("schemas/fixtures/manifest/retained_ids.v1.json")
+                .is_file()
+    }) else {
+        return;
+    };
+    let Ok(relative) = source_path.strip_prefix(root) else {
+        return;
+    };
+    let relative = relative.to_string_lossy().replace('\\', "/");
+    if !relative.starts_with("schemas/source/") {
+        return;
+    }
+    let baseline_path = root.join("schemas/fixtures/manifest/retained_ids.v1.json");
+    let mut baseline = read_json(&baseline_path);
+    let Some(entry) = baseline["entries"]
+        .as_array_mut()
+        .expect("baseline entries")
+        .iter_mut()
+        .find(|entry| entry["source"].as_str() == Some(relative.as_str()))
+    else {
+        return;
+    };
+    let bytes = std::fs::read(source_path).expect("read changed retained source");
+    entry["source_sha256"] = serde_json::json!(hex::encode(Sha256::digest(bytes)));
+    let mut baseline_bytes = serde_json::to_vec_pretty(&baseline).expect("serialize baseline");
+    baseline_bytes.push(b'\n');
+    std::fs::write(baseline_path, baseline_bytes)
+        .expect("update retained baseline hash for coherent test fixture mutation");
 }
 
 fn mutate_command_envelope(temp: &Path, mutate: impl FnOnce(&mut serde_json::Value)) {
@@ -550,6 +593,29 @@ fn assert_generate_fails(temp: &Path, expected: &str) {
     );
 }
 
+fn assert_registry_load_fails_for_all_commands(temp: &Path, expected: &str) {
+    let instance = temp.join("instance.json");
+    write_json(&instance, &serde_json::json!({}));
+    for args in [
+        vec!["generate"],
+        vec!["check"],
+        vec![
+            "validate",
+            "--schema",
+            "https://schemas.shittim.local/v1/common/actor.json",
+            "--instance",
+            instance.to_str().expect("UTF-8 instance path"),
+        ],
+    ] {
+        let (code, stdout, stderr) = run_tool_for_root(&args, temp);
+        assert_ne!(code, 0, "{args:?} unexpectedly passed: {stdout}");
+        assert!(
+            stderr.contains(expected),
+            "expected {expected:?} for {args:?} in: {stderr}"
+        );
+    }
+}
+
 fn copy_tree(source: &Path, target: &Path) {
     for entry in walkdir::WalkDir::new(source)
         .into_iter()
@@ -560,7 +626,18 @@ fn copy_tree(source: &Path, target: &Path) {
                     part.as_os_str().to_str(),
                     Some("target" | "node_modules" | ".git")
                 )
-            })
+            }) && !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".schema-tool-")
+                && !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".schema-tool-stage-")
+                && !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".schema-tool-backup-")
         })
     {
         let relative = entry.path().strip_prefix(source).expect("relative path");
@@ -734,8 +811,8 @@ fn generation_target_closure_rejects_missing_dependency_target() {
 #[test]
 fn relative_external_ref_missing_target_fails_closure() {
     let temp = temporary_repo("relative-external-missing-target");
-    let parent_id = "https://schemas.shittim.local/v1/kcp/rel_parent.json";
-    let child_id = "https://schemas.shittim.local/v1/kcp/rel_child.json";
+    let parent_id = "https://schemas.shittim.local/kcp/test/rel_parent.json";
+    let child_id = "https://schemas.shittim.local/kcp/test/rel_child.json";
     let parent_source = "schemas/source/kcp/rel_parent.v1.json";
     let child_source = "schemas/source/kcp/rel_child.v1.json";
 
@@ -779,7 +856,7 @@ fn relative_external_ref_missing_target_fails_closure() {
         "title": "RelParent",
         "version": 1,
         "source": parent_source,
-        "domain": "kcp",
+        "component": "kcp",
         "kind": "object",
         "compatibility": "test-only",
         "generation_targets": ["rust"],
@@ -791,7 +868,7 @@ fn relative_external_ref_missing_target_fails_closure() {
         "title": "RelChild",
         "version": 1,
         "source": child_source,
-        "domain": "kcp",
+        "component": "kcp",
         "kind": "object",
         "compatibility": "test-only",
         "generation_targets": ["typescript"],
@@ -922,11 +999,127 @@ fn mixed_target_closure_requires_dependency_on_same_target() {
 }
 
 #[test]
+fn schema_node_walker_covers_all_locations_and_skips_instance_data() {
+    type SchemaMutation = fn(&mut serde_json::Value);
+    let cases: &[(&str, SchemaMutation)] = &[
+        ("properties", |root| {
+            root["properties"]["walk_test"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("patternProperties", |root| {
+            root["patternProperties"] = serde_json::json!({"^x$": {"$dynamicRef": "#bad"}})
+        }),
+        ("dependentSchemas", |root| {
+            root["dependentSchemas"] = serde_json::json!({"x": {"$dynamicRef": "#bad"}})
+        }),
+        ("$defs", |root| {
+            root["$defs"]["walk_test"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("definitions", |root| {
+            root["definitions"] = serde_json::json!({"walk_test": {"$dynamicRef": "#bad"}})
+        }),
+        ("additionalProperties", |root| {
+            root["additionalProperties"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("unevaluatedProperties", |root| {
+            root["unevaluatedProperties"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("propertyNames", |root| {
+            root["propertyNames"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("items", |root| {
+            root["items"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("contains", |root| {
+            root["contains"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("unevaluatedItems", |root| {
+            root["unevaluatedItems"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("contentSchema", |root| {
+            root["contentSchema"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("not", |root| {
+            root["not"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("if", |root| {
+            root["if"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("then", |root| {
+            root["then"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("else", |root| {
+            root["else"] = serde_json::json!({"$dynamicRef": "#bad"})
+        }),
+        ("prefixItems", |root| {
+            root["prefixItems"] = serde_json::json!([{"$dynamicRef": "#bad"}])
+        }),
+        ("allOf", |root| {
+            root["allOf"] = serde_json::json!([{"$dynamicRef": "#bad"}])
+        }),
+        ("anyOf", |root| {
+            root["anyOf"] = serde_json::json!([{"$dynamicRef": "#bad"}])
+        }),
+        ("oneOf", |root| {
+            root["oneOf"] = serde_json::json!([{"$dynamicRef": "#bad"}])
+        }),
+    ];
+
+    for (keyword, mutate) in cases {
+        let temp = temporary_repo(&format!("schema-walk-{keyword}"));
+        let actor_path = temp.join("schemas/source/common/actor.v1.json");
+        let mut actor = read_json(&actor_path);
+        mutate(&mut actor);
+        write_json(&actor_path, &actor);
+        assert_registry_load_fails_for_all_commands(&temp, "$dynamicRef");
+        std::fs::remove_dir_all(temp).expect("clean temp repo");
+    }
+
+    let temp = temporary_repo("schema-walk-instance-values");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut actor = read_json(&actor_path);
+    actor["const"] = serde_json::json!({"$ref": "https://instance.invalid/const"});
+    actor["default"] = serde_json::json!({"$dynamicRef": "instance"});
+    actor["examples"] = serde_json::json!([{"$id": "instance"}]);
+    actor["enum"] = serde_json::json!([{"$ref": "https://instance.invalid/enum"}]);
+    actor["properties"]["$ref"] = serde_json::json!({"type": "string"});
+    actor["properties"]["$id"] = serde_json::json!({"type": "string"});
+    actor["properties"]["$schema"] = serde_json::json!({"type": "string"});
+    actor["properties"]["$dynamicRef"] = serde_json::json!({"type": "string"});
+    write_json(&actor_path, &actor);
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0, "shape changes may fail restricted codegen");
+    assert!(
+        !stderr.contains("instance.invalid")
+            && !stderr.contains("unsupported JSON Schema identity/ref keyword"),
+        "instance data/property names must not be audited as Schema keywords: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn reserved_property_name_value_still_enforces_real_ref_gate() {
+    let temp = temporary_repo("reserved-property-real-ref");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut actor = read_json(&actor_path);
+    actor["properties"]["$ref"] = serde_json::json!({
+        "$ref": "https://schemas.shittim.local/v1/task/action_request.json"
+    });
+    write_json(&actor_path, &actor);
+    let (code, _stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0);
+    assert!(
+        stderr.contains("component") && stderr.contains("allowed"),
+        "real ref in property named $ref must pass through component gate: {stderr}"
+    );
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
 fn deep_local_fragment_external_ref_joins_target_closure() {
     let temp = temporary_repo("deep-fragment-external");
     // Create parent (rust) with $defs that $ref an external child; child must list rust.
-    let parent_id = "https://schemas.shittim.local/v1/kcp/deep_parent.json";
-    let child_id = "https://schemas.shittim.local/v1/kcp/deep_child.json";
+    let parent_id = "https://schemas.shittim.local/kcp/test/deep_parent.json";
+    let child_id = "https://schemas.shittim.local/kcp/test/deep_child.json";
     let parent_source = "schemas/source/kcp/deep_parent.v1.json";
     let child_source = "schemas/source/kcp/deep_child.v1.json";
     write_json(
@@ -977,7 +1170,7 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
         "title": "DeepParent",
         "version": 1,
         "source": parent_source,
-        "domain": "kcp",
+        "component": "kcp",
         "kind": "kcp_request",
         "compatibility": "test-only",
         "generation_targets": ["rust"],
@@ -988,7 +1181,7 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
         "title": "DeepChild",
         "version": 1,
         "source": child_source,
-        "domain": "kcp",
+        "component": "kcp",
         "kind": "kcp_request",
         "compatibility": "test-only",
         "generation_targets": ["rust"],
@@ -1037,8 +1230,8 @@ fn cyclic_refs_do_not_hang_and_generate() {
     // Self-cycle via optional property $ref to self is enough to exercise seen-set.
     // Restricted codegen forbids most recursive shapes if they aren't simple $ref roots.
     // Use two schemas that $ref each other at the root property level.
-    let a_id = "https://schemas.shittim.local/v1/kcp/cycle_a.json";
-    let b_id = "https://schemas.shittim.local/v1/kcp/cycle_b.json";
+    let a_id = "https://schemas.shittim.local/kcp/test/cycle_a.json";
+    let b_id = "https://schemas.shittim.local/kcp/test/cycle_b.json";
     let a_source = "schemas/source/kcp/cycle_a.v1.json";
     let b_source = "schemas/source/kcp/cycle_b.v1.json";
     write_json(
@@ -1080,7 +1273,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
             "title": title,
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1139,7 +1332,7 @@ fn off_manifest_source_file_fails_load() {
         &temp.join("schemas/source/kcp/not_in_manifest.v1.json"),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$id": "https://schemas.shittim.local/v1/kcp/not_in_manifest.json",
+            "$id": "https://schemas.shittim.local/kcp/test/not_in_manifest.json",
             "title": "NotInManifest",
             "type": "object",
             "additionalProperties": false,
@@ -1158,8 +1351,8 @@ fn off_manifest_source_file_fails_load() {
 #[test]
 fn same_title_collision_fails_with_both_identities() {
     let temp = temporary_repo("title-collision");
-    let a_id = "https://schemas.shittim.local/v1/kcp/title_collision_a.json";
-    let b_id = "https://schemas.shittim.local/v1/kcp/title_collision_b.json";
+    let a_id = "https://schemas.shittim.local/kcp/test/title_collision_a.json";
+    let b_id = "https://schemas.shittim.local/kcp/test/title_collision_b.json";
     let a_source = "schemas/source/kcp/title_collision_a.v1.json";
     let b_source = "schemas/source/kcp/title_collision_b.v1.json";
     for (id, source) in [(a_id, a_source), (b_id, b_source)] {
@@ -1188,7 +1381,7 @@ fn same_title_collision_fails_with_both_identities() {
             "title": "SharedTitle",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1227,7 +1420,7 @@ fn nested_hint_collision_fails_with_both_identities() {
     // Covered by same_title_collision. Here force two nested const types under one schema
     // with property names that PascalCase collide ("status" and "Status") — JSON property
     // names are case-sensitive; "status" and "Status" both become Status under the parent.
-    let schema_id = "https://schemas.shittim.local/v1/kcp/nested_hint_collision.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/nested_hint_collision.json";
     let source = "schemas/source/kcp/nested_hint_collision.v1.json";
     write_json(
         &temp.join(source),
@@ -1255,7 +1448,7 @@ fn nested_hint_collision_fails_with_both_identities() {
             "title": "NestedHintCollision",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1385,7 +1578,7 @@ fn response_envelope_remains_untyped() {
 #[test]
 fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
     let temp = temporary_repo("string-enum-order");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/test_string_enum_order.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/test_string_enum_order.json";
     let source = "schemas/source/kcp/test_string_enum_order.v1.json";
     write_json(
         &temp.join(source),
@@ -1407,7 +1600,7 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
             "title": "TestStringEnumOrder",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1468,7 +1661,7 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
 #[test]
 fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
     let temp = temporary_repo("string-enum-wire-collision");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/test_string_enum_collision.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/test_string_enum_collision.json";
     let source = "schemas/source/kcp/test_string_enum_collision.v1.json";
     write_json(
         &temp.join(source),
@@ -1490,7 +1683,7 @@ fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
             "title": "TestStringEnumCollision",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1523,7 +1716,7 @@ fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
 #[test]
 fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
     let temp = temporary_repo("nullable-string-enum-all");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/test_nullable_string_enum.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/test_nullable_string_enum.json";
     let source = "schemas/source/kcp/test_nullable_string_enum.v1.json";
     write_json(
         &temp.join(source),
@@ -1553,7 +1746,7 @@ fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
             "title": "TestNullableStringEnum",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["rust"],

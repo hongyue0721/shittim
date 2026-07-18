@@ -108,8 +108,11 @@ impl ArtifactPlan {
             .into());
         }
         let roots: BTreeSet<String> = artifact_roots.into_iter().collect();
-        if roots.is_empty() {
-            bail!("artifact plan requires at least one artifact root");
+        if roots.len() != 1 {
+            bail!(
+                "artifact transaction currently supports exactly one artifact root; got {} ({roots:?})",
+                roots.len()
+            );
         }
         validate_artifact_paths(&artifacts, &roots)?;
         let planned_directory_prefixes = compute_planned_directory_prefixes(&artifacts, &roots);
@@ -451,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn try_new_rejects_traversal_duplicates_absolute_and_prefix_tricks() {
+    fn try_new_rejects_unsafe_paths_and_non_single_root_plans() {
         assert!(ArtifactPlan::try_new(vec![artifact("out/../secret.rs")], ["out".into()]).is_err());
 
         assert!(ArtifactPlan::try_new(
@@ -487,6 +490,13 @@ mod tests {
         assert!(ArtifactPlan::try_new(
             vec![artifact("rust/crates/kernel-contracts/src/other/types.rs")],
             [root.into()]
+        )
+        .is_err());
+
+        assert!(ArtifactPlan::try_new(vec![artifact("out/a.rs")], []).is_err());
+        assert!(ArtifactPlan::try_new(
+            vec![artifact("out/a.rs"), artifact("other/b.rs")],
+            ["out".into(), "other".into()]
         )
         .is_err());
     }

@@ -5,6 +5,7 @@
 use crate::error::SchemaToolError;
 use crate::manifest::{GenerationTarget, SchemaRegistry};
 use crate::resolve::resolve_ref;
+use crate::schema_walk::walk_schema_nodes;
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -62,7 +63,7 @@ pub fn validate_generation_targets(entry_id: &str, targets: &[GenerationTarget])
 /// manifest (no closed `ALL` enum walk).
 pub fn build_target_plan(registry: &SchemaRegistry) -> Result<TargetPlan> {
     let mut discovered: BTreeSet<GenerationTarget> = BTreeSet::new();
-    for entry in &registry.manifest.schemas {
+    for entry in &registry.manifest().schemas {
         for target in &entry.generation_targets {
             discovered.insert(*target);
         }
@@ -70,7 +71,7 @@ pub fn build_target_plan(registry: &SchemaRegistry) -> Result<TargetPlan> {
     let mut targets = Vec::new();
     for target in discovered {
         let roots: BTreeSet<String> = registry
-            .manifest
+            .manifest()
             .schemas
             .iter()
             .filter(|entry| entry.generation_targets.contains(&target))
@@ -152,7 +153,7 @@ fn ensure_dependency_in_target(
     from_id: &str,
     dep_id: &str,
 ) -> Result<()> {
-    if !registry.by_id.contains_key(dep_id) {
+    if !registry.get(dep_id).is_ok() {
         return Err(SchemaToolError::msg(format!(
             "generation target closure error: schema {from_id} references unknown dependency {dep_id}"
         ))
@@ -175,52 +176,37 @@ fn ensure_dependency_in_target(
 fn collect_external_deps(
     registry: &SchemaRegistry,
     base_id: &str,
-    node: &Value,
+    schema: &Value,
     closure: &mut BTreeSet<String>,
     stack: &mut Vec<String>,
     seen: &mut BTreeSet<crate::contract_model::ContractTypeId>,
 ) -> Result<()> {
-    match node {
-        Value::Object(map) => {
-            if let Some(Value::String(reference)) = map.get("$ref") {
-                let resolved = resolve_ref(registry, base_id, reference)?;
-                if seen.insert(resolved.type_id.clone()) {
-                    let resolved_id = resolved.type_id.schema_id.clone();
-                    if resolved_id != base_id
-                        && registry.by_id.contains_key(&resolved_id)
-                        && closure.insert(resolved_id.clone())
-                    {
-                        // External (possibly with fragment). Whole-schema and fragment-on-external
-                        // both pull the target schema into the closure.
-                        stack.push(resolved_id.clone());
-                    }
-                    // Recurse into resolved node so deep local fragments that contain external
-                    // $refs are discovered (cycles guarded by resolved ContractTypeId).
-                    collect_external_deps(
-                        registry,
-                        &resolved_id,
-                        resolved.node,
-                        closure,
-                        stack,
-                        seen,
-                    )?;
-                }
+    walk_schema_nodes(schema, |pointer, _, node| {
+        let Some(object) = node.as_object() else {
+            return Ok(());
+        };
+        let Some(reference_value) = object.get("$ref") else {
+            return Ok(());
+        };
+        let reference = reference_value.as_str().ok_or_else(|| {
+            SchemaToolError::msg(format!(
+                "$ref must be a string at {base_id}#{}",
+                pointer.as_str()
+            ))
+        })?;
+        let resolved = resolve_ref(registry, base_id, reference)?;
+        if seen.insert(resolved.type_id.clone()) {
+            let resolved_id = resolved.type_id.schema_id.clone();
+            if resolved_id != base_id
+                && registry.get(&resolved_id).is_ok()
+                && closure.insert(resolved_id.clone())
+            {
+                stack.push(resolved_id.clone());
             }
-            for (key, value) in map {
-                if key == "$ref" {
-                    continue;
-                }
-                collect_external_deps(registry, base_id, value, closure, stack, seen)?;
-            }
+            collect_external_deps(registry, &resolved_id, resolved.node, closure, stack, seen)?;
         }
-        Value::Array(items) => {
-            for item in items {
-                collect_external_deps(registry, base_id, item, closure, stack, seen)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 fn envelope_payload_ids(

@@ -1,5 +1,5 @@
 use crate::error::SchemaToolError;
-use crate::manifest::{LoadedSchema, SchemaRegistry};
+use crate::manifest::SchemaRegistry;
 use crate::paths;
 use anyhow::{Context, Result};
 use jsonschema::{Draft, Retrieve, Uri, Validator};
@@ -12,7 +12,7 @@ pub fn run(repo_root: &Path, schema_selector: &str, instance_path: &Path) -> Res
     let registry = SchemaRegistry::load(repo_root)?;
     let loaded = registry.resolve_schema_selector(schema_selector)?;
     let instance = paths::read_json_file(instance_path)?;
-    validate_instance(&registry, loaded, &instance).map_err(|e| anyhow::anyhow!(e))?;
+    validate_instance(&registry, schema_selector, &instance).map_err(|e| anyhow::anyhow!(e))?;
     println!(
         "valid: instance {} against {}",
         instance_path.display(),
@@ -57,8 +57,7 @@ pub fn validate_examples(
             anyhow::bail!("example {} must be a JSON object", path.display());
         };
 
-        let loaded = registry.get(&schema_id)?;
-        validate_instance(registry, loaded, &instance).with_context(|| {
+        validate_instance(registry, &schema_id, &instance).with_context(|| {
             format!(
                 "example {} failed validation against {schema_id}",
                 path.display()
@@ -68,12 +67,22 @@ pub fn validate_examples(
     Ok(())
 }
 
+/// Validate an instance against a schema resolved exclusively from `registry`.
+///
+/// The public API accepts a schema ID or source-path selector rather than a
+/// `LoadedSchema`, so a caller cannot pair a schema borrowed from one registry
+/// with another registry's reference set.
 pub fn validate_instance(
     registry: &SchemaRegistry,
-    loaded: &LoadedSchema,
+    schema_selector: &str,
     instance: &Value,
 ) -> Result<(), SchemaToolError> {
-    let validator = build_validator(registry, loaded)?;
+    let loaded = registry
+        .resolve_schema_selector(schema_selector)
+        .map_err(|error| {
+            SchemaToolError::msg(format!("resolve schema {schema_selector}: {error}"))
+        })?;
+    let validator = build_validator(registry, loaded.id())?;
     let errors: Vec<String> = validator
         .iter_errors(instance)
         .map(|e| format!("{} at {}", e, e.instance_path))
@@ -105,11 +114,21 @@ impl Retrieve for RegistryRetriever {
 
 fn build_validator(
     registry: &SchemaRegistry,
-    loaded: &LoadedSchema,
+    schema_id: &str,
+) -> Result<Validator, SchemaToolError> {
+    let loaded = registry
+        .get(schema_id)
+        .map_err(|error| SchemaToolError::msg(format!("resolve schema {schema_id}: {error}")))?;
+    build_validator_for_loaded_schema(registry, loaded)
+}
+
+fn build_validator_for_loaded_schema(
+    registry: &SchemaRegistry,
+    loaded: &crate::manifest::LoadedSchema,
 ) -> Result<Validator, SchemaToolError> {
     let mut documents = BTreeMap::new();
-    for (id, item) in &registry.by_id {
-        documents.insert(id.clone(), item.document.clone());
+    for (id, item) in registry.loaded_schemas() {
+        documents.insert(id.to_owned(), item.document.clone());
     }
 
     let retriever = RegistryRetriever { documents };
@@ -128,13 +147,12 @@ fn build_validator(
 #[allow(dead_code)]
 pub fn compile_all(registry: &SchemaRegistry) -> Result<BTreeMap<String, Arc<Validator>>> {
     let documents = registry
-        .by_id
-        .iter()
-        .map(|(id, loaded)| (id.clone(), loaded.document.clone()))
+        .loaded_schemas()
+        .map(|(id, loaded)| (id.to_owned(), loaded.document.clone()))
         .collect();
     let retriever = RegistryRetriever { documents };
     let mut out = BTreeMap::new();
-    for (id, loaded) in &registry.by_id {
+    for (id, loaded) in registry.loaded_schemas() {
         let validator = Validator::options()
             .with_draft(Draft::Draft202012)
             .with_retriever(retriever.clone())
@@ -142,7 +160,7 @@ pub fn compile_all(registry: &SchemaRegistry) -> Result<BTreeMap<String, Arc<Val
             .map_err(|error| {
                 SchemaToolError::msg(format!("failed to compile schema {id}: {error}"))
             })?;
-        out.insert(id.clone(), Arc::new(validator));
+        out.insert(id.to_owned(), Arc::new(validator));
     }
     Ok(out)
 }

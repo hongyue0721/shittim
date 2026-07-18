@@ -4,6 +4,7 @@
 //! pipeline so integration tests can assert graph identity and Rust projection
 //! without scraping generated source strings as the only oracle.
 
+pub mod artifact_transaction;
 pub mod canonicalize;
 pub mod check;
 pub mod codegen;
@@ -16,6 +17,7 @@ pub mod names;
 pub mod paths;
 pub mod resolve;
 pub mod rust_codegen;
+pub mod schema_walk;
 pub mod target;
 pub mod validate;
 
@@ -26,10 +28,14 @@ pub use contract_model::{
     UnknownFieldPolicy,
 };
 pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
-pub use manifest::{GenerationTarget, Manifest, ManifestEntry, SchemaRegistry};
+pub use manifest::{
+    GenerationTarget, Manifest, ManifestComponent, ManifestEntry, MethodFamily, SchemaRegistry,
+    SchemaSourcePath,
+};
 pub use resolve::{
     require_canonical_id_base, require_canonical_schema_id, resolve_ref, schema_at,
-    schema_at_document, schema_id_in_id_base_namespace, ResolvedSchemaRef,
+    schema_id_in_id_base_namespace, schema_id_in_namespace, validate_component_namespace,
+    ResolvedSchemaRef,
 };
 pub use rust_codegen::{
     project_rust, render_catalog_module, render_typed_module_from_projection,
@@ -45,7 +51,6 @@ pub fn lower_and_render_rust(
     repo_root: &Path,
 ) -> Result<(TargetContractGraph, String, String, String)> {
     let registry = SchemaRegistry::load(repo_root)?;
-    resolve::check_all_refs(&registry)?;
     let plan = target::build_target_plan(&registry)?;
     let set = plan
         .targets

@@ -11,11 +11,12 @@ use schema_tool::json_pointer::{
 use schema_tool::manifest::{GenerationTarget, SchemaRegistry};
 use schema_tool::resolve::{
     require_canonical_id_base, require_canonical_schema_id, resolve_ref, schema_at,
-    schema_at_document, schema_id_in_id_base_namespace, ResolvedSchemaRef,
+    schema_id_in_id_base_namespace, validate_component_namespace, ResolvedSchemaRef,
 };
 use schema_tool::target::build_target_plan;
 use schema_tool::{lower_and_render_rust, lower_target_contract_graph, project_rust};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,6 +27,13 @@ fn repo_root() -> PathBuf {
     dir.pop();
     dir.pop();
     dir
+}
+
+fn schema_tool_bin() -> PathBuf {
+    if let Ok(path) = std::env::var("CARGO_BIN_EXE_schema-tool") {
+        return PathBuf::from(path);
+    }
+    repo_root().join("rust/target/debug/schema-tool")
 }
 
 fn temporary_repo(label: &str) -> PathBuf {
@@ -72,6 +80,46 @@ fn write_json(path: &Path, value: &serde_json::Value) {
         std::fs::create_dir_all(parent).expect("mkdir");
     }
     std::fs::write(path, serde_json::to_string_pretty(value).unwrap() + "\n").expect("write");
+    refresh_retained_source_hash(path);
+}
+
+fn refresh_retained_source_hash(source_path: &Path) {
+    let Some(root) = source_path.ancestors().find(|ancestor| {
+        ancestor.join("schemas/manifest.json").is_file()
+            && ancestor
+                .join("schemas/fixtures/manifest/retained_ids.v1.json")
+                .is_file()
+    }) else {
+        return;
+    };
+    update_retained_source_hash(root, source_path);
+}
+
+fn update_retained_source_hash(root: &Path, source_path: &Path) {
+    let Ok(relative) = source_path.strip_prefix(root) else {
+        return;
+    };
+    let relative = relative.to_string_lossy().replace('\\', "/");
+    if !relative.starts_with("schemas/source/") {
+        return;
+    }
+    let baseline_path = root.join("schemas/fixtures/manifest/retained_ids.v1.json");
+    let mut baseline = read_json(&baseline_path);
+    let Some(entry) = baseline["entries"]
+        .as_array_mut()
+        .expect("baseline entries")
+        .iter_mut()
+        .find(|entry| entry["source"].as_str() == Some(relative.as_str()))
+    else {
+        return;
+    };
+    let bytes = std::fs::read(source_path).expect("read changed retained source");
+    entry["source_sha256"] = json!(hex::encode(Sha256::digest(bytes)));
+    std::fs::write(
+        baseline_path,
+        serde_json::to_string_pretty(&baseline).unwrap() + "\n",
+    )
+    .expect("update retained baseline hash for coherent test fixture mutation");
 }
 
 fn read_json(path: &Path) -> serde_json::Value {
@@ -249,6 +297,57 @@ fn resolve_ref_local_absolute_relative_share_identity() {
 }
 
 #[test]
+fn refs_must_target_authoritative_schema_nodes_not_instance_values() {
+    let temp = temporary_repo("ref-schema-node-index");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let actor_id = "https://schemas.shittim.local/v1/common/actor.json";
+    let original = read_json(&actor_path);
+
+    for (label, pointer, instance) in [
+        ("const", "/const", serde_json::json!({"type": "string"})),
+        ("default", "/default", serde_json::json!({"type": "string"})),
+        (
+            "examples",
+            "/examples/0",
+            serde_json::json!({"type": "string"}),
+        ),
+        ("enum", "/enum/0", serde_json::json!({"type": "string"})),
+    ] {
+        let mut actor = original.clone();
+        actor[label] = if label == "examples" || label == "enum" {
+            serde_json::json!([instance])
+        } else {
+            instance
+        };
+        actor["properties"]["display_name"] = serde_json::json!({"$ref": format!("#{pointer}")});
+        write_json(&actor_path, &actor);
+        let err = SchemaRegistry::load(&temp).unwrap_err().to_string();
+        assert!(
+            err.contains("not an authoritative SchemaNode") && err.contains(pointer),
+            "{label}: {err}"
+        );
+    }
+
+    let mut actor = original;
+    actor["$defs"] = serde_json::json!({"named": {"type": "string"}});
+    actor["properties"]["display_name"] = serde_json::json!({"$ref": "#/$defs/named"});
+    actor["properties"]["schema_array"] = serde_json::json!({
+        "type": "array",
+        "items": {"type": "string"}
+    });
+    write_json(&actor_path, &actor);
+    let registry = SchemaRegistry::load(&temp).expect("legal Schema-bearing pointers load");
+    for reference in [
+        "#/$defs/named",
+        "#/properties/display_name",
+        "#/properties/schema_array/items",
+    ] {
+        resolve_ref(&registry, actor_id, reference).expect(reference);
+    }
+    std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
 fn external_fragment_graph_node_is_unique() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("registry");
@@ -325,7 +424,7 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
 
     // Manifest load rejects non-canonical $id.
     let temp = temporary_repo("root-noncanonical-id");
-    let _schema_id = "https://schemas.shittim.local/v1/kcp/bad_id.json";
+    let _schema_id = "https://schemas.shittim.local/kcp/test/bad_id.json";
     let source = "schemas/source/kcp/bad_id.v1.json";
     // Write a document whose $id is relative — manifest id will also be set relative.
     write_json(
@@ -346,7 +445,7 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
             "title": "BadId",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"]
@@ -366,7 +465,7 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
 #[test]
 fn nested_non_root_id_fails_with_real_location() {
     let temp = temporary_repo("nested-id-location");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/nested_id_probe.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/nested_id_probe.json";
     let source = "schemas/source/kcp/nested_id_probe.v1.json";
     write_json(
         &temp.join(source),
@@ -380,7 +479,7 @@ fn nested_non_root_id_fails_with_real_location() {
             "properties": {
                 "schema_version": {"type": "integer", "const": 1},
                 "nested": {
-                    "$id": "https://schemas.shittim.local/v1/kcp/nested_id_probe_nested.json",
+                    "$id": "https://schemas.shittim.local/kcp/test/nested_id_probe_nested.json",
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
@@ -397,28 +496,133 @@ fn nested_non_root_id_fails_with_real_location() {
             "title": "NestedIdProbe",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }),
     );
-    let registry = SchemaRegistry::load(&temp).expect("registry loads (nested $id checked later)");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let err = lower_target_contract_graph(&registry, set)
-        .unwrap_err()
-        .to_string();
+    let err = SchemaRegistry::load(&temp).unwrap_err().to_string();
     assert!(err.contains("nested non-root $id"), "{err}");
     assert!(
         err.contains("/properties/nested") || err.contains("nested_id_probe"),
         "error must locate the nested $id: {err}"
     );
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn registry_load_rejects_retained_source_hash_drift() {
+    let temp = temporary_repo("retained-source-hash-drift");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut actor = read_json(&actor_path);
+    actor["description"] = json!("valid schema bytes changed without ledger update");
+    std::fs::write(
+        &actor_path,
+        serde_json::to_string_pretty(&actor).unwrap() + "\n",
+    )
+    .expect("tamper retained source without updating ledger");
+
+    let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(error.contains("source SHA-256 mismatch"), "{error}");
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn registry_rejects_invalid_manifest_source_paths() {
+    for (label, source) in [
+        ("absolute", "/tmp/actor.json"),
+        ("traversal", "schemas/source/common/../actor.v1.json"),
+        ("outside-source", "schemas/examples/actor.valid.json"),
+        ("backslash", "schemas\\source\\common\\actor.v1.json"),
+        ("empty-segment", "schemas/source//common/actor.v1.json"),
+        ("dot-segment", "schemas/source/./common/actor.v1.json"),
+        ("prefix-trick", "schemas/source-evil/common/actor.v1.json"),
+    ] {
+        let temp = temporary_repo(&format!("source-path-{label}"));
+        let manifest_path = temp.join("schemas/manifest.json");
+        let mut manifest = read_json(&manifest_path);
+        manifest["schemas"][0]["source"] = json!(source);
+        write_json(&manifest_path, &manifest);
+        let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+        assert!(error.contains("source path"), "{label}: {error}");
+        std::fs::remove_dir_all(temp).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn registry_rejects_schema_source_file_and_ancestor_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let file_temp = temporary_repo("source-file-symlink");
+    let actor_path = file_temp.join("schemas/source/common/actor.v1.json");
+    let real_actor = file_temp.join("schemas/source/common/actor.real.json");
+    std::fs::rename(&actor_path, &real_actor).expect("move actor target");
+    symlink(&real_actor, &actor_path).expect("source file symlink");
+    let error = SchemaRegistry::load(&file_temp).unwrap_err().to_string();
+    assert!(error.contains("symlink"), "{error}");
+    std::fs::remove_dir_all(file_temp).ok();
+
+    let ancestor_temp = temporary_repo("source-ancestor-symlink");
+    let common_dir = ancestor_temp.join("schemas/source/common");
+    let real_common_dir = ancestor_temp.join("schemas/source/common-real");
+    std::fs::rename(&common_dir, &real_common_dir).expect("move common directory");
+    symlink(&real_common_dir, &common_dir).expect("source ancestor symlink");
+    let error = SchemaRegistry::load(&ancestor_temp)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("symlink"), "{error}");
+    std::fs::remove_dir_all(ancestor_temp).ok();
+}
+
+#[test]
+fn registry_and_cli_fail_closed_on_dynamic_ref() {
+    let temp = temporary_repo("dynamic-ref-fail-closed");
+    let actor_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut actor = read_json(&actor_path);
+    actor["properties"]["id"] = json!({
+        "$dynamicRef": "https://schemas.shittim.local/v1/task/task_spec.json"
+    });
+    std::fs::write(
+        &actor_path,
+        serde_json::to_string_pretty(&actor).unwrap() + "\n",
+    )
+    .expect("write dynamicRef probe");
+    update_retained_source_hash(&temp, &actor_path);
+
+    let load_error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(load_error.contains("$dynamicRef"), "{load_error}");
+
+    let instance_path = temp.join("actor-instance.json");
+    write_json(&instance_path, &json!({}));
+    for command in ["check", "generate"] {
+        let output = Command::new(schema_tool_bin())
+            .arg("--repo-root")
+            .arg(&temp)
+            .arg(command)
+            .output()
+            .expect("run schema-tool");
+        assert!(!output.status.success(), "{command} must fail");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("$dynamicRef"), "{command}: {stderr}");
+    }
+    let output = Command::new(schema_tool_bin())
+        .arg("--repo-root")
+        .arg(&temp)
+        .args([
+            "validate",
+            "--schema",
+            "https://schemas.shittim.local/v1/common/actor.json",
+            "--instance",
+        ])
+        .arg(&instance_path)
+        .output()
+        .expect("run validate");
+    assert!(!output.status.success(), "validate must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("$dynamicRef"), "{stderr}");
     std::fs::remove_dir_all(temp).ok();
 }
 
@@ -477,10 +681,10 @@ fn inline_oneof_branch_and_items_use_real_pointers() {
 #[test]
 fn scc_exact_option_box_self_mutual_and_array_indirect() {
     let temp = temporary_repo("recursive-layout");
-    let self_id = "https://schemas.shittim.local/v1/kcp/self_recursive.json";
-    let a_id = "https://schemas.shittim.local/v1/kcp/mutual_a.json";
-    let b_id = "https://schemas.shittim.local/v1/kcp/mutual_b.json";
-    let c_id = "https://schemas.shittim.local/v1/kcp/scc_c.json";
+    let self_id = "https://schemas.shittim.local/kcp/test/self_recursive.json";
+    let a_id = "https://schemas.shittim.local/kcp/test/mutual_a.json";
+    let b_id = "https://schemas.shittim.local/kcp/test/mutual_b.json";
+    let c_id = "https://schemas.shittim.local/kcp/test/scc_c.json";
     let self_source = "schemas/source/kcp/self_recursive.v1.json";
     let a_source = "schemas/source/kcp/mutual_a.v1.json";
     let b_source = "schemas/source/kcp/mutual_b.v1.json";
@@ -567,7 +771,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
             "title": title,
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -671,7 +875,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
 #[test]
 fn root_unsupported_shape_fails_closed() {
     let temp = temporary_repo("root-unsupported");
-    let schema_id = "https://schemas.shittim.local/v1/kcp/unsupported_root.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test/unsupported_root.json";
     let source = "schemas/source/kcp/unsupported_root.v1.json";
     write_json(
         &temp.join(source),
@@ -692,7 +896,7 @@ fn root_unsupported_shape_fails_closed() {
             "title": "UnsupportedRoot",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"]
@@ -851,9 +1055,7 @@ fn resolved_schema_ref_is_the_single_resolution_type() {
     )
     .expect("resolve");
     assert!(resolved.type_id.is_root());
-    let node = schema_at_document(resolved.node, &JsonPointer::root())
-        .expect("root pointer on resolved node");
-    assert!(node.get("$id").is_some() || node.get("type").is_some());
+    assert!(resolved.node.get("$id").is_some() || resolved.node.get("type").is_some());
 }
 
 // ---------------------------------------------------------------------------
@@ -921,7 +1123,7 @@ fn id_base_rejects_entry_outside_and_prefix_spoof() {
             "title": "Outside",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"]
@@ -956,7 +1158,7 @@ fn id_base_rejects_entry_outside_and_prefix_spoof() {
             "title": "Spoof",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"]
@@ -971,14 +1173,415 @@ fn id_base_rejects_entry_outside_and_prefix_spoof() {
 }
 
 // ---------------------------------------------------------------------------
+// Manifest v2 root/component/retained-ID namespace migration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn component_namespace_rejects_spoofed_url_component_forms() {
+    let root = require_canonical_id_base("https://schemas.shittim.local/").unwrap();
+    assert!(
+        validate_component_namespace(&root, "common", "https://schemas.shittim.local/common/")
+            .is_ok()
+    );
+    for namespace in [
+        "https://schemas.shittim.local/common_evil/",
+        "https://schemas.shittim.local/common/./",
+        "https://schemas.shittim.local/common//",
+        "https://schemas.shittim.local/%63ommon/",
+        "https://schemas.shittim.local:443/common/",
+    ] {
+        assert!(
+            validate_component_namespace(&root, "common", namespace).is_err(),
+            "component namespace must reject {namespace}"
+        );
+    }
+}
+
+#[test]
+fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sources() {
+    let root = repo_root();
+    let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
+    assert_eq!(registry.manifest().schema_version, 2);
+    assert_eq!(
+        registry.manifest().id_base,
+        "https://schemas.shittim.local/",
+        "root namespace is fixed by the v2 contract"
+    );
+    let components = registry.manifest().components.clone();
+    assert_eq!(
+        registry.schema_count(),
+        41,
+        "production baseline is 41 schemas"
+    );
+
+    let retained: BTreeSet<_> = components
+        .iter()
+        .flat_map(|component| component.retained_ids.iter())
+        .collect();
+    assert_eq!(retained.len(), 41, "all retained IDs must have one owner");
+    for (_id, loaded) in registry.loaded_schemas() {
+        let entry = loaded.entry();
+        assert!(entry.id.starts_with("https://schemas.shittim.local/v1/"));
+        assert!(retained.contains(&entry.id));
+        let source_id = loaded
+            .document()
+            .get("$id")
+            .and_then(serde_json::Value::as_str);
+        assert_eq!(source_id, Some(entry.id.as_str()));
+    }
+}
+
+#[test]
+fn manifest_v2_rejects_v1_alias_or_retained_ownership_breakage() {
+    let temp = temporary_repo("manifest-v2-strict-retained");
+    let manifest_path = temp.join("schemas/manifest.json");
+
+    let mut legacy = read_json(&manifest_path);
+    legacy["schema_version"] = json!(1);
+    write_json(&manifest_path, &legacy);
+    assert!(SchemaRegistry::load(&temp)
+        .unwrap_err()
+        .to_string()
+        .contains("only manifest v2"));
+
+    let mut orphan = read_json(&repo_root().join("schemas/manifest.json"));
+    orphan["components"]
+        .as_array_mut()
+        .expect("components")
+        .iter_mut()
+        .find(|component| component["name"] == "common")
+        .expect("common component")["retained_ids"]
+        .as_array_mut()
+        .expect("retained IDs")
+        .remove(0);
+    write_json(&manifest_path, &orphan);
+    let orphan_error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        orphan_error.contains("retained ownership ledger mismatch"),
+        "{orphan_error}"
+    );
+
+    let mut duplicate = read_json(&repo_root().join("schemas/manifest.json"));
+    let retained_id = duplicate["components"][0]["retained_ids"][0].clone();
+    duplicate["components"][1]["retained_ids"]
+        .as_array_mut()
+        .expect("retained IDs")
+        .push(retained_id);
+    write_json(&manifest_path, &duplicate);
+    let duplicate_error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        duplicate_error.contains("strictly sorted and unique"),
+        "{duplicate_error}"
+    );
+
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn registry_load_rejects_component_ref_gate_before_public_use() {
+    let temp = temporary_repo("component-ref-gate");
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["components"]
+        .as_array_mut()
+        .expect("components")
+        .iter_mut()
+        .find(|component| component["name"] == "kcp")
+        .expect("kcp component")["allowed_refs"] = json!(["event", "task"]);
+    write_json(&manifest_path, &manifest);
+
+    let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(error.contains("component ref gate error"), "{error}");
+    assert!(error.contains("kcp") && error.contains("common"), "{error}");
+
+    std::fs::remove_dir_all(temp).ok();
+}
+
+// ---------------------------------------------------------------------------
+// Manifest v2 root/component/retained-ID namespace migration
+// ---------------------------------------------------------------------------
+
+#[test]
+fn manifest_v2_requires_empty_typed_method_version_binding_section() {
+    let root = repo_root();
+    let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
+    assert!(
+        registry.manifest().method_version_bindings.is_empty(),
+        "this migration reserves the typed section; it does not invent business-v2 bindings"
+    );
+}
+
+#[test]
+fn manifest_v2_rejects_any_nonempty_method_version_binding_section() {
+    let temp = temporary_repo("manifest-v2-nonempty-method-binding");
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["method_version_bindings"] = json!([{
+        "family": "command",
+        "method": "future.method",
+        "active_request_versions": [1],
+        "legacy_validation_versions": [],
+        "request_schema_id_by_version": {
+            "1": "https://schemas.shittim.local/v1/kcp/system_ping_request.json"
+        },
+        "response_schema_id_by_version": {
+            "1": "https://schemas.shittim.local/v1/kcp/system_ping_response.json"
+        }
+    }]);
+    write_json(&manifest_path, &manifest);
+
+    let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        error.contains("method_version_bindings must be empty"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn public_validation_resolves_schema_only_from_its_registry() {
+    let registry = SchemaRegistry::load(&repo_root()).expect("production registry loads");
+    let schema_id = "https://schemas.shittim.local/v1/common/actor.json";
+    let valid = json!({
+        "schema_version": 1,
+        "revision": 1,
+        "id": "actor-1",
+        "kind": "known_user",
+        "source": "test",
+        "authentication_level": "asserted",
+        "confidence": 1.0
+    });
+    schema_tool::validate::validate_instance(&registry, schema_id, &valid)
+        .expect("schema ID is resolved by the supplied registry");
+
+    let error = schema_tool::validate::validate_instance(
+        &registry,
+        "https://schemas.shittim.local/v1/not-present.json",
+        &valid,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("resolve schema"), "{error}");
+    assert!(error.contains("schema selector not found"), "{error}");
+}
+
+#[test]
+fn registry_load_rejects_coordinated_retained_rebind_and_real_orphan() {
+    let temp = temporary_repo("manifest-v2-retained-ledger");
+    let manifest_path = temp.join("schemas/manifest.json");
+
+    let mut coordinated_rebind = read_json(&manifest_path);
+    let moved = coordinated_rebind["components"]
+        .as_array_mut()
+        .expect("components")
+        .iter_mut()
+        .find(|component| component["name"] == "common")
+        .expect("common component")["retained_ids"]
+        .as_array_mut()
+        .expect("common retained IDs")
+        .remove(0);
+    coordinated_rebind["components"]
+        .as_array_mut()
+        .expect("components")
+        .iter_mut()
+        .find(|component| component["name"] == "kcp")
+        .expect("kcp component")["retained_ids"]
+        .as_array_mut()
+        .expect("kcp retained IDs")
+        .push(moved.clone());
+    coordinated_rebind["components"]
+        .as_array_mut()
+        .expect("components")
+        .iter_mut()
+        .find(|component| component["name"] == "kcp")
+        .expect("kcp component")["retained_ids"]
+        .as_array_mut()
+        .expect("kcp retained IDs")
+        .sort_by(|left, right| left.as_str().cmp(&right.as_str()));
+    coordinated_rebind["schemas"]
+        .as_array_mut()
+        .expect("schemas")
+        .iter_mut()
+        .find(|entry| entry["id"] == moved)
+        .expect("moved entry")["component"] = json!("kcp");
+    write_json(&manifest_path, &coordinated_rebind);
+    let rebind_error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        rebind_error.contains("retained baseline mismatch"),
+        "{rebind_error}"
+    );
+
+    let mut orphan = read_json(&repo_root().join("schemas/manifest.json"));
+    orphan["schemas"]
+        .as_array_mut()
+        .expect("schemas")
+        .retain(|entry| entry["id"] != "https://schemas.shittim.local/v1/common/actor.json");
+    write_json(&manifest_path, &orphan);
+    let orphan_error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        orphan_error.contains("retained baseline ID is orphaned"),
+        "{orphan_error}"
+    );
+
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn retained_and_component_native_namespaces_are_mutually_exclusive() {
+    let temp = temporary_repo("retained-namespace-overlap");
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["components"]
+        .as_array_mut()
+        .expect("components")
+        .push(json!({
+            "name": "v1",
+            "namespace": "https://schemas.shittim.local/v1/",
+            "allowed_refs": [],
+            "retained_ids": []
+        }));
+    write_json(&manifest_path, &manifest);
+
+    let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    assert!(
+        error.contains("retained and component-native identity classes are mutually exclusive"),
+        "{error}"
+    );
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn registry_loads_component_native_entry_and_all_ref_forms() {
+    let temp = temporary_repo("component-native-positive");
+    let native_id = "https://schemas.shittim.local/kcp/future/native_request/v2";
+    let native_source = "schemas/source/kcp/future_native_request.v2.json";
+    write_json(
+        &temp.join(native_source),
+        &json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": native_id,
+            "title": "FutureNativeRequest",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "actor", "local", "relative", "absolute"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 2},
+                "actor": {"$ref": "https://schemas.shittim.local/v1/common/actor.json"},
+                "local": {"$ref": "#/$defs/local"},
+                "relative": {"$ref": "../../../v1/common/actor.json"},
+                "absolute": {"$ref": "https://schemas.shittim.local/v1/common/actor.json"}
+            },
+            "$defs": {
+                "local": {"type": "string"}
+            }
+        }),
+    );
+    add_manifest_entry(
+        &temp,
+        json!({
+            "id": native_id,
+            "title": "FutureNativeRequest",
+            "version": 2,
+            "source": native_source,
+            "component": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "future-test-only",
+            "generation_targets": ["rust"],
+            "schema_version_field": "schema_version"
+        }),
+    );
+
+    let registry = SchemaRegistry::load(&temp).expect("native-to-retained refs are allowed");
+    assert!(registry.get(native_id).is_ok());
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn component_gate_can_allow_ref_while_target_closure_still_fails() {
+    let temp = temporary_repo("component-gate-target-closure");
+    let native_id = "https://schemas.shittim.local/kcp/future/closure_request/v1";
+    let native_source = "schemas/source/kcp/future_closure_request.v1.json";
+    write_json(
+        &temp.join(native_source),
+        &json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": native_id,
+            "title": "FutureClosureRequest",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "actor"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "actor": {"$ref": "https://schemas.shittim.local/v1/common/actor.json"}
+            }
+        }),
+    );
+    add_manifest_entry(
+        &temp,
+        json!({
+            "id": native_id,
+            "title": "FutureClosureRequest",
+            "version": 1,
+            "source": native_source,
+            "component": "kcp",
+            "kind": "kcp_request",
+            "compatibility": "future-test-only",
+            "generation_targets": ["typescript"],
+            "schema_version_field": "schema_version"
+        }),
+    );
+
+    let registry = SchemaRegistry::load(&temp).expect("kcp allowed_refs permits common");
+    let error = build_target_plan(&registry).unwrap_err().to_string();
+    assert!(error.contains("generation target closure error"), "{error}");
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn cli_validate_rejects_unauthorized_component_ref_during_registry_load() {
+    let temp = temporary_repo("cli-validate-component-gate");
+    let source_path = temp.join("schemas/source/common/actor.v1.json");
+    let mut source = read_json(&source_path);
+    source["properties"]["unauthorized_event"] = json!({
+        "$ref": "https://schemas.shittim.local/v1/event/event_envelope.json"
+    });
+    write_json(&source_path, &source);
+    let instance_path = temp.join("instance.json");
+    write_json(&instance_path, &json!({}));
+
+    let (code, _stdout, stderr) = Command::new(schema_tool_bin())
+        .args([
+            "validate",
+            "--schema",
+            "schemas/source/common/actor.v1.json",
+            "--instance",
+            instance_path.to_str().expect("UTF-8 path"),
+            "--repo-root",
+            temp.to_str().expect("UTF-8 path"),
+        ])
+        .output()
+        .map(|output| {
+            (
+                output.status.code().unwrap_or(1),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            )
+        })
+        .expect("run schema-tool validate");
+    assert_ne!(code, 0, "unauthorized ref must reject CLI validate");
+    assert!(stderr.contains("component ref gate error"), "{stderr}");
+    std::fs::remove_dir_all(temp).ok();
+}
+
+// ---------------------------------------------------------------------------
 // Projection sibling / diamond + single projection instance
 // ---------------------------------------------------------------------------
 
 #[test]
 fn sibling_and_diamond_nominal_projection_and_shared_root() {
     let temp = temporary_repo("sibling-diamond");
-    let shared_id = "https://schemas.shittim.local/v1/kcp/shared_leaf.json";
-    let parent_id = "https://schemas.shittim.local/v1/kcp/diamond_parent.json";
+    let shared_id = "https://schemas.shittim.local/kcp/test/shared_leaf.json";
+    let parent_id = "https://schemas.shittim.local/kcp/test/diamond_parent.json";
     let shared_source = "schemas/source/kcp/shared_leaf.v1.json";
     let parent_source = "schemas/source/kcp/diamond_parent.v1.json";
 
@@ -1039,7 +1642,7 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
             "title": title,
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1085,7 +1688,7 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
 #[test]
 fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
     let temp = temporary_repo("backedge-reuse");
-    let self_id = "https://schemas.shittim.local/v1/kcp/backedge_self.json";
+    let self_id = "https://schemas.shittim.local/kcp/test/backedge_self.json";
     let source = "schemas/source/kcp/backedge_self.v1.json";
     write_json(
         &temp.join(source),
@@ -1120,7 +1723,7 @@ fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
             "title": "BackedgeSelf",
             "version": 1,
             "source": source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "object",
             "compatibility": "test-only",
             "generation_targets": ["rust"],
@@ -1181,7 +1784,7 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
     // surface both targets, but the Rust set/graph must not pull the orphan in. We never
     // call the unimplemented TypeScript renderer — only plan + lower the Rust graph.
     let temp = temporary_repo("ts-only-orphan-plan");
-    let orphan_id = "https://schemas.shittim.local/v1/kcp/ts_only_orphan.json";
+    let orphan_id = "https://schemas.shittim.local/kcp/test/ts_only_orphan.json";
     let orphan_source = "schemas/source/kcp/ts_only_orphan.v1.json";
     write_json(
         &temp.join(orphan_source),
@@ -1205,7 +1808,7 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
             "title": "TsOnlyOrphan",
             "version": 1,
             "source": orphan_source,
-            "domain": "kcp",
+            "component": "kcp",
             "kind": "kcp_request",
             "compatibility": "test-only",
             "generation_targets": ["typescript"],
