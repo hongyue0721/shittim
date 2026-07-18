@@ -25,8 +25,9 @@
 //! not need `Box`.
 
 use crate::contract_model::{
-    ConstJson, ContractTypeId, EnvelopeWireBinding, Nullability, Presence, ScalarKind,
-    SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse, UnknownFieldPolicy,
+    ConstJson, ContractTypeId, EnvelopeWireBinding, IntegerConstraints, JsonInteger, Nullability,
+    Presence, ScalarKind, SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
+    UnknownFieldPolicy,
 };
 use crate::error::SchemaToolError;
 use crate::names::{to_pascal_case, to_snake_case, to_upper_snake_case};
@@ -117,8 +118,13 @@ enum RustTypeExpr {
 /// One projected declaration body.
 #[derive(Debug, Clone)]
 enum ProjectedShape {
+    /// A root pure-ref Schema is a transparent language alias. Fragment aliases
+    /// never become declarations; they resolve through the neutral alias table.
+    Alias {
+        target: RustTypeExpr,
+    },
     Object {
-        fields: Vec<ProjectedField>,
+        member_plan: RustMemberPlan,
         unknown_field_policy: UnknownFieldPolicy,
     },
     TaggedUnion {
@@ -136,9 +142,23 @@ enum ProjectedShape {
 #[derive(Debug, Clone)]
 struct ProjectedField {
     json_name: String,
+    /// Final renderer-owned Rust member name, computed exactly once.
+    rust_name: String,
     ty: RustTypeExpr,
     presence: Presence,
     nullability: Nullability,
+}
+
+#[derive(Debug, Clone)]
+struct GeneratedMember {
+    rust_name: String,
+    purpose: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct RustMemberPlan {
+    declared: Vec<ProjectedField>,
+    generated: Vec<GeneratedMember>,
 }
 
 #[derive(Debug, Clone)]
@@ -234,13 +254,14 @@ impl RustProjection {
                     "projection has no declaration named {decl_rust_name}"
                 ))
             })?;
-        let ProjectedShape::Object { fields, .. } = &decl.shape else {
+        let ProjectedShape::Object { member_plan, .. } = &decl.shape else {
             return Err(SchemaToolError::msg(format!(
                 "declaration {decl_rust_name} is not an object"
             ))
             .into());
         };
-        let field = fields
+        let field = member_plan
+            .declared
             .iter()
             .find(|f| f.json_name == json_field)
             .ok_or_else(|| {
@@ -451,13 +472,24 @@ impl<'a> Projector<'a> {
                     )?;
                     projected.push(ProjectedField {
                         json_name: field.json_name.clone(),
+                        rust_name: rust_field_name(&field.json_name),
                         ty,
                         presence: field.presence,
                         nullability: field.nullability,
                     });
                 }
                 Ok(ProjectedShape::Object {
-                    fields: projected,
+                    member_plan: RustMemberPlan {
+                        declared: projected,
+                        generated: if *unknown_field_policy == UnknownFieldPolicy::Allow {
+                            vec![GeneratedMember {
+                                rust_name: "additional_properties".to_string(),
+                                purpose: "open-object #[serde(flatten)] extension map",
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                    },
                     unknown_field_policy: *unknown_field_policy,
                 })
             }
@@ -510,6 +542,7 @@ impl<'a> Projector<'a> {
                         lineage.push(field.ty.source.clone());
                         projected.push(ProjectedField {
                             json_name: field.json_name.clone(),
+                            rust_name: rust_field_name(&field.json_name),
                             ty: self.project_type_use(
                                 &field.ty,
                                 &field_name,
@@ -539,17 +572,53 @@ impl<'a> Projector<'a> {
             TypeShape::Const { value } => Ok(ProjectedShape::Const {
                 value: value.clone(),
             }),
-            // Named declarations are only emitted for Object / StringEnum / Const
-            // (matching HEAD). Scalar/Any/Array/Nullable shapes are inlined at use sites
-            // and must not become standalone declarations.
-            TypeShape::Scalar { .. }
-            | TypeShape::AnyJson
-            | TypeShape::Array { .. }
-            | TypeShape::Nullable { .. } => Err(SchemaToolError::msg(format!(
-                "internal renderer error: cannot project non-named shape at {} (name {rust_name})",
-                canonical.display()
-            ))
-            .into()),
+            TypeShape::Alias { target } => {
+                let resolution = self.graph.alias_resolutions.get(canonical).ok_or_else(|| {
+                    SchemaToolError::msg(format!(
+                        "internal renderer error: missing neutral alias resolution for {}",
+                        canonical.display()
+                    ))
+                })?;
+                let mut alias_lineage = use_site_lineage.to_vec();
+                alias_lineage.push(target.source.clone());
+                Ok(ProjectedShape::Alias {
+                    target: self.project_reference(
+                        &resolution.terminal_id,
+                        rust_name,
+                        &alias_lineage,
+                        doc_schema_id,
+                    )?,
+                })
+            }
+            // Root terminal scalars/containers also need a Rust declaration so a
+            // root Alias can transparently name them. They render as type aliases;
+            // fragment terminal shapes remain inlined by project_reference.
+            TypeShape::Scalar { scalar } => Ok(ProjectedShape::Alias {
+                target: RustTypeExpr::Scalar(*scalar),
+            }),
+            TypeShape::AnyJson => Ok(ProjectedShape::Alias {
+                target: RustTypeExpr::AnyJson,
+            }),
+            TypeShape::Array { items } => {
+                let mut lineage = use_site_lineage.to_vec();
+                lineage.push(items.source.clone());
+                Ok(ProjectedShape::Alias {
+                    target: RustTypeExpr::Array(Box::new(self.project_type_use(
+                        items,
+                        &format!("{rust_name}Item"),
+                        &lineage,
+                        doc_schema_id,
+                    )?)),
+                })
+            }
+            TypeShape::Nullable { inner } => Ok(ProjectedShape::Alias {
+                target: RustTypeExpr::Nullable(Box::new(self.project_type_use(
+                    inner,
+                    rust_name,
+                    use_site_lineage,
+                    doc_schema_id,
+                )?)),
+            }),
         }
     }
 
@@ -617,6 +686,8 @@ impl<'a> Projector<'a> {
         }
 
         // Non-named shapes referenced by identity: project inline.
+        // Alias is a pure `$ref` definition node: follow the target without creating a
+        // parallel declaration, preserving the host fragment identity in the graph only.
         match &node.shape {
             TypeShape::Scalar { scalar } => Ok(RustTypeExpr::Scalar(*scalar)),
             TypeShape::AnyJson => Ok(RustTypeExpr::AnyJson),
@@ -634,6 +705,20 @@ impl<'a> Projector<'a> {
             TypeShape::Nullable { inner } => Ok(RustTypeExpr::Nullable(Box::new(
                 self.project_type_use(inner, rust_name, use_site_lineage, doc_schema_id)?,
             ))),
+            TypeShape::Alias { .. } => {
+                let resolution = self.graph.alias_resolutions.get(id).ok_or_else(|| {
+                    SchemaToolError::msg(format!(
+                        "internal renderer error: missing neutral alias resolution for {}",
+                        id.display()
+                    ))
+                })?;
+                self.project_reference(
+                    &resolution.terminal_id,
+                    rust_name,
+                    use_site_lineage,
+                    doc_schema_id,
+                )
+            }
             TypeShape::Object { .. }
             | TypeShape::TaggedUnion { .. }
             | TypeShape::StringEnum { .. }
@@ -659,8 +744,13 @@ fn apply_recursive_layout(decls: &mut BTreeMap<RustDeclarationId, ProjectedDecl>
     }
     for (id, decl) in decls.iter() {
         match &decl.shape {
-            ProjectedShape::Object { fields, .. } => {
-                for field in fields {
+            ProjectedShape::Alias { target } => {
+                for dep in direct_named_deps(target) {
+                    edges.entry(id.clone()).or_default().insert(dep);
+                }
+            }
+            ProjectedShape::Object { member_plan, .. } => {
+                for field in &member_plan.declared {
                     for dep in direct_named_deps(&field.ty) {
                         edges.entry(id.clone()).or_default().insert(dep);
                     }
@@ -683,8 +773,11 @@ fn apply_recursive_layout(decls: &mut BTreeMap<RustDeclarationId, ProjectedDecl>
     for (id, decl) in decls.iter_mut() {
         let owner_scc = scc_of.get(id).copied().unwrap_or(0);
         match &mut decl.shape {
-            ProjectedShape::Object { fields, .. } => {
-                for field in fields {
+            // Alias edges participate in SCC discovery, but transparent aliases
+            // themselves never receive renderer-invented boxing.
+            ProjectedShape::Alias { .. } => {}
+            ProjectedShape::Object { member_plan, .. } => {
+                for field in &mut member_plan.declared {
                     box_direct_scc_named(&mut field.ty, owner_scc, &scc_of);
                 }
             }
@@ -833,19 +926,37 @@ fn type_name_from_schema_id(id: &str) -> String {
 
 fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
     match &decl.shape {
-        ProjectedShape::Object { fields, .. } => {
-            let mut rust_fields: BTreeMap<String, String> = BTreeMap::new();
-            for field in fields {
-                let rust_name = rust_field_name(&field.json_name);
+        ProjectedShape::Object { member_plan, .. } => {
+            let mut rust_members: BTreeMap<String, String> = BTreeMap::new();
+            for field in &member_plan.declared {
+                let identity = format!(
+                    "declared JSON field {:?} at {}/properties/{}",
+                    field.json_name, decl.doc_schema_id, field.json_name
+                );
                 if let Some(previous) =
-                    rust_fields.insert(rust_name.clone(), field.json_name.clone())
+                    rust_members.insert(field.rust_name.clone(), identity.clone())
                 {
                     return Err(SchemaToolError::msg(format!(
-                        "Rust field name collision in `{}` ({}): json fields {previous:?} and {:?} both map to `{rust_name}` (use-sites /properties/{previous} and /properties/{})",
+                        "Rust member namespace collision in `{}` ({}; Schema {}): {previous} and {identity} both map to `{}` after snake_case/keyword normalization",
                         decl.rust_name,
                         decl.id.display(),
-                        field.json_name,
-                        field.json_name
+                        decl.doc_schema_id,
+                        field.rust_name
+                    ))
+                    .into());
+                }
+            }
+            for generated in &member_plan.generated {
+                let identity = format!("generated member for {}", generated.purpose);
+                if let Some(previous) =
+                    rust_members.insert(generated.rust_name.clone(), identity.clone())
+                {
+                    return Err(SchemaToolError::msg(format!(
+                        "Rust member namespace collision in `{}` ({}; Schema {}): {previous} collides with {identity} at `{}`",
+                        decl.rust_name,
+                        decl.id.display(),
+                        decl.doc_schema_id,
+                        generated.rust_name
                     ))
                     .into());
                 }
@@ -879,7 +990,7 @@ fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
                 }
                 let mut fields = BTreeMap::new();
                 for field in &variant.fields {
-                    let rust_name = rust_field_name(&field.json_name);
+                    let rust_name = &field.rust_name;
                     if let Some(previous) =
                         fields.insert(rust_name.clone(), field.json_name.clone())
                     {
@@ -906,7 +1017,7 @@ fn audit_decl_internal_collisions(decl: &ProjectedDecl) -> Result<()> {
                 }
             }
         }
-        ProjectedShape::Const { .. } => {}
+        ProjectedShape::Alias { .. } | ProjectedShape::Const { .. } => {}
     }
     Ok(())
 }
@@ -1007,18 +1118,33 @@ pub fn render_catalog_module(graph: &TargetContractGraph) -> Result<String> {
     }
     out.push_str("];\n\n");
 
-    // Active catalogs: empty when V2 Envelope authority is absent (current production).
+    // V2 Envelope family structure authority may be absent in synthetic graphs.
+    // Presence does not imply bound active versions or executable registration.
+    out.push_str(
+        "/// Methods declared by the unique KcpCommandEnvelopeV2 family structure authority.\n",
+    );
+    out.push_str("/// This does not imply a bound active version or executable registration.\n");
     render_str_slice(
         &mut out,
-        "KCP_COMMAND_METHODS",
+        "KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS",
         &graph.catalog.kcp_command_methods,
     );
+    out.push_str(
+        "/// Methods declared by the unique KcpQueryEnvelopeV2 family structure authority.\n",
+    );
+    out.push_str("/// This does not imply a bound active version or executable registration.\n");
     render_str_slice(
         &mut out,
-        "KCP_QUERY_METHODS",
+        "KCP_ENVELOPE_AUTHORITY_QUERY_METHODS",
         &graph.catalog.kcp_query_methods,
     );
-    render_str_slice(&mut out, "KCP_METHODS", &graph.catalog.kcp_methods);
+    out.push_str("/// Canonical merge of V2 command/query family structure authority.\n");
+    out.push_str("/// Consumers needing bound versions must use METHOD_VERSION_BINDINGS.\n");
+    render_str_slice(
+        &mut out,
+        "KCP_ENVELOPE_AUTHORITY_METHODS",
+        &graph.catalog.kcp_methods,
+    );
 
     // Explicit retained v1 catalogs. Not active authority; consumers that still need
     // the retained first-batch set must opt into LEGACY names.
@@ -1206,13 +1332,16 @@ fn render_projected_decl(
     names: &BTreeMap<RustDeclarationId, String>,
 ) -> Result<String> {
     match &decl.shape {
+        ProjectedShape::Alias { target } => {
+            render_type_alias(&decl.rust_name, &decl.doc_schema_id, target, names)
+        }
         ProjectedShape::Object {
-            fields,
+            member_plan,
             unknown_field_policy,
         } => render_struct(
             &decl.rust_name,
             &decl.doc_schema_id,
-            fields,
+            member_plan,
             *unknown_field_policy,
             names,
         ),
@@ -1239,10 +1368,22 @@ fn render_projected_decl(
     }
 }
 
+fn render_type_alias(
+    type_name: &str,
+    schema_id: &str,
+    target: &RustTypeExpr,
+    names: &BTreeMap<RustDeclarationId, String>,
+) -> Result<String> {
+    let rendered = render_rust_type_expr(target, names, TypeRenderContext::TypesModule)?;
+    Ok(format!(
+        "/// Transparent root alias generated from `{schema_id}`\npub type {type_name} = {rendered};\n"
+    ))
+}
+
 fn render_struct(
     type_name: &str,
     schema_id: &str,
-    fields: &[ProjectedField],
+    member_plan: &RustMemberPlan,
     unknown_field_policy: UnknownFieldPolicy,
     names: &BTreeMap<RustDeclarationId, String>,
 ) -> Result<String> {
@@ -1253,15 +1394,15 @@ fn render_struct(
     let mut body = format!(
         "/// Generated from `{schema_id}`\n#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]{serde_attribute}\npub struct {type_name} {{\n"
     );
-    for field in fields {
-        let rust_name = rust_field_name(&field.json_name);
+    for field in &member_plan.declared {
+        let rust_name = &field.rust_name;
         let mut rendered = render_rust_type_expr(&field.ty, names, TypeRenderContext::TypesModule)?;
         if field.presence == Presence::Optional && !rendered.starts_with("Option<") {
             rendered = format!("Option<{rendered}>");
         }
 
         let mut serde_attrs = Vec::new();
-        if rust_name != field.json_name {
+        if rust_name != &field.json_name {
             serde_attrs.push(format!("rename = {:?}", field.json_name));
         }
         if field.presence == Presence::Optional && field.nullability == Nullability::NonNull {
@@ -1271,6 +1412,18 @@ fn render_struct(
             body.push_str(&format!("    #[serde({})]\n", serde_attrs.join(", ")));
         }
         body.push_str(&format!("    pub {rust_name}: {rendered},\n"));
+    }
+    for generated in &member_plan.generated {
+        if generated.rust_name == "additional_properties" {
+            body.push_str("    #[serde(default, flatten)]\n");
+            body.push_str("    pub additional_properties: serde_json::Map<String, JsonValue>,\n");
+        } else {
+            return Err(SchemaToolError::msg(format!(
+                "internal renderer error: unknown generated member `{}` for {type_name}",
+                generated.rust_name
+            ))
+            .into());
+        }
     }
     body.push_str("}\n");
     Ok(body)
@@ -1292,14 +1445,14 @@ fn render_tagged_union(
             variant.tag, variant.rust_name
         ));
         for field in &variant.fields {
-            let rust_name = rust_field_name(&field.json_name);
+            let rust_name = &field.rust_name;
             let mut rendered =
                 render_rust_type_expr(&field.ty, names, TypeRenderContext::TypesModule)?;
             if field.presence == Presence::Optional && !rendered.starts_with("Option<") {
                 rendered = format!("Option<{rendered}>");
             }
             let mut serde_attrs = Vec::new();
-            if rust_name != field.json_name {
+            if rust_name != &field.json_name {
                 serde_attrs.push(format!("rename = {:?}", field.json_name));
             }
             if field.presence == Presence::Optional && field.nullability == Nullability::NonNull {
@@ -1331,7 +1484,7 @@ fn render_rust_type_expr(
         RustTypeExpr::Scalar(scalar) => Ok(match scalar {
             ScalarKind::Null => "NullOnly".into(),
             ScalarKind::Boolean => "bool".into(),
-            ScalarKind::Integer => "i64".into(),
+            ScalarKind::Integer { constraints } => render_integer_type(*constraints),
             ScalarKind::Number => "f64".into(),
             ScalarKind::String => "String".into(),
         }),
@@ -1362,6 +1515,33 @@ fn render_rust_type_expr(
             ))
             .into()
         }),
+    }
+}
+
+fn render_integer_type(constraints: IntegerConstraints) -> String {
+    let minimum = constraints.minimum.map(JsonInteger::as_i128);
+    let maximum = constraints.maximum.map(JsonInteger::as_i128);
+    match (minimum, maximum) {
+        // `i64` is the compatibility-preserving default contract for historical
+        // generated integers. Specialize only when the proven non-negative range
+        // needs the unsigned 32-bit contract (as method payload versions do).
+        (Some(minimum), Some(maximum))
+            if minimum >= 0
+                && maximum > i128::from(i32::MAX)
+                && maximum <= i128::from(u32::MAX) =>
+        {
+            "u32".into()
+        }
+        (Some(minimum), Some(maximum))
+            if minimum >= 0
+                && maximum > i128::from(i64::MAX)
+                && maximum <= i128::from(u64::MAX) =>
+        {
+            "u64".into()
+        }
+        // Preserve existing public bytes for absent, one-sided, and historical
+        // bounded ranges that fit the established signed contract.
+        _ => "i64".into(),
     }
 }
 
@@ -1524,7 +1704,7 @@ fn render_typed_envelope(
             binding.schema_id
         ))
     })?;
-    let ProjectedShape::Object { fields, .. } = &root_decl.shape else {
+    let ProjectedShape::Object { member_plan, .. } = &root_decl.shape else {
         return Err(SchemaToolError::msg(format!(
             "internal renderer error: envelope root is not an object projection: {}",
             binding.schema_id
@@ -1532,7 +1712,7 @@ fn render_typed_envelope(
         .into());
     };
 
-    let mut ordered_fields: Vec<&ProjectedField> = fields.iter().collect();
+    let mut ordered_fields: Vec<&ProjectedField> = member_plan.declared.iter().collect();
     ordered_fields.sort_by(|a, b| a.json_name.cmp(&b.json_name));
 
     let mut raw_fields = Vec::new();
@@ -1776,6 +1956,7 @@ mod tests {
                 "https://example/b.json".into(),
             ],
             nodes,
+            alias_resolutions: BTreeMap::new(),
             envelopes: vec![],
             catalog: CatalogFacts {
                 embedded_sources: vec![],
@@ -1797,6 +1978,103 @@ mod tests {
         assert!(err.contains("Rust type name collision"), "{err}");
         assert!(err.contains("https://example/a.json"), "{err}");
         assert!(err.contains("https://example/b.json"), "{err}");
+    }
+
+    #[test]
+    fn open_object_generated_member_collision_uses_single_namespace_plan() {
+        fn graph_with_field(json_name: &str) -> TargetContractGraph {
+            let root = ContractTypeId::root("https://example/open-collision.json");
+            let field_id = root.child("properties").child(json_name);
+            let mut nodes = BTreeMap::new();
+            nodes.insert(
+                root.clone(),
+                ContractTypeNode {
+                    id: root.clone(),
+                    schema_title: Some("OpenCollisionV1".into()),
+                    source: SourceSchemaMetadata::from_type_id(&root),
+                    shape: TypeShape::Object {
+                        fields: vec![crate::contract_model::ObjectField {
+                            json_name: json_name.into(),
+                            ty: TypeUse {
+                                expr: TypeExpr::Scalar {
+                                    scalar: ScalarKind::String,
+                                },
+                                source: SourceUseSite::new(
+                                    root.schema_id.clone(),
+                                    field_id.pointer.clone(),
+                                ),
+                            },
+                            presence: Presence::Required,
+                            nullability: Nullability::NonNull,
+                            schema_location: field_id,
+                        }],
+                        unknown_field_policy: UnknownFieldPolicy::Allow,
+                    },
+                },
+            );
+            TargetContractGraph {
+                target: crate::manifest::GenerationTarget::Rust,
+                source_schema_ids: vec![root.schema_id.clone()],
+                nodes,
+                alias_resolutions: BTreeMap::new(),
+                envelopes: vec![],
+                catalog: CatalogFacts {
+                    embedded_sources: vec![],
+                    kcp_command_methods: vec![],
+                    kcp_query_methods: vec![],
+                    kcp_methods: vec![],
+                    kcp_legacy_v1_command_methods: vec![],
+                    kcp_legacy_v1_query_methods: vec![],
+                    kcp_legacy_v1_methods: vec![],
+                    event_v1_types: vec![],
+                    method_version_bindings: vec![],
+                    kcp_protocol_version: "1.0".into(),
+                },
+            }
+        }
+
+        for field in ["additional_properties", "additionalProperties"] {
+            let error = project_rust(&graph_with_field(field))
+                .expect_err("declared field must collide with generated flatten member")
+                .to_string();
+            assert!(error.contains("Rust member namespace collision"), "{error}");
+            assert!(error.contains("OpenCollisionV1"), "{error}");
+            assert!(
+                error.contains("https://example/open-collision.json"),
+                "{error}"
+            );
+            assert!(error.contains(field), "{error}");
+            assert!(error.contains("additional_properties"), "{error}");
+            assert!(error.contains("generated member"), "{error}");
+        }
+    }
+
+    #[test]
+    fn integer_renderer_only_narrows_fully_proven_ranges() {
+        assert_eq!(
+            render_integer_type(IntegerConstraints {
+                minimum: Some(JsonInteger::Signed(1)),
+                maximum: Some(JsonInteger::Unsigned(u64::from(u32::MAX))),
+            }),
+            "u32"
+        );
+        assert_eq!(
+            render_integer_type(IntegerConstraints {
+                minimum: Some(JsonInteger::Signed(1)),
+                maximum: Some(JsonInteger::Signed(200)),
+            }),
+            "i64",
+            "historical bounded fields keep the established public contract"
+        );
+        assert_eq!(
+            render_integer_type(IntegerConstraints {
+                minimum: Some(JsonInteger::Signed(1)),
+                maximum: None,
+            }),
+            "i64",
+            "one-sided historical constraints must preserve existing public bytes"
+        );
+        assert_eq!(render_integer_type(IntegerConstraints::default()), "i64");
     }
 
     #[test]
@@ -1873,6 +2151,7 @@ mod tests {
             target: crate::manifest::GenerationTarget::Rust,
             source_schema_ids: vec![root.schema_id.clone()],
             nodes,
+            alias_resolutions: BTreeMap::new(),
             envelopes: vec![],
             catalog: CatalogFacts {
                 embedded_sources: vec![],
@@ -1977,6 +2256,7 @@ mod tests {
             target: crate::manifest::GenerationTarget::Rust,
             source_schema_ids: vec![root.schema_id.clone()],
             nodes,
+            alias_resolutions: BTreeMap::new(),
             envelopes: vec![],
             catalog: CatalogFacts {
                 embedded_sources: vec![],
@@ -2007,6 +2287,132 @@ mod tests {
             })
             .collect();
         assert_eq!(clones.len(), 2);
+    }
+
+    #[test]
+    fn root_alias_renders_transparent_type_and_fragment_alias_does_not_declare() {
+        let target = ContractTypeId::root("https://example/target");
+        let alias = ContractTypeId::root("https://example/alias");
+        let fragment = target.child("$defs").child("reexport");
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            target.clone(),
+            ContractTypeNode {
+                id: target.clone(),
+                schema_title: Some("AliasTargetV1".into()),
+                source: SourceSchemaMetadata::from_type_id(&target),
+                shape: TypeShape::Object {
+                    fields: vec![],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            },
+        );
+        for (id, target_id, title) in [
+            (&alias, &fragment, Some("AliasRootV1".to_string())),
+            (&fragment, &target, None),
+        ] {
+            nodes.insert(
+                id.clone(),
+                ContractTypeNode {
+                    id: id.clone(),
+                    schema_title: title,
+                    source: SourceSchemaMetadata::from_type_id(id),
+                    shape: TypeShape::Alias {
+                        target: TypeUse {
+                            expr: TypeExpr::Reference {
+                                id: target_id.clone(),
+                            },
+                            source: SourceUseSite::new(id.schema_id.clone(), id.pointer.clone()),
+                        },
+                    },
+                },
+            );
+        }
+        let scalar = ContractTypeId::root("https://example/scalar");
+        let scalar_alias = ContractTypeId::root("https://example/scalar-alias");
+        nodes.insert(
+            scalar.clone(),
+            ContractTypeNode {
+                id: scalar.clone(),
+                schema_title: Some("ScalarTargetV1".into()),
+                source: SourceSchemaMetadata::from_type_id(&scalar),
+                shape: TypeShape::Scalar {
+                    scalar: ScalarKind::String,
+                },
+            },
+        );
+        nodes.insert(
+            scalar_alias.clone(),
+            ContractTypeNode {
+                id: scalar_alias.clone(),
+                schema_title: Some("ScalarAliasV1".into()),
+                source: SourceSchemaMetadata::from_type_id(&scalar_alias),
+                shape: TypeShape::Alias {
+                    target: TypeUse {
+                        expr: TypeExpr::Reference { id: scalar.clone() },
+                        source: SourceUseSite::new(
+                            scalar_alias.schema_id.clone(),
+                            scalar_alias.pointer.clone(),
+                        ),
+                    },
+                },
+            },
+        );
+        let mut alias_resolutions = BTreeMap::new();
+        alias_resolutions.insert(
+            alias.clone(),
+            crate::contract_model::AliasResolution {
+                alias_id: alias.clone(),
+                terminal_id: target.clone(),
+                chain: vec![alias.clone(), fragment.clone()],
+            },
+        );
+        alias_resolutions.insert(
+            fragment.clone(),
+            crate::contract_model::AliasResolution {
+                alias_id: fragment.clone(),
+                terminal_id: target.clone(),
+                chain: vec![fragment.clone()],
+            },
+        );
+        alias_resolutions.insert(
+            scalar_alias.clone(),
+            crate::contract_model::AliasResolution {
+                alias_id: scalar_alias.clone(),
+                terminal_id: scalar.clone(),
+                chain: vec![scalar_alias.clone()],
+            },
+        );
+        let graph = TargetContractGraph {
+            target: crate::manifest::GenerationTarget::Rust,
+            source_schema_ids: vec![
+                alias.schema_id.clone(),
+                scalar.schema_id.clone(),
+                scalar_alias.schema_id.clone(),
+                target.schema_id.clone(),
+            ],
+            nodes,
+            alias_resolutions,
+            envelopes: vec![],
+            catalog: CatalogFacts {
+                embedded_sources: vec![],
+                kcp_command_methods: vec![],
+                kcp_query_methods: vec![],
+                kcp_methods: vec![],
+                kcp_legacy_v1_command_methods: vec![],
+                kcp_legacy_v1_query_methods: vec![],
+                kcp_legacy_v1_methods: vec![],
+                event_v1_types: vec![],
+                method_version_bindings: vec![],
+                kcp_protocol_version: "1.0".into(),
+            },
+        };
+        let projection = project_rust(&graph).expect("project root alias");
+        let types = render_types_module_from_projection(&projection).expect("render alias");
+        assert!(types.contains("pub type AliasRootV1 = AliasTargetV1;"));
+        assert!(types.contains("pub type ScalarTargetV1 = String;"));
+        assert!(types.contains("pub type ScalarAliasV1 = ScalarTargetV1;"));
+        assert_eq!(projection.nominal_count_for(&fragment), 0);
     }
 
     #[test]

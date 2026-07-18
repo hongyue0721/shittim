@@ -1,10 +1,10 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-18（Manifest v2/walker、LockPort exact 矩阵与 TransactionFs fixed-point exact 矩阵已完成独立验收；业务 v2 仍未开始。）
+> 状态日期：2026-07-18（首批12个 business-v2 Schema source/manifest entries 与 generated Rust types 已落地；production MethodVersionBindings 仍为空；official JCS/hash fixtures、repository/handler/cutover 未完成。）
 
 ## 当前阶段
 
-当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。active合同已经是TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Event/Audit/ContentOrigin相关v2；这些均未生成或实现。根Node/pnpm基座存在，但没有TS包、SDK/client、agentd、server、Publisher或Provider。
+当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。manifest共有53个Schema（41 retained + 12 component-native）；首批12项的source、manifest entries与generated Rust root types已落地，但production MethodVersionBindings仍为空。active合同已经是TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Event/Audit/ContentOrigin相关v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。根Node/pnpm基座存在，但没有TS包、agentd、server、Publisher或Provider。
 
 统一 Extension SDK Base 是基础产品的 Core 阻塞项：目前只有 `contract-only` 规范，没有正式 operation Schema、library、`composition`、public API 或 SDK 包；因此尚未达到 `schema/SDK`。`provider contract` 与 `real-platform` 是可选 Profile claim 的后续成熟度，`distribution_asserted` 则是与 maturity 正交的对外声明事实；当前两者都不存在。Computer Use 已从 Core 必做能力移为 Extension SDK Base 上的 optional Profile；当前同样仅为 `contract-only`，没有专用 Schema、crate、SDK composition、Provider 或真机测试，因而不阻塞 Core 完成。`desktop-client` 也不等同于 Computer Use。
 
@@ -24,8 +24,8 @@
 ### Schema 与 Rust 契约
 
 - [x] 创建 Rust workspace 与 `rust-toolchain.toml`（1.97.0）。
-- [x] 创建 41 个 Draft 2020-12 Schema 和 `schemas/manifest.json`。
-- [x] `schema-tool generate/check/validate/canonicalize` 已有可运行的单root transaction；artifact transaction 的 typed operation trace、独立 LockPort、精确 reference-model matrix 与 structured failure 已完成根因级实现和独立验收。当前验收边界明确为单artifact-root、Linux real-platform；control-flow/fault conformance 不等同真实断电介质模型，multi-root 与 non-Linux platform port 未实现，业务 v2 也未开始。现有实现：`ArtifactPlan`拒绝0/multi-root；持久lock file用Rust 1.97 OS advisory file lock且不unlink；锁内recover，durable `Preparing/Prepared/RollingBack/Committed` journal协调同filesystem stage/backup/rollback-discard，所有关键syscall前后checkpoint由production闭集枚举；普通journal pre-rename I/O错误须先删除本transaction regular temp并fsync parent才在线rollback，temp清理失败明确返回`rollback deferred/recovery required`并保留journal供下次恢复；commit outcome uncertain不回滚，rollback crash-idempotent，cleanup失败可恢复。成功除lock file外无transaction residue，且保留非planned文件让check继续报告drift；未来multi-root/其它平台port未实现，同用户恶意FS替换不在conformance安全边界。
+- [x] 创建 53 个 Draft 2020-12 Schema 和 `schemas/manifest.json`（41 retained + 12 component-native）；首批12项 source/entries 与 generated Rust root types 已落地。
+- [x] `schema-tool generate/check/validate/canonicalize` 已有可运行的单root transaction；artifact transaction 的 typed operation trace、独立 LockPort、精确 reference-model matrix 与 structured failure 已完成根因级实现和独立验收。当前验收边界明确为单artifact-root、Linux real-platform；control-flow/fault conformance 不等同真实断电介质模型，multi-root 与 non-Linux platform port 未实现。现有实现：`ArtifactPlan`拒绝0/multi-root；持久lock file用Rust 1.97 OS advisory file lock且不unlink；锁内recover，durable `Preparing/Prepared/RollingBack/Committed` journal协调同filesystem stage/backup/rollback-discard，所有关键syscall前后checkpoint由production闭集枚举；普通journal pre-rename I/O错误须先删除本transaction regular temp并fsync parent才在线rollback，temp清理失败明确返回`rollback deferred/recovery required`并保留journal供下次恢复；commit outcome uncertain不回滚，rollback crash-idempotent，cleanup失败可恢复。成功除lock file外无transaction residue，且保留非planned文件让check继续报告drift；未来multi-root/其它平台port未实现，同用户恶意FS替换不在conformance安全边界。
 - [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> ValidatedRegistry<Production|Synthetic> -> TargetPlan/TargetSchemaSet -> target-scoped IR (TargetContractGraph) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；旧版实现的`manifest.id_base` URL namespace校验已由后续manifest v2 component/retained-ID gate替代；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；envelope 唯一分析（0 payload ref => untyped；≥1 双射，mixed branch fail）；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，`TargetPlan`/`TargetSchemaSet` facts字段private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；生产41个Schema无环，生成两次稳定；TS renderer 仍未实现（声明即整体 fail，无部分写）。
 - [x] 落地 Schema TaggedUnion：`oneOf` 单一 Nullable/TaggedUnion/Unsupported 分类先于 object lowering；中立 `TypeShape::TaggedUnion` 保存 discriminator、canonical branch identity、`/oneOf/N` arm `SourceUseSite` 与 unknown-field 禁止策略，保持 use-site 与 Rust symbol 分离；inline/`$ref`、nested、one-branch、`unevaluatedProperties:false` 与 branch `additionalProperties:false`均严格验证，UEP 不会改写被引用 object 的自身策略；Rust projection 只消费 IR，生成内部 tag + `deny_unknown_fields` enum（不 flatten/optional mega-struct），并将 union variant fields 纳入 SCC `Option<Box>` / `Vec` layout。引入该 IR 时同步修正普通 Object unknown-field policy：3个 source `additionalProperties:true` 的 Envelope payload 生成 struct 移除错误 `deny_unknown_fields`，因此保留开放 payload 的真实 Schema/serde 行为；Envelope root 仍严格拒绝未知字段。新增 raw JSON duplicate/missing/unknown tag、ordinary duplicate field、每分支及嵌套 serde roundtrip/tag-once、cargo test、nullable/non-discriminated/ref-target/profile 负例、Envelope binding 不变、实际 CLI 四生成物 no-partial 及两次稳定性覆盖；测试数量不作为稳定合同，避免文档随新增用例漂移。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
@@ -102,7 +102,7 @@
 ### KCP Value preflight 与注册式 dispatcher 实现
 
 - [x] 在 `kernel-contracts` 增加 `ContractFailureStage`、`ContractFailureClassification`、`ClassifiedContractFailure`、`ContractError::stage()` 与 `classification_for_preflight()`；caller Schema violation 与 post-Schema/generated/catalog failure 结构化区分。
-- [x] schema-tool 模板生成 `decode_after_validation`，并令 wire/payload/discriminator default 分别产生 `WireDecodeAfterSchema`、`PayloadDecodeAfterSchema`、`GeneratedDiscriminatorMapping`；生成物通过 schema-tool regenerate，无手改。
+- [x] schema-tool生成`decode_after_validation`相关代码；`kernel-contracts::decode_validated`提供通用Schema-first typed decode，CLI/runtime共享启用format assertion的同一validator配置；Alias统一resolution/audit与root transparent alias已落地。以上仍不表示active runtime cutover完成。
 - [x] 在 `kernel-kcp` 实现 `preflight_value(Value)`，按 request_id > family > protocol > auth > generated family method > 根 payload version > 完整 Schema/typed decode 固定优先级短路。
 - [x] 固定五类 wire error 的 code/message/details/retryable，并复用 crate-private generated Response Schema finalizer；final response fault seam 本地 fail closed。
 - [x] 实现 private-state `TypedCatalogRequest` / `RegisteredRequest`，避免调用方构造 family/discriminator/payload 错配；公开只读 family/method introspection。
@@ -110,19 +110,21 @@
 - [x] 实现 borrowing `TypedDispatcher<C,G,B>`，直接调用三个 public `handle_*`，不增加平行 ports、不重复 deadline/Schema、不改写 `HandlerResult` 或 intent。
 - [x] 增加 static negative Serialize assertions、八方法合法 Value、priority/field/cross-family/root/nested version、known malformed/valid、固定 error response、private unknown-schema/final-response fault seam、dispatcher response/ContractFailure/Created intent 与 clock 路由测试。
 - [x] `kernel-contracts`、`schema-tool`、`kernel-kcp`均有对应自动化回归；测试数量随新增场景演进，不在进度文档中维护易漂移总数。
-- [x] 没有新增 Schema、bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。
+- [x] 当前 retained v1 Value preflight/registration/dispatcher 与三个 handler 已实现；未新增 bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。active method-aware payload version preflight与runtime cutover仍未完成。
 
 ## 新接受的contract-only架构（ADR-0006/0007）
 
 - [x] 接受ADR-0006：active KCP TaskCreate v2 root-only；v1 legacy冻结；Child Task唯一通过父Task的`kernel.task/task.child.create` S1 Action创建；child事实直接Action causation，Action自身状态事件使用transition anchor；显式Scope/Delegation delta；原子materialization与legacy provenance。
 - [x] 接受ADR-0007：Approval v2 request/resolution/invalidation判别联合、subject exactly-one、不可变current-head CAS、material/observation fingerprint分离、真实身份/remote challenge证据与plan re-evaluation。
 - [x] 接受ADR-0006/0007并补齐完整contract；本轮进一步闭合首批正好12个Schema的component-native exact validator目标、五值compatibility一般规则、`NormalizedRootTaskCreatePayloadV2#/$defs`中立宿主、逐source `$ref`依赖、allocation/projection schema_version、Envelope V2 registry发现、active Catalog命名与MethodVersionBinding production-stage gate。
-- [x] **schema-tool library implemented（本切片）**：正式五值`compatibility`；component-native exact ID/source/title/version硬门；完整非空`MethodVersionBinding` validator；registry exact V2 Envelope authority发现；显式`ProductionRegistry`/`SyntheticRegistry` profile proof成为TargetPlan、target graph与artifact planning的唯一入口，裸`SchemaRegistry`仅inspection/instance validation；`validate_production_manifest_stage`挂到production CLI check/generate；catalog生成`KCP_METHODS`/`KCP_LEGACY_V1_*`/`METHOD_VERSION_BINDINGS`；production bindings仍为空，未新增12业务Schema source；types/typed/mod byte稳定，catalog.rs按新API预期变更。
+- [x] **首批12 business-v2 Schema source/manifest/generated types（本切片）**：12 component-native entries；shared `$defs` host + absolute fragment refs；V2 Envelope family authority生效后 `KCP_ENVELOPE_AUTHORITY_METHODS`=8，legacy仍8，`METHOD_VERSION_BINDINGS=[]`；该authority不代表bound active version或executable registration。
+- [x] **schema-tool library implemented（本切片）**：正式五值`compatibility`；component-native exact ID/source/title/version硬门；完整非空`MethodVersionBinding` validator；registry exact V2 Envelope authority发现；显式`ProductionRegistry`/`SyntheticRegistry` profile proof成为TargetPlan、target graph与artifact planning的唯一入口，裸`SchemaRegistry`仅inspection/instance validation；`validate_production_manifest_stage`挂到production CLI check/generate；catalog生成`KCP_ENVELOPE_AUTHORITY_METHODS`/`KCP_LEGACY_V1_*`/`METHOD_VERSION_BINDINGS`；production bindings仍为空；neutral Alias resolution/root transparent alias、root API re-export、shared format assertion/unknown fail-closed、通用validated decode taxonomy、open-object统一member collision audit与`1..=u32::MAX -> u32`准确生成均已完成。
 - [x] production retained lifecycle改标：TaskCreateRequest/KcpCommandEnvelope/KcpQueryEnvelope v1=`legacy-validation-only`，TaskCreateResponse v1=`legacy-read-only`，其余37=`v1-stable`；不改retained ledger/source bytes。
 
 ## 未完成
 
-- [ ] 新增并生成首批12项：InputContentOriginV1、InputTaskScopeV1、TaskCreateRequestV2、NormalizedRootTaskCreatePayloadV2、RootTaskCreateIdempotencyProjectionV1、TaskCreateResponseV2、RootTaskCreateAllocationV2、ChildTaskProposalV1、NormalizedChildTaskProposalV1、ChildTaskMaterializationAllocationV1、KcpCommandEnvelopeV2、KcpQueryEnvelopeV2。工具层已就绪，production仍无这12个Schema source/entries，bindings仍为空。
+- [x] 新增并生成首批12项：InputContentOriginV1、InputTaskScopeV1、TaskCreateRequestV2、NormalizedRootTaskCreatePayloadV2、RootTaskCreateIdempotencyProjectionV1、TaskCreateResponseV2、RootTaskCreateAllocationV2、ChildTaskProposalV1、NormalizedChildTaskProposalV1、ChildTaskMaterializationAllocationV1、KcpCommandEnvelopeV2、KcpQueryEnvelopeV2。manifest=53（41 retained + 12 component-native）；generated root types 已存在；production bindings 仍为空；active/legacy catalog 各8；无 TypedKcp*EnvelopeV2。
+- [ ] 本批12项的 official JCS/hash fixtures 与 repository 复用 helper 仍未提交（下一独立测试/业务切片）。
 - [ ] 后续其它v2 Schema仍包括四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule、signature/credential/challenge/evidence等。
 - [ ] 将Value preflight改为method-aware payload version；active `task.create`只接受2，v1仅migration validator；替换registered v1 handler。
 - [ ] 实现root v2 repository/handler与child Action materializer；同Action最多一child、bundle全有或全无、canonical readback与reconciliation。
@@ -154,7 +156,7 @@
 
 ## 下一步
 
-1. 首批12 Schema source/entries与production bindings仍待实现；schema-tool library的compatibility/ID/title/schema_version、claimant authority、target-local binding facts、显式profile、catalog与typed selector基座已经完成，production继续由`ProductionRegistry`保持bindings empty。
+1. 首批12 Schema source/entries/generated types 已落地；production bindings 仍 empty。下一步是 official fixtures/hash、method-aware preflight、root v2 repository/handler 与 child materializer，以及最终 V2ProductionWriteCutover。
 2. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
 3. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
 4. 实现root TaskCreate v2与child Action原子materializer、provenance migration和reconciliation。

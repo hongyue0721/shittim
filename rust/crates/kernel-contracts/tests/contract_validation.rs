@@ -4,7 +4,7 @@ use kernel_contracts::{
     sha256_canonical, validate_json, ActionStatus, Actor, ActorAuthenticationLevel, ActorKind,
     ActorSchemaVersion, ApprovalRecord, ApprovalRecordApprovalType, ApprovalRecordDecision,
     ApprovalRecordSchemaVersion, ApprovalRecordTarget, ContractError,
-    ContractFailureClassification, ContractFailureStage, EntryPoint, EventEnvelope,
+    ContractFailureClassification, ContractFailureStage, DecodeStage, EntryPoint, EventEnvelope,
     EventEnvelopePayload, EventPayload, KcpCommandEnvelope, KcpCommandEnvelopePayload,
     KcpCommandEnvelopeProtocolVersion, KcpCommandPayload, KcpQueryEnvelope,
     KcpQueryEnvelopePayload, NullOnly, PermissionDecision, PermissionDecisionBinding,
@@ -14,9 +14,10 @@ use kernel_contracts::{
     PolicyRuleSchemaVersion, PolicyRuleSource, PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest,
     TaskListRequestParentFilter, TaskListRequestParentFilterMode, TaskListRequestProposer,
     TaskListRequestSchemaVersion, TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope,
-    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_LEGACY_V1_METHODS, KCP_METHODS,
+    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_ENVELOPE_AUTHORITY_METHODS, KCP_LEGACY_V1_METHODS,
     KCP_PROTOCOL_VERSION,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 const AUDIT_RECORD_ID: &str = "https://schemas.shittim.local/v1/audit/audit_record.json";
@@ -60,6 +61,16 @@ fn contract_errors_have_stable_preflight_stage_classification() {
             },
             ContractFailureStage::CallerSchemaValidation,
             ContractFailureClassification::CallerInvalid,
+            Some(QUERY_ID),
+        ),
+        (
+            ContractError::DecodeAfterSchema {
+                schema_id: QUERY_ID.into(),
+                stage: DecodeStage::TypedDeserialize,
+                detail: "private serde detail".into(),
+            },
+            ContractFailureStage::TypedDecodeAfterSchema,
+            ContractFailureClassification::InternalContractFailure,
             Some(QUERY_ID),
         ),
         (
@@ -123,6 +134,50 @@ fn contract_errors_have_stable_preflight_stage_classification() {
         assert_eq!(classified.classification, classification);
         assert_eq!(classified.schema_id.as_deref(), schema_id);
     }
+}
+
+#[test]
+fn generic_decode_after_schema_is_structured_and_does_not_cross_safe_boundary() {
+    #[derive(Debug, serde::Deserialize)]
+    struct RejectSchemaValidValue {
+        #[serde(rename = "echo", deserialize_with = "reject_string")]
+        _echo: String,
+    }
+
+    fn reject_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let _ = String::deserialize(deserializer)?;
+        Err(serde::de::Error::custom("typed-only rejection marker"))
+    }
+
+    let instance = json!({"schema_version": 1, "echo": "schema accepts this string"});
+    validate_json(
+        "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+        &instance,
+    )
+    .expect("Schema must pass before the synthetic typed rejection");
+    let error = kernel_contracts::decode_validated::<RejectSchemaValidValue>(
+        "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+        &instance,
+    )
+    .expect_err("custom typed decoder must reject after Schema");
+    assert_eq!(error.stage(), ContractFailureStage::TypedDecodeAfterSchema);
+    let classified = error.classification_for_preflight();
+    assert_eq!(
+        classified.classification,
+        ContractFailureClassification::InternalContractFailure
+    );
+    assert_eq!(
+        classified.schema_id.as_deref(),
+        Some("https://schemas.shittim.local/v1/kcp/system_ping_request.json")
+    );
+    assert!(error.to_string().contains("typed-only rejection marker"));
+    assert!(
+        !format!("{classified:?}").contains("typed-only rejection marker"),
+        "safe structured classification must not expose serde detail"
+    );
 }
 
 #[test]
@@ -586,11 +641,15 @@ fn kcp_unknown_command_method_rejected() {
 
 #[test]
 fn kcp_eight_methods_closed_set_constants() {
-    // Production stage: active catalogs are empty; retained first-batch set is LEGACY.
-    assert!(KCP_METHODS.is_empty());
+    // Production has V2 Envelope family structure authority for eight methods.
+    // This authority catalog is not a bound-version or executable registry.
+    // Retained first-batch set remains LEGACY and orthogonal; bindings stay empty.
+    assert_eq!(KCP_ENVELOPE_AUTHORITY_METHODS.len(), 8);
     assert_eq!(KCP_LEGACY_V1_METHODS.len(), 8);
     assert_eq!(KCP_PROTOCOL_VERSION, "1.0");
     assert_eq!(EVENT_V1_TYPES.len(), 3);
+    assert!(KCP_ENVELOPE_AUTHORITY_METHODS.contains(&"task.create"));
+    assert!(KCP_ENVELOPE_AUTHORITY_METHODS.contains(&"stop.activate"));
     assert!(KCP_LEGACY_V1_METHODS.contains(&"task.create"));
     assert!(KCP_LEGACY_V1_METHODS.contains(&"stop.activate"));
     assert!(EVENT_V1_TYPES.contains(&"task.created"));

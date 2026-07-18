@@ -384,7 +384,7 @@ receipt preimage就是`NormalizedRootTaskCreatePayloadV2`的JCS UTF-8 bytes。v2
 - `KcpCommandEnvelopeV2`：`https://schemas.shittim.local/kcp/command_envelope/v2`；
 - `KcpQueryEnvelopeV2`：`https://schemas.shittim.local/kcp/query_envelope/v2`。
 
-二者的顶层`protocol_version`仍固定`"1.0"`；Schema版本名V2描述breaking validation architecture，不把wire protocol升级成2.0。新Envelope只验证公共结构、family method闭集与根`payload.schema_version`为positive integer，**不得**含任何方法payload conditional `$ref`：每个新Envelope正好0个method payload conditional `$ref`。因此只禁止生成`TypedKcpCommandEnvelopeV2`与`TypedKcpQueryEnvelopeV2`这两个generic envelope typed decode，以及任何仅由这两个Envelope的0 conditional refs同义派生的wrapper；不得据此笼统禁止其它有正式判别映射的`Typed*V2`类型。payload业务Schema由generated MethodVersionBinding按`family+method+request version`第二阶段选择。`KcpQueryEnvelopeV2`即使当前query payload都仍为v1，也因验证架构从method-only conditional binding改为family+method+version两阶段选择而属于breaking replacement，必须保留独立V2身份。retained v1 Command/Query Envelope source、ID和条件refs不得修改。
+二者的顶层`protocol_version`仍固定`"1.0"`；Schema版本名V2描述breaking validation architecture，不把wire protocol升级成2.0。新Envelope只验证公共结构、family method闭集与根`payload.schema_version`为**u32 method-version编码域**（`1..=4294967295`）；该上界与manifest/generated `MethodVersionBinding`公开`u32`类型一致，不是任意策略。新Envelope**不得**含任何方法payload conditional `$ref`：每个新Envelope正好0个method payload conditional `$ref`。因此只禁止生成`TypedKcpCommandEnvelopeV2`与`TypedKcpQueryEnvelopeV2`这两个generic envelope typed decode，以及任何仅由这两个Envelope的0 conditional refs同义派生的wrapper；不得据此笼统禁止其它有正式判别映射的`Typed*V2`类型。payload业务Schema由generated MethodVersionBinding按`family+method+request version`第二阶段选择。`KcpQueryEnvelopeV2`即使当前query payload都仍为v1，也因验证架构从method-only conditional binding改为family+method+version两阶段选择而属于breaking replacement，必须保留独立V2身份。retained v1 Command/Query Envelope source、ID和条件refs不得修改。
 
 Command：
 
@@ -402,7 +402,7 @@ Command：
   idempotency_key: <non-empty string>,
   expected_revision: <non-negative integer> | null,
   command_type: <KCP method name>,
-  payload: { schema_version: <positive integer>, ... }
+  payload: { schema_version: <u32 integer 1..=4294967295>, ... }
 }
 ```
 
@@ -419,7 +419,7 @@ Query：
   task_id: <uuid> | null,
   deadline: <RFC 3339 UTC timestamp>,
   query_type: <KCP method name>,
-  payload: { schema_version: <positive integer>, ... }
+  payload: { schema_version: <u32 integer 1..=4294967295>, ... }
 }
 ```
 
@@ -2011,7 +2011,7 @@ JSON Schema object `oneOf`只有在每branch经canonical `$ref` resolution后均
 
 ### 13.5 MethodVersionBinding权威结构与两阶段启用
 
-MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding描述某个KCP family/method的request/response版本选择与active/legacy validation lifecycle；`compatibility`描述Schema entry的演化关系。不得从任一字段推导另一字段。
+MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding描述某个KCP family/method的request/response版本选择与active/legacy validation lifecycle；`compatibility`只描述Schema entry相对既有wire合同的演化关系。不得把`compatibility`称作lifecycle字段，也不得从任一字段推导另一字段。
 
 每条binding全部字段required：
 
@@ -2036,8 +2036,8 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 - active request/response不得引用`legacy-validation-only`或`legacy-read-only` entry；legacy request只能引用`legacy-validation-only` entry；internal projection/allocation与其它非KCP kind不得进入binding；
 - binding引用的request、response及其全部`$ref`依赖必须属于binding catalog的generation target closure，且对应生成target完整；合法Schema ID但target closure不完整仍失败；
 - active family structure authority不得再通过schema ID文件名或`*command_envelope.json`/`*query_envelope.json` suffix推断。registry必须对每个family按全部entry事实唯一选择：`component=kcp`、`kind=envelope`、title分别精确为`KcpCommandEnvelopeV2`/`KcpQueryEnvelopeV2`、ID分别精确为`https://schemas.shittim.local/kcp/command_envelope/v2`/`https://schemas.shittim.local/kcp/query_envelope/v2`、entry version `2`、root `schema_version`（若该root声明该字段）与entry version一致、`compatibility=breaking-replacement`；任一family候选为0或多于1都fail closed。选中后读取其root `command_type`/`query_type` discriminator enum作为active family method事实；retained v1 Envelope只负责legacy validation/typed decode，绝不是active method catalog authority；
-- generated active目录常量/API固定命名为`KCP_COMMAND_METHODS`、`KCP_QUERY_METHODS`与两者canonical合并的`KCP_METHODS`，不得继续用`KCP_V1_METHODS`指代active总目录。若后续确需暴露retained legacy目录，必须使用含`LEGACY`的独立名称，例如`KCP_LEGACY_V1_METHODS`，且不能被active preflight消费；
-- 完整八方法覆盖不在代码或fixture手写第二份生产表：MethodVersionBinding validator直接从上述registry Envelope facts派生expected set，并证明每个method恰有一个binding、无遗漏/多余/跨family错配。validator不得反向读取generated `KCP_*METHODS`常量，否则会形成“用待验证生成物验证其自身来源”的循环；新Envelope本身没有payload conditional refs；
+- generated Envelope结构权威目录常量/API固定命名为`KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS`、`KCP_ENVELOPE_AUTHORITY_QUERY_METHODS`与两者canonical合并的`KCP_ENVELOPE_AUTHORITY_METHODS`。这些常量只表达active family structure authority，不表达bound active version或dispatcher executable registration。不得继续用`KCP_COMMAND_METHODS`/`KCP_QUERY_METHODS`/`KCP_METHODS`等易被运行时误用的名称，也不得用`KCP_V1_METHODS`指代active总目录。retained legacy目录必须使用含`LEGACY`的独立名称，例如`KCP_LEGACY_V1_METHODS`，且不能被active preflight消费；
+- 完整八方法覆盖不在代码或fixture手写第二份生产表：MethodVersionBinding validator直接从上述registry Envelope facts派生expected set，并证明每个method恰有一个binding、无遗漏/多余/跨family错配。validator不得反向读取generated `KCP_ENVELOPE_AUTHORITY_*`常量，否则会形成“用待验证生成物验证其自身来源”的循环；新Envelope本身没有payload conditional refs；
 - generated binding catalog只提供library facts/选择器，不表示dispatcher registration、handler、repository、server或SDK已可用。
 
 启用分两阶段：
@@ -2072,7 +2072,7 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 - `allowed_refs`是严格升序、无重复的其它 component name 数组；不得声明自身或未知component。跨 component `$ref` 只有目标component在源component `allowed_refs`中才可解析；同component可引用。此component-ref gate独立于且不得替代generation target closure：gate通过后，依赖仍必须声明同一generation target。
 - `retained_ids`是严格升序、无重复的canonical absolute schema IDs；一个retained ID恰好对应一个当前manifest entry及其完全未改写的source `$id`。因此retained ID禁止重绑到别的component、禁止孤儿、禁止重复；entry ID如落入任一retained set，必须恰好由其所属component保留。当前41个历史`/v1/` IDs以版本控制的不可变迁移ledger（`schemas/fixtures/manifest/retained_ids.v1.json`）逐项固定`id/component/source/source_sha256`，`SchemaRegistry::load`逐项计算实际source bytes SHA-256并同时核对manifest所有权/路径，因此ledger是每次load的生产gate，不能通过协同移动`retained_ids`和entry `component`、改路径或单独篡改仍合法的Schema bytes绕过。ledger只记录迁移时的41个历史ID；本批12个新component-native ID及以后所有新ID都不得加入。retained ID不得落在任何component namespace，component-native ID也不得落入retained集合；不允许新的非retained `/v1/` entry。
 - `method_version_bindings`为manifest v2 required typed字段，元素wire shape就是§13.5的完整`MethodVersionBinding`。通用`SchemaRegistry::load`允许并完整验证合法非空synthetic registry；production `schemas/manifest.json`在Schema/工具阶段仍显式为空，只由§13.5命名的`validate_production_manifest_stage`断言，直到`V2ProductionWriteCutover`才启用。不得把“production当前为空”实现成通用empty-only loader规则。
-- `compatibility`正式闭集固定且只允许`v1-stable | new-contract | breaking-replacement | legacy-validation-only | legacy-read-only`，所有production、synthetic、fixture与test manifest一律使用这五值，不得增加任何测试专用或预留的lifecycle值，也不得设置测试旁路。一般判定规则为：`breaking-replacement`用于存在明确被替换旧wire contract的新独立版本；`new-contract`用于没有旧wire contract被替换的新对象，包括projection/allocation；`legacy-validation-only`只供显式历史输入validation/migration，不得用于production write或active response；`legacy-read-only`只供历史持久事实/response读取校验，不得作为request。`v1-stable`表示该retained合同仍按其引用方生命周期稳定使用。该字段与MethodVersionBinding lifecycle正交；尤其`new-contract`不表示public method可调用，也不等于internal visibility。正式闭集中没有`internal` compatibility：projection/allocation使用`new-contract`，依靠entry `kind`及“不得被MethodVersionBinding引用”的验证约束保持internal，不得增造第六种值或借compatibility表达可见性。
+- `compatibility`正式闭集固定且只允许`v1-stable | new-contract | breaking-replacement | legacy-validation-only | legacy-read-only`，所有production、synthetic、fixture与test manifest一律使用这五值，不得增加任何测试专用或预留的演化标签值，也不得设置测试旁路。一般判定规则为：`breaking-replacement`用于存在明确被替换旧wire contract的新独立版本；`new-contract`用于没有旧wire contract被替换的新对象，包括projection/allocation；`legacy-validation-only`只供显式历史输入validation/migration，不得用于production write或active response；`legacy-read-only`只供历史持久事实/response读取校验，不得作为request。`v1-stable`表示该retained合同仍按其引用方生命周期稳定使用。该字段与MethodVersionBinding lifecycle正交；尤其`new-contract`不表示public method可调用，也不等于internal visibility。正式闭集中没有`internal` compatibility：projection/allocation使用`new-contract`，依靠entry `kind`及“不得被MethodVersionBinding引用”的验证约束保持internal，不得增造第六种值或借compatibility表达可见性。
 - 非retained component-native entry的ID必须**精确**为`https://schemas.shittim.local/<component>/<snake_case_name>/v<version>`，source必须精确镜像为`schemas/source/<component>/<snake_case_name>.v<version>.json`。一般情况下，`snake_case_name`由entry `title`移除末尾精确版本后缀`V<version>`后按项目canonical snake_case规则得到。KCP envelope是规范化命名空间已编码的固定规则：hard gate必须按`component=kcp`、`kind=envelope`与title精确为`KcpCommandEnvelopeV2`/`KcpQueryEnvelopeV2`应用规范stem，显式去掉领域前缀`Kcp`，分别固定为`command_envelope`/`query_envelope`；因此Command Envelope的ID/source固定为`https://schemas.shittim.local/kcp/command_envelope/v2`与`schemas/source/kcp/command_envelope.v2.json`，Query Envelope的ID/source固定为`https://schemas.shittim.local/kcp/query_envelope/v2`与`schemas/source/kcp/query_envelope.v2.json`，不得生成`kcp_kcp...`。这不是任意例外，而是component已编码kcp命名空间的规范stem规则。`snake_case_name`结果为一个或多个小写ASCII字母/数字片段以下划线连接，不允许大写、连字符、空片段。
 本批后续Schema/工具提交必须新增**正好12个**entry，title都必须带`V1`/`V2`后缀以避免Rust平面命名冲突；本次文档提交不改manifest/source/generated：
 
@@ -2110,7 +2110,7 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 
 `{九字段}`是表述集合，不是合法literal ref path；source中必须逐项写出精确fragment。`TaskCreateRequestV2`/`TaskCreateResponseV2`属于`kcp→task/common` closure，两个Envelope属于`kcp→common`，`RootTaskCreateIdempotencyProjectionV1`明确属于`task→common`，两个allocation文档无refs。
 
-同一后续提交还必须把retained `TaskCreateRequestV1`、`KcpCommandEnvelopeV1`、`KcpQueryEnvelopeV1` entry的`compatibility`标为`legacy-validation-only`，retained `TaskCreateResponseV1` entry标为`legacy-read-only`；其余retained 37项保持`v1-stable`。compatibility改标只改变manifest lifecycle标签，不得改41项retained ledger的ID/component/source/source SHA-256，也不得改对应source bytes。这些是后续manifest实际改动合同，本次docs提交不得提前修改或宣称已实现。
+同一后续提交还必须把retained `TaskCreateRequestV1`、`KcpCommandEnvelopeV1`、`KcpQueryEnvelopeV1` entry的`compatibility`标为`legacy-validation-only`，retained `TaskCreateResponseV1` entry标为`legacy-read-only`；其余retained 37项保持`v1-stable`。compatibility改标只改变manifest演化标签，不得改41项retained ledger的ID/component/source/source SHA-256，也不得改对应source bytes。这些是后续manifest实际改动合同，本次docs提交不得提前修改或宣称已实现。
 
 - registry在构造公开对象前调用单一权威`SchemaNode` walker。walker以pre-order提供canonical JSON Pointer、`is_root`与object/boolean node callback，并只遍历下列Draft 2020-12 Schema-bearing位置：map value `properties`、`patternProperties`、`dependentSchemas`、`$defs`、`definitions`；single Schema `additionalProperties`、`unevaluatedProperties`、`propertyNames`、`items`、`contains`、`unevaluatedItems`、`contentSchema`、`not`、`if`、`then`、`else`；Schema array `prefixItems`、`allOf`、`anyOf`、`oneOf`。存在但容器/node类型错误立即失败。loader对每个document用该walker建立私有不可变的authoritative SchemaNode pointer index；`resolve_ref`和public `schema_at`必须先验证目标pointer属于该index，raw JSON pointer lookup只能crate-private且命名明确。`$ref`指向`const/default/examples/enum`等实例位置时，即使目标JSON长得像Schema也fail closed；`$defs/properties/items`等合法Schema位置通过。restricted identity audit、registry `$ref` resolution/component gate、generation target dependency closure及restricted codegen support-profile audit均复用该walker callback，不得复制第二套通用位置闭集；target envelope提取只允许作为已命名的特定IR结构读取。`$ref`只在Schema node检查，禁止递归进入实例数据。map中的`$ref/$id/$schema/$dynamicRef`只是普通property/definition名称，其value仍作为Schema遍历。
 - restricted identity/ref profile：仅root允许`$id`与`$schema`；任何nested非root `$id`/`$schema`立即失败；当前不支持的`$anchor`、`$dynamicAnchor`、`$dynamicRef`、`$recursiveAnchor`、`$recursiveRef`、`$vocabulary`均立即失败。上述invariant由`SchemaRegistry::load`统一实施，因此validate/check/generate不能绕过或延后。

@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：contract-only；本 ADR 未修改 Schema、Rust、SQLite migration 或生成物
+- 实现状态：contract-only；本 ADR 未实现 TaskCreate v2 repository/handler/materializer，但首批相关 Schema source、manifest entries 与 generated Rust root types 已落地；production MethodVersionBindings、fixtures 与 cutover 仍未完成
 
 ## 背景
 
@@ -115,3 +115,8 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 4. 扩大 scope/capability 进入 Policy context而不是 hard deny，Delegation authority 缺失则明确失败；
 5. 故障注入证明 bundle 全有或全无、同 Action最多一个 child；
 6. legacy direct-child 可读且明确标记 provenance，不伪造历史事实。
+
+## 实现状态（非规范）
+
+- 首批12 Schema source/manifest/generated types 已落地（含 ChildTaskProposal/NormalizedChild/Allocation 与 TaskCreate v2 相关对象）。
+- production MethodVersionBindings 仍为空；repository/handler/materializer/cutover 与 official hash fixtures 未完成。

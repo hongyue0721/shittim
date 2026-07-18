@@ -14,7 +14,9 @@ use schema_tool::resolve::{
     schema_id_in_id_base_namespace, validate_component_namespace, ResolvedSchemaRef,
 };
 use schema_tool::target::build_target_plan;
-use schema_tool::{lower_and_render_rust, lower_target_contract_graph, project_rust};
+use schema_tool::{
+    lower_and_render_rust, lower_target_contract_graph, project_rust, AliasResolution,
+};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -139,6 +141,18 @@ fn add_manifest_entry(temp: &Path, entry: serde_json::Value) {
 // ---------------------------------------------------------------------------
 // Production identity / HEAD bytes
 // ---------------------------------------------------------------------------
+
+#[test]
+fn alias_resolution_is_usable_from_schema_tool_root_api() {
+    let alias_id = schema_tool::ContractTypeId::root("https://example/alias");
+    let terminal_id = schema_tool::ContractTypeId::root("https://example/terminal");
+    let fact = AliasResolution {
+        alias_id: alias_id.clone(),
+        terminal_id: terminal_id.clone(),
+        chain: vec![alias_id],
+    };
+    assert_eq!(fact.terminal_id, terminal_id);
+}
 
 #[test]
 fn production_graph_keeps_single_defs_node_and_two_policy_rule_clones() {
@@ -995,6 +1009,87 @@ fn artifact_plan_try_new_rejects_evil_absolute_traversal_duplicate_and_nested_ok
 }
 
 #[test]
+fn shared_goal_constraint_real_mutant_reloads_lowers_and_renders() {
+    let temp = temporary_repo("shared-goal-real-mutant");
+    let host_id = "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2";
+    let request_id = "https://schemas.shittim.local/kcp/task_create_request/v2";
+    let child_id = "https://schemas.shittim.local/task/child_task_proposal/v1";
+    let normalized_child_id =
+        "https://schemas.shittim.local/task/normalized_child_task_proposal/v1";
+    let host_path = temp.join("schemas/source/task/normalized_root_task_create_payload.v2.json");
+    let mut host = read_json(&host_path);
+    host["$defs"]["goal"]["minLength"] = json!(3);
+    write_json(&host_path, &host);
+
+    let registry = SchemaRegistry::load(&temp).expect("reload mutant");
+    for (schema_id, version) in [
+        (request_id, 2),
+        (host_id, 2),
+        (child_id, 1),
+        (normalized_child_id, 1),
+    ] {
+        let mut short = business_v2_nine_fields(version, "ab");
+        assert!(
+            schema_tool::validate::validate_instance(&registry, schema_id, &short).is_err(),
+            "mutated host must reject ab through {schema_id}"
+        );
+        short["goal"] = json!("abc");
+        schema_tool::validate::validate_instance(&registry, schema_id, &short).unwrap_or_else(
+            |error| panic!("mutated host must accept abc through {schema_id}: {error}"),
+        );
+    }
+
+    let synthetic = schema_tool::SyntheticRegistry::new(&registry).expect("synthetic profile");
+    let plan = build_target_plan(synthetic).expect("target plan");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("lower mutant");
+    let projection = project_rust(&graph).expect("project mutant");
+    let rendered =
+        schema_tool::render_types_module_from_projection(&projection).expect("render mutant");
+    assert!(rendered.contains("pub struct TaskCreateRequestV2"));
+    let goal = schema_tool::ContractTypeId::root(host_id)
+        .child("$defs")
+        .child("goal");
+    assert!(graph.nodes.contains_key(&goal));
+    assert_eq!(
+        graph
+            .nodes
+            .keys()
+            .filter(|id| id.pointer.as_str() == "/$defs/goal")
+            .count(),
+        1
+    );
+    std::fs::remove_dir_all(temp).ok();
+}
+
+fn business_v2_nine_fields(schema_version: u32, goal: &str) -> serde_json::Value {
+    json!({
+        "schema_version": schema_version,
+        "proposer": "user",
+        "goal": goal,
+        "constraints": [],
+        "success_criteria": [],
+        "risk_hint": null,
+        "capability_hints": [],
+        "task_scope": {
+            "schema_version": 1,
+            "resource_patterns": [],
+            "exclusions": [],
+            "allowed_capability_hints": [],
+            "expires_at": null
+        },
+        "delegation_ref": null,
+        "origin": {
+            "schema_version": 1,
+            "kind": "user_input",
+            "source_uri": null,
+            "upstream_stable_id": null,
+            "producer_ref": {"kind": "actor", "id": "actor-1"},
+            "parent_origin_refs": []
+        }
+    })
+}
+
+#[test]
 fn root_shared_refs_are_not_cloned_per_use_site() {
     let root = repo_root();
     let (_graph, types, _, _) =
@@ -1206,8 +1301,8 @@ fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sou
     let components = registry.manifest().components.clone();
     assert_eq!(
         registry.schema_count(),
-        41,
-        "production baseline is 41 schemas"
+        53,
+        "production baseline is 41 retained + 12 business-v2 schemas"
     );
 
     let retained: BTreeSet<_> = components
@@ -1215,16 +1310,29 @@ fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sou
         .flat_map(|component| component.retained_ids.iter())
         .collect();
     assert_eq!(retained.len(), 41, "all retained IDs must have one owner");
+    let mut retained_count = 0usize;
+    let mut native_count = 0usize;
     for (_id, loaded) in registry.loaded_schemas() {
         let entry = loaded.entry();
-        assert!(entry.id.starts_with("https://schemas.shittim.local/v1/"));
-        assert!(retained.contains(&entry.id));
         let source_id = loaded
             .document()
             .get("$id")
             .and_then(serde_json::Value::as_str);
         assert_eq!(source_id, Some(entry.id.as_str()));
+        if entry.id.starts_with("https://schemas.shittim.local/v1/") {
+            assert!(retained.contains(&entry.id));
+            retained_count += 1;
+        } else {
+            assert!(
+                !retained.contains(&entry.id),
+                "component-native id must not enter retained ledger: {}",
+                entry.id
+            );
+            native_count += 1;
+        }
     }
+    assert_eq!(retained_count, 41);
+    assert_eq!(native_count, 12);
 }
 
 #[test]
@@ -1308,20 +1416,23 @@ fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
     let mut legacy_validation = 0usize;
     let mut legacy_read = 0usize;
     let mut stable = 0usize;
+    let mut new_contract = 0usize;
+    let mut breaking = 0usize;
     for entry in &registry.manifest().schemas {
         match entry.compatibility {
             schema_tool::SchemaCompatibility::LegacyValidationOnly => legacy_validation += 1,
             schema_tool::SchemaCompatibility::LegacyReadOnly => legacy_read += 1,
             schema_tool::SchemaCompatibility::V1Stable => stable += 1,
-            other => panic!(
-                "unexpected production compatibility {other:?} on {}",
-                entry.id
-            ),
+            schema_tool::SchemaCompatibility::NewContract => new_contract += 1,
+            schema_tool::SchemaCompatibility::BreakingReplacement => breaking += 1,
         }
     }
     assert_eq!(legacy_validation, 3);
     assert_eq!(legacy_read, 1);
     assert_eq!(stable, 37);
+    assert_eq!(new_contract, 8);
+    assert_eq!(breaking, 4);
+    assert_eq!(registry.schema_count(), 53);
     schema_tool::validate_production_manifest_stage(&registry)
         .expect("production stage gate accepts empty bindings");
 }
@@ -1329,8 +1440,23 @@ fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
 #[test]
 fn generic_loader_rejects_incomplete_nonempty_bindings_without_v2_authority() {
     let temp = temporary_repo("manifest-v2-nonempty-method-binding");
+    // Production now includes V2 envelopes. Strip them so this case still proves the
+    // no-authority branch rather than the incomplete-coverage branch.
     let manifest_path = temp.join("schemas/manifest.json");
     let mut manifest = read_json(&manifest_path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    schemas.retain(|entry| {
+        !matches!(
+            entry["id"].as_str(),
+            Some(
+                "https://schemas.shittim.local/kcp/command_envelope/v2"
+                    | "https://schemas.shittim.local/kcp/query_envelope/v2",
+            )
+        )
+    });
+    // Source files that remain without manifest entries fail closed as orphans.
+    let _ = std::fs::remove_file(temp.join("schemas/source/kcp/command_envelope.v2.json"));
+    let _ = std::fs::remove_file(temp.join("schemas/source/kcp/query_envelope.v2.json"));
     manifest["method_version_bindings"] = json!([{
         "family": "command",
         "method": "task.create",
@@ -1850,7 +1976,9 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
         .expect("typescript TargetSchemaSet");
 
     assert_eq!(rust_set.target(), GenerationTarget::Rust);
-    assert!(rust_set.active_envelope_authority().is_empty());
+    // Production now includes active V2 Envelope authority; this mixed-target
+    // fixture inherits those roots for rust and keeps production-empty bindings.
+    assert!(!rust_set.active_envelope_authority().is_empty());
     assert!(rust_set.method_version_bindings().is_empty());
 
     assert!(

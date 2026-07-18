@@ -1,6 +1,6 @@
 # Task创建、Child materialization与repository硬合同
 
-> 状态：active v2 contract-only；现有Rust/SQLite只实现legacy TaskCreate v1 create/get，不得进入未来production server。
+> 状态：首批12项相关Schema source、manifest entries与generated Rust root types已落地；production MethodVersionBindings仍为空。active v2仍contract-only，official JCS/hash fixtures、repository canonical write/readback、handler与cutover未完成。现有Rust/SQLite只实现legacy TaskCreate v1 create/get，不得进入未来production server。
 
 ## Lifecycle矩阵
 

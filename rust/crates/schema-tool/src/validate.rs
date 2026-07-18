@@ -2,7 +2,8 @@ use crate::error::SchemaToolError;
 use crate::manifest::SchemaRegistry;
 use crate::paths;
 use anyhow::{Context, Result};
-use jsonschema::{Draft, Retrieve, Uri, Validator};
+use jsonschema::{Retrieve, Uri, Validator};
+use kernel_contracts::validator::contract_validator_options;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -134,9 +135,7 @@ fn build_validator_for_loaded_schema(
     let retriever = RegistryRetriever { documents };
     let resource = loaded.document.clone();
 
-    jsonschema::options()
-        .with_draft(Draft::Draft202012)
-        .with_retriever(retriever)
+    contract_validator_options(retriever)
         .build(&resource)
         .map_err(|e| {
             SchemaToolError::msg(format!("failed to compile schema {}: {e}", loaded.entry.id))
@@ -153,9 +152,7 @@ pub fn compile_all(registry: &SchemaRegistry) -> Result<BTreeMap<String, Arc<Val
     let retriever = RegistryRetriever { documents };
     let mut out = BTreeMap::new();
     for (id, loaded) in registry.loaded_schemas() {
-        let validator = Validator::options()
-            .with_draft(Draft::Draft202012)
-            .with_retriever(retriever.clone())
+        let validator = contract_validator_options(retriever.clone())
             .build(&loaded.document)
             .map_err(|error| {
                 SchemaToolError::msg(format!("failed to compile schema {id}: {error}"))

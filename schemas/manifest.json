@@ -102,6 +102,162 @@
   "method_version_bindings": [],
   "schemas": [
     {
+      "id": "https://schemas.shittim.local/common/input_content_origin/v1",
+      "title": "InputContentOriginV1",
+      "version": 1,
+      "source": "schemas/source/common/input_content_origin.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "common"
+    },
+    {
+      "id": "https://schemas.shittim.local/kcp/command_envelope/v2",
+      "title": "KcpCommandEnvelopeV2",
+      "version": 2,
+      "source": "schemas/source/kcp/command_envelope.v2.json",
+      "kind": "envelope",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "kcp"
+    },
+    {
+      "id": "https://schemas.shittim.local/kcp/query_envelope/v2",
+      "title": "KcpQueryEnvelopeV2",
+      "version": 2,
+      "source": "schemas/source/kcp/query_envelope.v2.json",
+      "kind": "envelope",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "kcp"
+    },
+    {
+      "id": "https://schemas.shittim.local/kcp/task_create_request/v2",
+      "title": "TaskCreateRequestV2",
+      "version": 2,
+      "source": "schemas/source/kcp/task_create_request.v2.json",
+      "kind": "kcp_request",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "kcp"
+    },
+    {
+      "id": "https://schemas.shittim.local/kcp/task_create_response/v2",
+      "title": "TaskCreateResponseV2",
+      "version": 2,
+      "source": "schemas/source/kcp/task_create_response.v2.json",
+      "kind": "kcp_response",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "kcp"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/child_task_materialization_allocation/v1",
+      "title": "ChildTaskMaterializationAllocationV1",
+      "version": 1,
+      "source": "schemas/source/task/child_task_materialization_allocation.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/child_task_proposal/v1",
+      "title": "ChildTaskProposalV1",
+      "version": 1,
+      "source": "schemas/source/task/child_task_proposal.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/input_task_scope/v1",
+      "title": "InputTaskScopeV1",
+      "version": 1,
+      "source": "schemas/source/task/input_task_scope.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/normalized_child_task_proposal/v1",
+      "title": "NormalizedChildTaskProposalV1",
+      "version": 1,
+      "source": "schemas/source/task/normalized_child_task_proposal.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2",
+      "title": "NormalizedRootTaskCreatePayloadV2",
+      "version": 2,
+      "source": "schemas/source/task/normalized_root_task_create_payload.v2.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/root_task_create_allocation/v2",
+      "title": "RootTaskCreateAllocationV2",
+      "version": 2,
+      "source": "schemas/source/task/root_task_create_allocation.v2.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1",
+      "title": "RootTaskCreateIdempotencyProjectionV1",
+      "version": 1,
+      "source": "schemas/source/task/root_task_create_idempotency_projection.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
       "id": "https://schemas.shittim.local/v1/audit/audit_record.json",
       "title": "AuditRecord",
       "version": 1,

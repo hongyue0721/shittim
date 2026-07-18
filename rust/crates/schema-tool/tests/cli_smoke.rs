@@ -106,13 +106,33 @@ fn generate_is_byte_stable_across_two_runs() {
         "missing explicit legacy method catalog"
     );
     assert!(
-        catalog_text.contains("KCP_METHODS"),
+        catalog_text.contains("KCP_ENVELOPE_AUTHORITY_METHODS"),
         "missing active method catalog"
     );
     assert!(
         catalog_text.contains("METHOD_VERSION_BINDINGS"),
         "missing method version binding catalog"
     );
+}
+
+#[test]
+fn check_fails_closed_when_schema_declares_unknown_format() {
+    let temp = temporary_repo("unknown-format");
+    let schema_path = temp.join("schemas/source/kcp/command_envelope.v2.json");
+    let mut schema = read_json(&schema_path);
+    schema["properties"]["request_id"]["format"] = serde_json::json!("shittim-unknown-format");
+    write_json(&schema_path, &schema);
+
+    let registry = SchemaRegistry::load(&temp).expect("unknown format is a compile-time concern");
+    let error = schema_tool::validate::compile_all(&registry)
+        .expect_err("shared validator options must reject unknown format")
+        .to_string();
+    assert!(error.contains("shittim-unknown-format"), "{error}");
+
+    let (code, stdout, stderr) = run_tool_for_root(&["check"], &temp);
+    assert_ne!(code, 0, "check unexpectedly passed: {stdout}");
+    assert!(stderr.contains("shittim-unknown-format"), "{stderr}");
+    std::fs::remove_dir_all(temp).expect("clean unknown-format repo");
 }
 
 #[test]

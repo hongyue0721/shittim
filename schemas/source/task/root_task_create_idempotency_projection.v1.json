@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1",
+  "title": "RootTaskCreateIdempotencyProjectionV1",
+  "description": "Closed v2 root task.create idempotency preimage projection. schema_version participates in JCS/hash.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "actor",
+    "entry_point",
+    "command_type",
+    "task_id",
+    "context",
+    "expected_revision",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "command_type": {
+      "type": "string",
+      "const": "task.create"
+    },
+    "task_id": {
+      "type": "null"
+    },
+    "context": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": true
+    },
+    "expected_revision": {
+      "type": "null"
+    },
+    "payload": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/kcp/query_envelope/v2",
+  "title": "KcpQueryEnvelopeV2",
+  "description": "Active KCP query envelope structure authority. Validates family structure and root payload.schema_version only; method payload selected by MethodVersionBinding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "message_kind",
+    "request_id",
+    "actor",
+    "entry_point",
+    "auth",
+    "task_id",
+    "deadline",
+    "query_type",
+    "payload"
+  ],
+  "properties": {
+    "protocol_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "message_kind": {
+      "type": "string",
+      "const": "query"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "auth": {
+      "type": "null"
+    },
+    "task_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "query_type": {
+      "type": "string",
+      "enum": [
+        "system.ping",
+        "task.get",
+        "task.list",
+        "event.subscribe",
+        "event.poll",
+        "stop.status"
+      ]
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "schema_version"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

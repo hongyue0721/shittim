@@ -641,6 +641,82 @@ impl CausationRefKind {
     }
 }
 
+/// Generated from `https://schemas.shittim.local/task/child_task_materialization_allocation/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChildTaskMaterializationAllocationV1 {
+    pub action_state_changed_dedup_key: String,
+    pub action_state_changed_event_id: String,
+    pub action_transition_id: String,
+    pub audit_record_id: String,
+    pub child_task_id: String,
+    pub content_origin_id: String,
+    pub correlation_id: String,
+    pub creation_provenance_id: String,
+    pub kernel_receipt_id: String,
+    pub schema_version: ChildTaskMaterializationAllocationV1SchemaVersion,
+    pub task_created_dedup_key: String,
+    pub task_created_event_id: String,
+    pub task_scope_id: String,
+    pub verification_result_id: String,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/child_task_materialization_allocation/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ChildTaskMaterializationAllocationV1SchemaVersion;
+impl Serialize for ChildTaskMaterializationAllocationV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ChildTaskMaterializationAllocationV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/task/child_task_proposal/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChildTaskProposalV1 {
+    pub capability_hints: Vec<String>,
+    pub constraints: Vec<String>,
+    pub delegation_ref: Option<String>,
+    pub goal: String,
+    pub origin: InputContentOriginV1,
+    pub proposer: ChildTaskProposalV1Proposer,
+    pub risk_hint: Option<String>,
+    pub schema_version: ChildTaskProposalV1SchemaVersion,
+    pub success_criteria: Vec<String>,
+    pub task_scope: InputTaskScopeV1,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/task/child_task_proposal/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChildTaskProposalV1Proposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl ChildTaskProposalV1Proposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/child_task_proposal/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ChildTaskProposalV1SchemaVersion;
+impl Serialize for ChildTaskProposalV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ChildTaskProposalV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/common/content_origin.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -884,6 +960,8 @@ pub struct EventEnvelope {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EventEnvelopePayload {
     pub schema_version: i64,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
 }
 
 /// Generated integer const from `https://schemas.shittim.local/v1/event/event_envelope.json`
@@ -1010,6 +1088,141 @@ pub struct EventSubscribeResponseSchemaVersion;
 impl Serialize for EventSubscribeResponseSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for EventSubscribeResponseSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/common/input_content_origin/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputContentOriginV1 {
+    pub kind: InputContentOriginV1Kind,
+    pub parent_origin_refs: Vec<String>,
+    pub producer_ref: InputContentOriginV1ProducerRef,
+    pub schema_version: InputContentOriginV1SchemaVersion,
+    pub source_uri: Option<String>,
+    pub upstream_stable_id: Option<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/common/input_content_origin/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum InputContentOriginV1Kind {
+    #[serde(rename = "user_input")]
+    UserInput,
+    #[serde(rename = "companion_generated")]
+    CompanionGenerated,
+    #[serde(rename = "system_generated")]
+    SystemGenerated,
+    #[serde(rename = "remote_message")]
+    RemoteMessage,
+    #[serde(rename = "web_content")]
+    WebContent,
+    #[serde(rename = "document_content")]
+    DocumentContent,
+    #[serde(rename = "model_output")]
+    ModelOutput,
+    #[serde(rename = "extension_output")]
+    ExtensionOutput,
+    #[serde(rename = "provider_output")]
+    ProviderOutput,
+    #[serde(rename = "imported_data")]
+    ImportedData,
+}
+
+impl InputContentOriginV1Kind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserInput => "user_input",
+            Self::CompanionGenerated => "companion_generated",
+            Self::SystemGenerated => "system_generated",
+            Self::RemoteMessage => "remote_message",
+            Self::WebContent => "web_content",
+            Self::DocumentContent => "document_content",
+            Self::ModelOutput => "model_output",
+            Self::ExtensionOutput => "extension_output",
+            Self::ProviderOutput => "provider_output",
+            Self::ImportedData => "imported_data",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/common/input_content_origin/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputContentOriginV1ProducerRef {
+    pub id: String,
+    pub kind: InputContentOriginV1ProducerRefKind,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/common/input_content_origin/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum InputContentOriginV1ProducerRefKind {
+    #[serde(rename = "actor")]
+    Actor,
+    #[serde(rename = "model")]
+    Model,
+    #[serde(rename = "extension")]
+    Extension,
+    #[serde(rename = "provider")]
+    Provider,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl InputContentOriginV1ProducerRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Actor,
+        Self::Model,
+        Self::Extension,
+        Self::Provider,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Actor => "actor",
+            Self::Model => "model",
+            Self::Extension => "extension",
+            Self::Provider => "provider",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/common/input_content_origin/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct InputContentOriginV1SchemaVersion;
+impl Serialize for InputContentOriginV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for InputContentOriginV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/task/input_task_scope/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputTaskScopeV1 {
+    pub allowed_capability_hints: Vec<String>,
+    pub exclusions: Vec<String>,
+    pub expires_at: Option<String>,
+    pub resource_patterns: Vec<String>,
+    pub schema_version: InputTaskScopeV1SchemaVersion,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/input_task_scope/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct InputTaskScopeV1SchemaVersion;
+impl Serialize for InputTaskScopeV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for InputTaskScopeV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/kcp/command_envelope.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1064,11 +1277,78 @@ pub enum KcpCommandEnvelopeMessageKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KcpCommandEnvelopePayload {
     pub schema_version: i64,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
 }
 
 /// Generated string const from `https://schemas.shittim.local/v1/kcp/command_envelope.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum KcpCommandEnvelopeProtocolVersion {
+    #[serde(rename = "1.0")]
+    Value,
+}
+
+/// Generated from `https://schemas.shittim.local/kcp/command_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KcpCommandEnvelopeV2 {
+    pub actor: Actor,
+    pub auth: NullOnly,
+    pub command_type: KcpCommandEnvelopeV2CommandType,
+    pub context: Option<JsonValue>,
+    pub deadline: String,
+    pub entry_point: EntryPoint,
+    pub expected_revision: Option<i64>,
+    pub idempotency_key: String,
+    pub message_kind: KcpCommandEnvelopeV2MessageKind,
+    pub payload: KcpCommandEnvelopeV2Payload,
+    pub protocol_version: KcpCommandEnvelopeV2ProtocolVersion,
+    pub request_id: String,
+    pub task_id: Option<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/kcp/command_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpCommandEnvelopeV2CommandType {
+    #[serde(rename = "task.create")]
+    TaskCreate,
+    #[serde(rename = "stop.activate")]
+    StopActivate,
+}
+
+impl KcpCommandEnvelopeV2CommandType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreate,
+        Self::StopActivate,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TaskCreate => "task.create",
+            Self::StopActivate => "stop.activate",
+        }
+    }
+}
+
+/// Generated string const from `https://schemas.shittim.local/kcp/command_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpCommandEnvelopeV2MessageKind {
+    #[serde(rename = "command")]
+    Value,
+}
+
+/// Generated from `https://schemas.shittim.local/kcp/command_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct KcpCommandEnvelopeV2Payload {
+    pub schema_version: u32,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
+}
+
+/// Generated string const from `https://schemas.shittim.local/kcp/command_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpCommandEnvelopeV2ProtocolVersion {
     #[serde(rename = "1.0")]
     Value,
 }
@@ -1117,6 +1397,8 @@ pub enum KcpQueryEnvelopeMessageKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KcpQueryEnvelopePayload {
     pub schema_version: i64,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
 }
 
 /// Generated string const from `https://schemas.shittim.local/v1/kcp/query_envelope.json`
@@ -1144,6 +1426,84 @@ pub enum KcpQueryEnvelopeQueryType {
 }
 
 impl KcpQueryEnvelopeQueryType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::SystemPing,
+        Self::TaskGet,
+        Self::TaskList,
+        Self::EventSubscribe,
+        Self::EventPoll,
+        Self::StopStatus,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SystemPing => "system.ping",
+            Self::TaskGet => "task.get",
+            Self::TaskList => "task.list",
+            Self::EventSubscribe => "event.subscribe",
+            Self::EventPoll => "event.poll",
+            Self::StopStatus => "stop.status",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/kcp/query_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KcpQueryEnvelopeV2 {
+    pub actor: Actor,
+    pub auth: NullOnly,
+    pub deadline: String,
+    pub entry_point: EntryPoint,
+    pub message_kind: KcpQueryEnvelopeV2MessageKind,
+    pub payload: KcpQueryEnvelopeV2Payload,
+    pub protocol_version: KcpQueryEnvelopeV2ProtocolVersion,
+    pub query_type: KcpQueryEnvelopeV2QueryType,
+    pub request_id: String,
+    pub task_id: Option<String>,
+}
+
+/// Generated string const from `https://schemas.shittim.local/kcp/query_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpQueryEnvelopeV2MessageKind {
+    #[serde(rename = "query")]
+    Value,
+}
+
+/// Generated from `https://schemas.shittim.local/kcp/query_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct KcpQueryEnvelopeV2Payload {
+    pub schema_version: u32,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
+}
+
+/// Generated string const from `https://schemas.shittim.local/kcp/query_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpQueryEnvelopeV2ProtocolVersion {
+    #[serde(rename = "1.0")]
+    Value,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/kcp/query_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum KcpQueryEnvelopeV2QueryType {
+    #[serde(rename = "system.ping")]
+    SystemPing,
+    #[serde(rename = "task.get")]
+    TaskGet,
+    #[serde(rename = "task.list")]
+    TaskList,
+    #[serde(rename = "event.subscribe")]
+    EventSubscribe,
+    #[serde(rename = "event.poll")]
+    EventPoll,
+    #[serde(rename = "stop.status")]
+    StopStatus,
+}
+
+impl KcpQueryEnvelopeV2QueryType {
     /// Schema enum declaration-order closed set (null filtered at use-site Option).
     pub const ALL: &'static [Self] = &[
         Self::SystemPing,
@@ -1215,6 +1575,106 @@ impl KcpResponseEnvelopeStatus {
         }
     }
 }
+
+/// Generated from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NormalizedChildTaskProposalV1 {
+    pub capability_hints: Vec<String>,
+    pub constraints: Vec<String>,
+    pub delegation_ref: Option<String>,
+    pub goal: String,
+    pub origin: InputContentOriginV1,
+    pub proposer: NormalizedChildTaskProposalV1Proposer,
+    pub risk_hint: Option<String>,
+    pub schema_version: NormalizedChildTaskProposalV1SchemaVersion,
+    pub success_criteria: Vec<String>,
+    pub task_scope: InputTaskScopeV1,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum NormalizedChildTaskProposalV1Proposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl NormalizedChildTaskProposalV1Proposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct NormalizedChildTaskProposalV1SchemaVersion;
+impl Serialize for NormalizedChildTaskProposalV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for NormalizedChildTaskProposalV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/task/normalized_root_task_create_payload/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NormalizedRootTaskCreatePayloadV2 {
+    pub capability_hints: Vec<String>,
+    pub constraints: Vec<String>,
+    pub delegation_ref: Option<String>,
+    pub goal: String,
+    pub origin: InputContentOriginV1,
+    pub proposer: NormalizedRootTaskCreatePayloadV2Proposer,
+    pub risk_hint: Option<String>,
+    pub schema_version: NormalizedRootTaskCreatePayloadV2SchemaVersion,
+    pub success_criteria: Vec<String>,
+    pub task_scope: InputTaskScopeV1,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/task/normalized_root_task_create_payload/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum NormalizedRootTaskCreatePayloadV2Proposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl NormalizedRootTaskCreatePayloadV2Proposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/normalized_root_task_create_payload/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct NormalizedRootTaskCreatePayloadV2SchemaVersion;
+impl Serialize for NormalizedRootTaskCreatePayloadV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for NormalizedRootTaskCreatePayloadV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/policy/permission_decision.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1950,6 +2410,55 @@ impl RecoveryDecisionCandidateTrigger {
     }
 }
 
+/// Generated from `https://schemas.shittim.local/task/root_task_create_allocation/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RootTaskCreateAllocationV2 {
+    pub audit_record_id: String,
+    pub content_origin_id: String,
+    pub correlation_id: String,
+    pub creation_provenance_id: String,
+    pub kernel_receipt_id: String,
+    pub schema_version: RootTaskCreateAllocationV2SchemaVersion,
+    pub task_created_dedup_key: String,
+    pub task_created_event_id: String,
+    pub task_id: String,
+    pub task_scope_id: String,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/root_task_create_allocation/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RootTaskCreateAllocationV2SchemaVersion;
+impl Serialize for RootTaskCreateAllocationV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for RootTaskCreateAllocationV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RootTaskCreateIdempotencyProjectionV1 {
+    pub actor: Actor,
+    pub command_type: RootTaskCreateIdempotencyProjectionV1CommandType,
+    pub context: Option<JsonValue>,
+    pub entry_point: EntryPoint,
+    pub expected_revision: NullOnly,
+    pub payload: NormalizedRootTaskCreatePayloadV2,
+    pub schema_version: RootTaskCreateIdempotencyProjectionV1SchemaVersion,
+    pub task_id: NullOnly,
+}
+
+/// Generated string const from `https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RootTaskCreateIdempotencyProjectionV1CommandType {
+    #[serde(rename = "task.create")]
+    Value,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RootTaskCreateIdempotencyProjectionV1SchemaVersion;
+impl Serialize for RootTaskCreateIdempotencyProjectionV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for RootTaskCreateIdempotencyProjectionV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated string enum from `https://schemas.shittim.local/v1/common/side_effect_class.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SideEffectClass {
@@ -2300,6 +2809,56 @@ pub struct TaskCreateRequestTaskScopeSchemaVersion;
 impl Serialize for TaskCreateRequestTaskScopeSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for TaskCreateRequestTaskScopeSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/kcp/task_create_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCreateRequestV2 {
+    pub capability_hints: Vec<String>,
+    pub constraints: Vec<String>,
+    pub delegation_ref: Option<String>,
+    pub goal: String,
+    pub origin: InputContentOriginV1,
+    pub proposer: TaskCreateRequestV2Proposer,
+    pub risk_hint: Option<String>,
+    pub schema_version: TaskCreateRequestV2SchemaVersion,
+    pub success_criteria: Vec<String>,
+    pub task_scope: InputTaskScopeV1,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/kcp/task_create_request/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TaskCreateRequestV2Proposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl TaskCreateRequestV2Proposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/kcp/task_create_request/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TaskCreateRequestV2SchemaVersion;
+impl Serialize for TaskCreateRequestV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for TaskCreateRequestV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/kcp/task_create_response.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2313,6 +2872,21 @@ pub struct TaskCreateResponse {
 pub struct TaskCreateResponseSchemaVersion;
 impl Serialize for TaskCreateResponseSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for TaskCreateResponseSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/kcp/task_create_response/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskCreateResponseV2 {
+    pub creation_provenance_ref: String,
+    pub schema_version: TaskCreateResponseV2SchemaVersion,
+    pub task: TaskSpec,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/kcp/task_create_response/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TaskCreateResponseV2SchemaVersion;
+impl Serialize for TaskCreateResponseV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for TaskCreateResponseV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/event/task_created_payload.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -3029,6 +3603,19 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn child_task_proposal_v1_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            ChildTaskProposalV1Proposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            ChildTaskProposalV1Proposer::as_str,
+        );
+    }
+
+    #[test]
     fn content_origin_carrier_ref_kind_string_enum_contract() {
         assert_string_enum_contract(
             ContentOriginCarrierRefKind::ALL,
@@ -3122,6 +3709,41 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn input_content_origin_v1_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            InputContentOriginV1Kind::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            InputContentOriginV1Kind::as_str,
+        );
+    }
+
+    #[test]
+    fn input_content_origin_v1_producer_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            InputContentOriginV1ProducerRefKind::ALL,
+            &[
+                "actor",
+                "model",
+                "extension",
+                "provider",
+                "system",
+            ],
+            InputContentOriginV1ProducerRefKind::as_str,
+        );
+    }
+
+    #[test]
     fn kcp_command_envelope_command_type_string_enum_contract() {
         assert_string_enum_contract(
             KcpCommandEnvelopeCommandType::ALL,
@@ -3130,6 +3752,18 @@ mod string_enum_contracts {
                 "stop.activate",
             ],
             KcpCommandEnvelopeCommandType::as_str,
+        );
+    }
+
+    #[test]
+    fn kcp_command_envelope_v2_command_type_string_enum_contract() {
+        assert_string_enum_contract(
+            KcpCommandEnvelopeV2CommandType::ALL,
+            &[
+                "task.create",
+                "stop.activate",
+            ],
+            KcpCommandEnvelopeV2CommandType::as_str,
         );
     }
 
@@ -3150,6 +3784,22 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn kcp_query_envelope_v2_query_type_string_enum_contract() {
+        assert_string_enum_contract(
+            KcpQueryEnvelopeV2QueryType::ALL,
+            &[
+                "system.ping",
+                "task.get",
+                "task.list",
+                "event.subscribe",
+                "event.poll",
+                "stop.status",
+            ],
+            KcpQueryEnvelopeV2QueryType::as_str,
+        );
+    }
+
+    #[test]
     fn kcp_response_envelope_status_string_enum_contract() {
         assert_string_enum_contract(
             KcpResponseEnvelopeStatus::ALL,
@@ -3158,6 +3808,32 @@ mod string_enum_contracts {
                 "error",
             ],
             KcpResponseEnvelopeStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn normalized_child_task_proposal_v1_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            NormalizedChildTaskProposalV1Proposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            NormalizedChildTaskProposalV1Proposer::as_str,
+        );
+    }
+
+    #[test]
+    fn normalized_root_task_create_payload_v2_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            NormalizedRootTaskCreatePayloadV2Proposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            NormalizedRootTaskCreatePayloadV2Proposer::as_str,
         );
     }
 
@@ -3434,6 +4110,19 @@ mod string_enum_contracts {
                 "system",
             ],
             TaskCreateRequestProposer::as_str,
+        );
+    }
+
+    #[test]
+    fn task_create_request_v2_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            TaskCreateRequestV2Proposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            TaskCreateRequestV2Proposer::as_str,
         );
     }
 

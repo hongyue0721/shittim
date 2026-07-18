@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2",
+  "title": "NormalizedRootTaskCreatePayloadV2",
+  "description": "Canonical normalized root task.create payload and neutral host of the nine shared task-create proposal field definitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposer",
+    "goal",
+    "constraints",
+    "success_criteria",
+    "risk_hint",
+    "capability_hints",
+    "task_scope",
+    "delegation_ref",
+    "origin"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "proposer": {
+      "$ref": "#/$defs/proposer"
+    },
+    "goal": {
+      "$ref": "#/$defs/goal"
+    },
+    "constraints": {
+      "$ref": "#/$defs/constraints"
+    },
+    "success_criteria": {
+      "$ref": "#/$defs/success_criteria"
+    },
+    "risk_hint": {
+      "$ref": "#/$defs/risk_hint"
+    },
+    "capability_hints": {
+      "$ref": "#/$defs/capability_hints"
+    },
+    "task_scope": {
+      "$ref": "#/$defs/task_scope"
+    },
+    "delegation_ref": {
+      "$ref": "#/$defs/delegation_ref"
+    },
+    "origin": {
+      "$ref": "#/$defs/origin"
+    }
+  },
+  "$defs": {
+    "proposer": {
+      "type": "string",
+      "enum": [
+        "user",
+        "companion",
+        "system"
+      ]
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "success_criteria": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "risk_hint": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "capability_hints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "task_scope": {
+      "$ref": "https://schemas.shittim.local/task/input_task_scope/v1"
+    },
+    "delegation_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "origin": {
+      "$ref": "https://schemas.shittim.local/common/input_content_origin/v1"
+    }
+  }
+}

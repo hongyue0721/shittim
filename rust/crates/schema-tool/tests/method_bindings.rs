@@ -142,10 +142,21 @@ fn write_component_native_schema(root: &Path, spec: ComponentNativeSpec<'_>) {
         Some(field) => json!(field),
         None => Value::Null,
     };
-    manifest["schemas"]
-        .as_array_mut()
-        .expect("schemas")
-        .push(entry);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    // Production now ships the first-batch business-v2 component-native IDs.
+    // Synthetic fixtures must upsert by id instead of always appending, or load
+    // fails closed on duplicate $id while still allowing document mutation.
+    if let Some(existing) = schemas.iter_mut().find(|item| item["id"] == id) {
+        *existing = entry;
+    } else {
+        schemas.push(entry);
+    }
+    schemas.sort_by(|left, right| {
+        left["id"]
+            .as_str()
+            .unwrap_or_default()
+            .cmp(right["id"].as_str().unwrap_or_default())
+    });
     write_json(&manifest_path, &manifest);
 }
 
@@ -179,9 +190,14 @@ fn install_v2_envelopes_both_targets(
     let manifest_path = root.join("schemas/manifest.json");
     let mut manifest = read_json(&manifest_path);
     let schemas = manifest["schemas"].as_array_mut().unwrap();
-    let len = schemas.len();
-    schemas[len - 2]["generation_targets"] = json!(["rust", "typescript"]);
-    schemas[len - 1]["generation_targets"] = json!(["rust", "typescript"]);
+    for entry in schemas.iter_mut() {
+        let id = entry["id"].as_str().unwrap_or_default();
+        if id == "https://schemas.shittim.local/kcp/command_envelope/v2"
+            || id == "https://schemas.shittim.local/kcp/query_envelope/v2"
+        {
+            entry["generation_targets"] = json!(["rust", "typescript"]);
+        }
+    }
     write_json(&manifest_path, &manifest);
 }
 
@@ -314,6 +330,27 @@ fn set_bindings(root: &Path, bindings: Value) {
     write_json(&path, &manifest);
 }
 
+fn remove_component_native_entries(root: &Path, ids: &[&str]) {
+    let path = root.join("schemas/manifest.json");
+    let mut manifest = read_json(&path);
+    let schemas = manifest["schemas"].as_array_mut().expect("schemas");
+    schemas.retain(|entry| !ids.iter().any(|id| entry["id"].as_str() == Some(*id)));
+    write_json(&path, &manifest);
+    for id in ids {
+        // Best-effort source removal keeps temp trees tidy; load only needs manifest absence.
+        if let Some(rest) = id.strip_prefix("https://schemas.shittim.local/") {
+            let parts: Vec<_> = rest.split('/').collect();
+            if parts.len() == 3 {
+                let source = root.join(format!(
+                    "schemas/source/{}/{}.{}.json",
+                    parts[0], parts[1], parts[2]
+                ));
+                let _ = std::fs::remove_file(source);
+            }
+        }
+    }
+}
+
 fn install_complete_synthetic_registry(root: &Path) {
     install_v2_envelopes(root, COMMAND_METHODS, QUERY_METHODS);
     install_task_create_v2_pair(root);
@@ -335,6 +372,9 @@ fn production_load_empty_bindings_and_retained_lifecycle_labels() {
     assert_eq!(counts.get("legacy-validation-only"), Some(&3));
     assert_eq!(counts.get("legacy-read-only"), Some(&1));
     assert_eq!(counts.get("v1-stable"), Some(&37));
+    assert_eq!(counts.get("new-contract"), Some(&8));
+    assert_eq!(counts.get("breaking-replacement"), Some(&4));
+    assert_eq!(registry.schema_count(), 53);
     validate_production_manifest_stage(&registry).expect("stage gate");
 
     // retained ledger/source bytes unchanged relative to fixture.
@@ -503,7 +543,7 @@ fn synthetic_eight_method_bindings_load_lower_render_stable() {
     assert_eq!(graph.catalog.kcp_query_methods, QUERY_METHODS);
     assert_eq!(graph.catalog.method_version_bindings.len(), 8);
     assert!(catalog.contains("METHOD_VERSION_BINDINGS"));
-    assert!(catalog.contains("KCP_METHODS"));
+    assert!(catalog.contains("KCP_ENVELOPE_AUTHORITY_METHODS"));
     assert!(catalog.contains("task.create"));
     assert!(catalog.contains("legacy_validation_versions"));
     assert!(
@@ -618,11 +658,22 @@ fn binding_negative_cases_fail_closed() {
     // missing envelope authority with non-empty bindings
     {
         let temp = temporary_repo("missing-authority");
+        // Production already ships V2 envelopes; strip them so non-empty bindings
+        // fail closed for missing active authority rather than duplicate ids.
+        remove_component_native_entries(
+            &temp,
+            &[
+                "https://schemas.shittim.local/kcp/command_envelope/v2",
+                "https://schemas.shittim.local/kcp/query_envelope/v2",
+            ],
+        );
         install_task_create_v2_pair(&temp);
         set_bindings(&temp, eight_method_bindings());
         let err = SchemaRegistry::load(&temp).unwrap_err().to_string();
         assert!(
-            err.contains("KcpCommandEnvelopeV2") || err.contains("authority"),
+            err.contains("KcpCommandEnvelopeV2")
+                || err.contains("authority")
+                || err.contains("Envelope"),
             "{err}"
         );
         std::fs::remove_dir_all(temp).ok();
@@ -697,7 +748,7 @@ fn v2_authority_with_empty_bindings_keeps_active_and_legacy_catalogs() {
     assert_eq!(graph.catalog.kcp_query_methods.len(), 6);
     assert_eq!(graph.catalog.kcp_legacy_v1_command_methods.len(), 2);
     assert_eq!(graph.catalog.kcp_legacy_v1_query_methods.len(), 6);
-    assert!(catalog.contains("KCP_METHODS"));
+    assert!(catalog.contains("KCP_ENVELOPE_AUTHORITY_METHODS"));
     assert!(catalog.contains("KCP_LEGACY_V1_METHODS"));
     std::fs::remove_dir_all(temp).ok();
 }
@@ -933,7 +984,7 @@ fn production_catalog_keeps_types_typed_mod_stable_and_renames_active_catalog() 
     .expect("render");
     let mod_rs = schema_tool::GENERATED_MOD_RS;
 
-    assert!(catalog.contains("KCP_METHODS"));
+    assert!(catalog.contains("KCP_ENVELOPE_AUTHORITY_METHODS"));
     assert!(catalog.contains("KCP_LEGACY_V1_METHODS"));
     assert!(!catalog.contains("KCP_V1_METHODS"));
     assert!(catalog.contains("METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[\n];"));

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/normalized_child_task_proposal/v1",
+  "title": "NormalizedChildTaskProposalV1",
+  "description": "Normalized child task proposal. Shares nine caller-owned field contracts via NormalizedRootTaskCreatePayloadV2 $defs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposer",
+    "goal",
+    "constraints",
+    "success_criteria",
+    "risk_hint",
+    "capability_hints",
+    "task_scope",
+    "delegation_ref",
+    "origin"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "proposer": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/proposer"
+    },
+    "goal": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/goal"
+    },
+    "constraints": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/constraints"
+    },
+    "success_criteria": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/success_criteria"
+    },
+    "risk_hint": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/risk_hint"
+    },
+    "capability_hints": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/capability_hints"
+    },
+    "task_scope": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/task_scope"
+    },
+    "delegation_ref": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/delegation_ref"
+    },
+    "origin": {
+      "$ref": "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/origin"
+    }
+  }
+}

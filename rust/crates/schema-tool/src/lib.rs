@@ -27,10 +27,10 @@ pub mod validate;
 
 pub use compatibility::SchemaCompatibility;
 pub use contract_model::{
-    lower_target_contract_graph, CatalogFacts, ConstJson, ContractTypeId, ContractTypeNode,
-    EnvelopeWireBinding, Nullability, ObjectField, Presence, ScalarKind, SourceSchemaMetadata,
-    SourceUseSite, TaggedUnionBranch, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
-    UnknownFieldPolicy,
+    lower_target_contract_graph, AliasResolution, CatalogFacts, ConstJson, ContractTypeId,
+    ContractTypeNode, EnvelopeWireBinding, IntegerConstraints, JsonInteger, Nullability,
+    ObjectField, Presence, ScalarKind, SourceSchemaMetadata, SourceUseSite, TaggedUnionBranch,
+    TargetContractGraph, TypeExpr, TypeShape, TypeUse, UnknownFieldPolicy,
 };
 pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
 pub use manifest::{

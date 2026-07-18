@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/common/input_content_origin/v1",
+  "title": "InputContentOriginV1",
+  "description": "Caller-declarable content origin input. Kernel-owned id/received_at/carrier/receipt are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "source_uri",
+    "upstream_stable_id",
+    "producer_ref",
+    "parent_origin_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "user_input",
+        "companion_generated",
+        "system_generated",
+        "remote_message",
+        "web_content",
+        "document_content",
+        "model_output",
+        "extension_output",
+        "provider_output",
+        "imported_data"
+      ]
+    },
+    "source_uri": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "format": "uri"
+    },
+    "upstream_stable_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "producer_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "actor",
+            "model",
+            "extension",
+            "provider",
+            "system"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "parent_origin_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      }
+    }
+  }
+}

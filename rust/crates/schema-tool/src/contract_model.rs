@@ -139,9 +139,35 @@ impl SourceUseSite {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "sign", content = "value", rename_all = "snake_case")]
+pub enum JsonInteger {
+    Signed(i64),
+    Unsigned(u64),
+}
+
+impl JsonInteger {
+    pub(crate) fn as_i128(self) -> i128 {
+        match self {
+            Self::Signed(value) => i128::from(value),
+            Self::Unsigned(value) => i128::from(value),
+        }
+    }
+}
+
+/// Language-neutral inclusive bounds proven by an integer Schema.
+///
+/// Bounds remain JSON integer facts; choosing `u32`, `i64`, or another language
+/// type is exclusively a renderer decision.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntegerConstraints {
+    pub minimum: Option<JsonInteger>,
+    pub maximum: Option<JsonInteger>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ScalarKind {
-    Integer,
+    Integer { constraints: IntegerConstraints },
     Number,
     String,
     Boolean,
@@ -224,9 +250,8 @@ pub struct TaggedUnionBranch {
 pub enum UnknownFieldPolicy {
     /// JSON object accepts no properties not declared in `properties`.
     Forbid,
-    /// JSON object retains the source Schema's open-object semantics. This is
-    /// intentionally distinct from `AnyJson`: declared fields remain modeled
-    /// while Serde ignores unknown fields during standalone projection.
+    /// JSON object accepts declared properties and retains every additional
+    /// property in a renderer-generated extension map during typed round-trip.
     Allow,
 }
 
@@ -284,6 +309,12 @@ pub enum TypeShape {
     },
     Const {
         value: ConstJson,
+    },
+    /// Pure `$ref` definition alias (annotation siblings only). The alias node keeps
+    /// its own canonical fragment identity while projection follows `target`.
+    /// Used by shared `$defs` hosts that re-export whole-schema contracts.
+    Alias {
+        target: TypeUse,
     },
 }
 
@@ -350,6 +381,16 @@ pub struct CatalogFacts {
     pub kcp_protocol_version: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AliasResolution {
+    /// Stable alias identity retained in the neutral graph.
+    pub alias_id: ContractTypeId,
+    /// First non-Alias graph node reached by the alias chain.
+    pub terminal_id: ContractTypeId,
+    /// Ordered aliases traversed from `alias_id` to the terminal target.
+    pub chain: Vec<ContractTypeId>,
+}
+
 /// Target-scoped language-neutral contract graph.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TargetContractGraph {
@@ -358,6 +399,9 @@ pub struct TargetContractGraph {
     pub source_schema_ids: Vec<String>,
     /// Nodes keyed by neutral identity. Ordering is BTreeMap order on ContractTypeId.
     pub nodes: BTreeMap<ContractTypeId, ContractTypeNode>,
+    /// Single language-neutral Alias resolution fact table. Renderers consume
+    /// this table rather than recursively rediscovering alias chains.
+    pub alias_resolutions: BTreeMap<ContractTypeId, AliasResolution>,
     pub envelopes: Vec<EnvelopeWireBinding>,
     pub catalog: CatalogFacts,
 }
@@ -415,6 +459,8 @@ pub(crate) fn lower_target_contract_graph_in_plan(
     // >=1 payload refs => every branch must be complete and bijective, else error.
 
     audit_graph_integrity(&state.nodes)?;
+    let alias_resolutions = resolve_and_audit_aliases(&state.nodes)?;
+    resolve_field_nullability(&mut state.nodes, &alias_resolutions)?;
 
     let catalog = build_catalog_facts(registry, schema_set)?;
     let mut source_schema_ids: Vec<String> = schema_set.closure().iter().cloned().collect();
@@ -424,6 +470,7 @@ pub(crate) fn lower_target_contract_graph_in_plan(
         target: schema_set.target(),
         source_schema_ids,
         nodes: state.nodes,
+        alias_resolutions,
         envelopes,
         catalog,
     })
@@ -584,6 +631,23 @@ fn lower_shape(
             &type_id.display(),
             "false schema has no inhabited type",
         ));
+    }
+
+    // Pure `$ref` definition/alias nodes keep their own ContractTypeId (fragment
+    // identity) while projection follows the resolved target. Only annotation
+    // siblings are allowed; validation/shape siblings remain unsupported.
+    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+        ensure_ref_has_only_annotation_siblings(schema, &type_id.display())?;
+        let resolved = resolve_ref(registry, &type_id.schema_id, reference)?;
+        ensure_node_from_schema(registry, state, &resolved.type_id, resolved.node, "")?;
+        return Ok(TypeShape::Alias {
+            target: TypeUse {
+                expr: TypeExpr::Reference {
+                    id: resolved.type_id,
+                },
+                source: SourceUseSite::new(type_id.schema_id.clone(), type_id.pointer.clone()),
+            },
+        });
     }
 
     if is_string_enum(schema) {
@@ -953,7 +1017,9 @@ fn lower_primitive_shape(
             scalar: ScalarKind::Boolean,
         }),
         "integer" => Ok(TypeShape::Scalar {
-            scalar: ScalarKind::Integer,
+            scalar: ScalarKind::Integer {
+                constraints: integer_constraints(schema, &type_id.display())?,
+            },
         }),
         "number" => Ok(TypeShape::Scalar {
             scalar: ScalarKind::Number,
@@ -1039,11 +1105,7 @@ fn lower_object_fields(
             &field_location,
             SourceUseSite::new(type_id.schema_id.clone(), field_location.pointer.clone()),
         )?;
-        let nullability = if schema_allows_null(registry, &type_id.schema_id, property)? {
-            Nullability::Nullable
-        } else {
-            Nullability::NonNull
-        };
+        let nullability = immediate_type_use_nullability(&ty);
         fields.push(ObjectField {
             json_name: json_name.clone(),
             ty,
@@ -1269,7 +1331,9 @@ fn primitive_or_container_use(
         }),
         "integer" => Ok(TypeUse {
             expr: TypeExpr::Scalar {
-                scalar: ScalarKind::Integer,
+                scalar: ScalarKind::Integer {
+                    constraints: integer_constraints(schema, &preferred_id.display())?,
+                },
             },
             source,
         }),
@@ -1727,6 +1791,7 @@ fn audit_shape_refs(
         | TypeShape::Const { .. } => Ok(()),
         TypeShape::Array { items } => audit_type_use_refs(nodes, owner, items),
         TypeShape::Nullable { inner } => audit_type_use_refs(nodes, owner, inner),
+        TypeShape::Alias { target } => audit_type_use_refs(nodes, owner, target),
         TypeShape::Object { fields, .. } => {
             for field in fields {
                 if field.schema_location.schema_id != owner.schema_id {
@@ -1778,6 +1843,154 @@ fn audit_type_use_refs(
                 .into());
             }
             Ok(())
+        }
+    }
+}
+
+fn resolve_and_audit_aliases(
+    nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
+) -> Result<BTreeMap<ContractTypeId, AliasResolution>> {
+    let aliases: Vec<_> = nodes
+        .iter()
+        .filter_map(|(id, node)| {
+            matches!(node.shape, TypeShape::Alias { .. }).then_some(id.clone())
+        })
+        .collect();
+    let mut resolutions = BTreeMap::new();
+    for alias_id in aliases {
+        if resolutions.contains_key(&alias_id) {
+            continue;
+        }
+        resolve_alias_path(nodes, &alias_id, &mut resolutions)?;
+    }
+    Ok(resolutions)
+}
+
+fn resolve_alias_path(
+    nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
+    start: &ContractTypeId,
+    resolutions: &mut BTreeMap<ContractTypeId, AliasResolution>,
+) -> Result<()> {
+    let mut path = Vec::new();
+    let mut positions = BTreeMap::new();
+    let mut current = start.clone();
+    let terminal_id = loop {
+        if let Some(resolved) = resolutions.get(&current) {
+            break resolved.terminal_id.clone();
+        }
+        let node = nodes.get(&current).ok_or_else(|| {
+            SchemaToolError::msg(format!(
+                "alias resolution error: missing node {}",
+                current.display()
+            ))
+        })?;
+        match &node.shape {
+            TypeShape::Alias { target } => {
+                if let Some(cycle_start) = positions.insert(current.clone(), path.len()) {
+                    let mut cycle = path[cycle_start..].to_vec();
+                    cycle.push(current);
+                    return Err(SchemaToolError::msg(format!(
+                        "alias resolution error: pure Alias cycle has no terminal declaration: {}",
+                        cycle
+                            .iter()
+                            .map(ContractTypeId::display)
+                            .collect::<Vec<_>>()
+                            .join(" -> ")
+                    ))
+                    .into());
+                }
+                path.push(current.clone());
+                let TypeExpr::Reference { id } = &target.expr else {
+                    return Err(SchemaToolError::msg(format!(
+                        "alias resolution error: {} target is not a graph reference",
+                        current.display()
+                    ))
+                    .into());
+                };
+                current = id.clone();
+            }
+            _ => break current,
+        }
+    };
+
+    for index in (0..path.len()).rev() {
+        let alias_id = path[index].clone();
+        let chain = path[index..].to_vec();
+        resolutions.insert(
+            alias_id.clone(),
+            AliasResolution {
+                alias_id,
+                terminal_id: terminal_id.clone(),
+                chain,
+            },
+        );
+    }
+    Ok(())
+}
+
+fn immediate_type_use_nullability(ty: &TypeUse) -> Nullability {
+    match &ty.expr {
+        TypeExpr::Nullable { .. }
+        | TypeExpr::AnyJson
+        | TypeExpr::Scalar {
+            scalar: ScalarKind::Null,
+        } => Nullability::Nullable,
+        TypeExpr::Scalar { .. } | TypeExpr::Array { .. } | TypeExpr::Reference { .. } => {
+            Nullability::NonNull
+        }
+    }
+}
+
+fn resolve_field_nullability(
+    nodes: &mut BTreeMap<ContractTypeId, ContractTypeNode>,
+    alias_resolutions: &BTreeMap<ContractTypeId, AliasResolution>,
+) -> Result<()> {
+    let snapshot = nodes.clone();
+    for node in nodes.values_mut() {
+        let TypeShape::Object { fields, .. } = &mut node.shape else {
+            continue;
+        };
+        for field in fields {
+            field.nullability =
+                if resolved_type_use_allows_null(&snapshot, alias_resolutions, &field.ty)? {
+                    Nullability::Nullable
+                } else {
+                    Nullability::NonNull
+                };
+        }
+    }
+    Ok(())
+}
+
+fn resolved_type_use_allows_null(
+    nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
+    alias_resolutions: &BTreeMap<ContractTypeId, AliasResolution>,
+    ty: &TypeUse,
+) -> Result<bool> {
+    match &ty.expr {
+        TypeExpr::Nullable { .. } => Ok(true),
+        TypeExpr::Scalar { scalar } => Ok(*scalar == ScalarKind::Null),
+        TypeExpr::AnyJson => Ok(true),
+        TypeExpr::Array { .. } => Ok(false),
+        TypeExpr::Reference { id } => {
+            let terminal = alias_resolutions
+                .get(id)
+                .map(|resolution| &resolution.terminal_id)
+                .unwrap_or(id);
+            let node = nodes.get(terminal).ok_or_else(|| {
+                SchemaToolError::msg(format!(
+                    "nullability resolution error: missing terminal node {}",
+                    terminal.display()
+                ))
+            })?;
+            Ok(matches!(
+                node.shape,
+                TypeShape::Nullable { .. }
+                    | TypeShape::AnyJson
+                    | TypeShape::Scalar {
+                        scalar: ScalarKind::Null
+                    }
+            ))
         }
     }
 }
@@ -1906,6 +2119,47 @@ fn validate_supported_schema_node(
     Ok(())
 }
 
+fn integer_constraints(schema: &Value, location: &str) -> Result<IntegerConstraints> {
+    fn bound(schema: &Value, keyword: &str, location: &str) -> Result<Option<JsonInteger>> {
+        let Some(value) = schema.get(keyword) else {
+            return Ok(None);
+        };
+        let Some(number) = value.as_number() else {
+            return Err(unsupported(
+                keyword,
+                location,
+                "integer bound must be a JSON number",
+            ));
+        };
+        if let Some(value) = number.as_i64() {
+            return Ok(Some(JsonInteger::Signed(value)));
+        }
+        if let Some(value) = number.as_u64() {
+            return Ok(Some(JsonInteger::Unsigned(value)));
+        }
+        Err(unsupported(
+            keyword,
+            location,
+            "integer bound must itself be an exact JSON integer representable by serde_json",
+        ))
+    }
+
+    let constraints = IntegerConstraints {
+        minimum: bound(schema, "minimum", location)?,
+        maximum: bound(schema, "maximum", location)?,
+    };
+    if let (Some(minimum), Some(maximum)) = (constraints.minimum, constraints.maximum) {
+        if minimum.as_i128() > maximum.as_i128() {
+            return Err(unsupported(
+                "minimum",
+                location,
+                "integer minimum must not exceed maximum",
+            ));
+        }
+    }
+    Ok(constraints)
+}
+
 fn ensure_const_matches_type(schema: &Value, value: &Value, location: &str) -> Result<()> {
     let valid = match schema.get("type").and_then(Value::as_str) {
         Some("string") => value.is_string(),
@@ -2011,61 +2265,8 @@ fn ensure_ref_has_only_annotation_siblings(schema: &Value, location: &str) -> Re
     Ok(())
 }
 
-/// Derive whether a property Schema accepts JSON `null` under the restricted surface.
-fn schema_allows_null(registry: &SchemaRegistry, base_id: &str, schema: &Value) -> Result<bool> {
-    if schema == &Value::Bool(true) {
-        return Ok(true);
-    }
-    if schema == &Value::Bool(false) {
-        return Ok(false);
-    }
-
-    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-        ensure_ref_has_only_annotation_siblings(schema, base_id)?;
-        let resolved = resolve_ref(registry, base_id, reference)?;
-        return schema_allows_null(registry, &resolved.type_id.schema_id, resolved.node);
-    }
-
-    if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
-        return Ok(variants.iter().any(is_null_type));
-    }
-
-    if is_nullable_string_enum(schema) {
-        return Ok(true);
-    }
-    if is_string_enum(schema) {
-        return Ok(false);
-    }
-
-    if let Some(value) = schema.get("const") {
-        return Ok(value.is_null());
-    }
-
-    match schema.get("type") {
-        Some(Value::String(kind)) => Ok(kind == "null"),
-        Some(Value::Array(kinds)) => {
-            if kinds.iter().any(|value| !value.is_string()) {
-                return Err(unsupported(
-                    "type",
-                    base_id,
-                    "type union contains a non-string member; cannot derive nullability",
-                ));
-            }
-            Ok(kinds.iter().any(|value| value.as_str() == Some("null")))
-        }
-        None if schema.get("properties").is_some() => Ok(false),
-        None => Err(unsupported(
-            "type",
-            base_id,
-            "cannot derive nullability without type/$ref/enum/const/oneOf",
-        )),
-        Some(other) => Err(unsupported(
-            "type",
-            base_id,
-            &format!("unsupported type form for nullability: {other}"),
-        )),
-    }
-}
+// Nullability is derived from the already-lowered graph by
+// `resolved_type_use_allows_null`; do not add a second raw-Schema `$ref` traversal here.
 
 fn required_set(schema: &Value) -> BTreeSet<String> {
     schema
@@ -2152,6 +2353,8 @@ mod tests {
             "Option",
             "Box",
             "Named",
+            "u32",
+            "i64",
             "variant_name",
             "raw_name",
             "typed_name",
@@ -2168,7 +2371,9 @@ mod tests {
     fn type_expr_is_neutral_scalars_only() {
         let samples = [
             TypeExpr::Scalar {
-                scalar: ScalarKind::Integer,
+                scalar: ScalarKind::Integer {
+                    constraints: IntegerConstraints::default(),
+                },
             },
             TypeExpr::Scalar {
                 scalar: ScalarKind::Number,
@@ -2181,6 +2386,139 @@ mod tests {
         for sample in samples {
             let text = serde_json::to_string(&sample).unwrap();
             assert!(!text.contains("i64") && !text.contains("f64") && !text.contains("String"));
+        }
+    }
+
+    #[test]
+    fn alias_resolution_records_chain_and_rejects_pure_cycle() {
+        fn alias_node(id: &ContractTypeId, target: &ContractTypeId) -> ContractTypeNode {
+            ContractTypeNode {
+                id: id.clone(),
+                schema_title: None,
+                source: SourceSchemaMetadata::from_type_id(id),
+                shape: TypeShape::Alias {
+                    target: TypeUse {
+                        expr: TypeExpr::Reference { id: target.clone() },
+                        source: SourceUseSite::new(id.schema_id.clone(), id.pointer.clone()),
+                    },
+                },
+            }
+        }
+
+        let a = ContractTypeId::root("https://example/a");
+        let b = ContractTypeId::root("https://example/b");
+        let c = ContractTypeId::root("https://example/c");
+        let mut chain_nodes = BTreeMap::new();
+        chain_nodes.insert(a.clone(), alias_node(&a, &b));
+        chain_nodes.insert(b.clone(), alias_node(&b, &c));
+        chain_nodes.insert(
+            c.clone(),
+            ContractTypeNode {
+                id: c.clone(),
+                schema_title: None,
+                source: SourceSchemaMetadata::from_type_id(&c),
+                shape: TypeShape::Scalar {
+                    scalar: ScalarKind::String,
+                },
+            },
+        );
+        let resolutions = resolve_and_audit_aliases(&chain_nodes).expect("alias chain");
+        assert_eq!(resolutions[&a].terminal_id, c);
+        assert_eq!(resolutions[&a].chain, vec![a.clone(), b.clone()]);
+
+        let mut cycle_nodes = BTreeMap::new();
+        cycle_nodes.insert(a.clone(), alias_node(&a, &b));
+        cycle_nodes.insert(b.clone(), alias_node(&b, &a));
+        let error = resolve_and_audit_aliases(&cycle_nodes)
+            .expect_err("pure Alias cycle must fail closed")
+            .to_string();
+        assert!(error.contains("pure Alias cycle"), "{error}");
+        assert!(error.contains("https://example/a"), "{error}");
+        assert!(error.contains("https://example/b"), "{error}");
+    }
+
+    #[test]
+    fn alias_nullability_uses_terminal_fact_and_recursive_object_is_not_pure_cycle() {
+        let nullable = ContractTypeId::root("https://example/nullable");
+        let alias = ContractTypeId::root("https://example/nullable-alias");
+        let recursive = ContractTypeId::root("https://example/recursive");
+        let recursive_alias = recursive.child("$defs").child("self");
+        let mut nodes = BTreeMap::new();
+        nodes.insert(
+            nullable.clone(),
+            ContractTypeNode {
+                id: nullable.clone(),
+                schema_title: None,
+                source: SourceSchemaMetadata::from_type_id(&nullable),
+                shape: TypeShape::Nullable {
+                    inner: TypeUse {
+                        expr: TypeExpr::Scalar {
+                            scalar: ScalarKind::String,
+                        },
+                        source: SourceUseSite::new(
+                            nullable.schema_id.clone(),
+                            nullable.pointer.clone(),
+                        ),
+                    },
+                },
+            },
+        );
+        nodes.insert(alias.clone(), alias_node_for_test(&alias, &nullable));
+        nodes.insert(
+            recursive.clone(),
+            ContractTypeNode {
+                id: recursive.clone(),
+                schema_title: None,
+                source: SourceSchemaMetadata::from_type_id(&recursive),
+                shape: TypeShape::Object {
+                    fields: vec![ObjectField {
+                        json_name: "next".into(),
+                        ty: TypeUse {
+                            expr: TypeExpr::Reference {
+                                id: recursive_alias.clone(),
+                            },
+                            source: SourceUseSite::new(
+                                recursive.schema_id.clone(),
+                                recursive.child("properties").child("next").pointer,
+                            ),
+                        },
+                        presence: Presence::Optional,
+                        nullability: Nullability::NonNull,
+                        schema_location: recursive.child("properties").child("next"),
+                    }],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            },
+        );
+        nodes.insert(
+            recursive_alias.clone(),
+            alias_node_for_test(&recursive_alias, &recursive),
+        );
+
+        let resolutions = resolve_and_audit_aliases(&nodes).expect("aliases with terminals");
+        assert!(resolved_type_use_allows_null(
+            &nodes,
+            &resolutions,
+            &TypeUse {
+                expr: TypeExpr::Reference { id: alias },
+                source: SourceUseSite::new("https://example/use", JsonPointer::root()),
+            }
+        )
+        .expect("nullable alias"));
+        assert_eq!(resolutions[&recursive_alias].terminal_id, recursive);
+    }
+
+    fn alias_node_for_test(id: &ContractTypeId, target: &ContractTypeId) -> ContractTypeNode {
+        ContractTypeNode {
+            id: id.clone(),
+            schema_title: None,
+            source: SourceSchemaMetadata::from_type_id(id),
+            shape: TypeShape::Alias {
+                target: TypeUse {
+                    expr: TypeExpr::Reference { id: target.clone() },
+                    source: SourceUseSite::new(id.schema_id.clone(), id.pointer.clone()),
+                },
+            },
         }
     }
 

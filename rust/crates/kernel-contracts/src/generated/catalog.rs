@@ -6,6 +6,18 @@
 
 /// Embedded schema documents generated from schemas/manifest.json.
 pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
+    ("https://schemas.shittim.local/common/input_content_origin/v1", include_str!("../../../../../schemas/source/common/input_content_origin.v1.json")),
+    ("https://schemas.shittim.local/kcp/command_envelope/v2", include_str!("../../../../../schemas/source/kcp/command_envelope.v2.json")),
+    ("https://schemas.shittim.local/kcp/query_envelope/v2", include_str!("../../../../../schemas/source/kcp/query_envelope.v2.json")),
+    ("https://schemas.shittim.local/kcp/task_create_request/v2", include_str!("../../../../../schemas/source/kcp/task_create_request.v2.json")),
+    ("https://schemas.shittim.local/kcp/task_create_response/v2", include_str!("../../../../../schemas/source/kcp/task_create_response.v2.json")),
+    ("https://schemas.shittim.local/task/child_task_materialization_allocation/v1", include_str!("../../../../../schemas/source/task/child_task_materialization_allocation.v1.json")),
+    ("https://schemas.shittim.local/task/child_task_proposal/v1", include_str!("../../../../../schemas/source/task/child_task_proposal.v1.json")),
+    ("https://schemas.shittim.local/task/input_task_scope/v1", include_str!("../../../../../schemas/source/task/input_task_scope.v1.json")),
+    ("https://schemas.shittim.local/task/normalized_child_task_proposal/v1", include_str!("../../../../../schemas/source/task/normalized_child_task_proposal.v1.json")),
+    ("https://schemas.shittim.local/task/normalized_root_task_create_payload/v2", include_str!("../../../../../schemas/source/task/normalized_root_task_create_payload.v2.json")),
+    ("https://schemas.shittim.local/task/root_task_create_allocation/v2", include_str!("../../../../../schemas/source/task/root_task_create_allocation.v2.json")),
+    ("https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1", include_str!("../../../../../schemas/source/task/root_task_create_idempotency_projection.v1.json")),
     ("https://schemas.shittim.local/v1/audit/audit_record.json", include_str!("../../../../../schemas/source/audit/audit_record.v1.json")),
     ("https://schemas.shittim.local/v1/common/action_status.json", include_str!("../../../../../schemas/source/common/action_status.v1.json")),
     ("https://schemas.shittim.local/v1/common/actor.json", include_str!("../../../../../schemas/source/common/actor.v1.json")),
@@ -49,13 +61,35 @@ pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
     ("https://schemas.shittim.local/v1/task/verification_result.json", include_str!("../../../../../schemas/source/task/verification_result.v1.json")),
 ];
 
-pub const KCP_COMMAND_METHODS: &[&str] = &[
+/// Methods declared by the unique KcpCommandEnvelopeV2 family structure authority.
+/// This does not imply a bound active version or executable registration.
+pub const KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS: &[&str] = &[
+    "task.create",
+    "stop.activate",
 ];
 
-pub const KCP_QUERY_METHODS: &[&str] = &[
+/// Methods declared by the unique KcpQueryEnvelopeV2 family structure authority.
+/// This does not imply a bound active version or executable registration.
+pub const KCP_ENVELOPE_AUTHORITY_QUERY_METHODS: &[&str] = &[
+    "system.ping",
+    "task.get",
+    "task.list",
+    "event.subscribe",
+    "event.poll",
+    "stop.status",
 ];
 
-pub const KCP_METHODS: &[&str] = &[
+/// Canonical merge of V2 command/query family structure authority.
+/// Consumers needing bound versions must use METHOD_VERSION_BINDINGS.
+pub const KCP_ENVELOPE_AUTHORITY_METHODS: &[&str] = &[
+    "event.poll",
+    "event.subscribe",
+    "stop.activate",
+    "stop.status",
+    "system.ping",
+    "task.create",
+    "task.get",
+    "task.list",
 ];
 
 pub const KCP_LEGACY_V1_COMMAND_METHODS: &[&str] = &[

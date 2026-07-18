@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum ContractFailureStage {
     /// Caller input failed the selected JSON Schema.
     CallerSchemaValidation,
+    /// A general generated/root type failed to deserialize after Schema validation.
+    TypedDecodeAfterSchema,
     /// A generated envelope wire type failed to decode after Schema validation.
     WireDecodeAfterSchema,
     /// A generated method payload failed to decode after Schema validation.
@@ -35,12 +37,27 @@ pub struct ClassifiedContractFailure {
     pub classification: ContractFailureClassification,
 }
 
+/// Stable sub-stage for the general validated decode API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecodeStage {
+    /// Deserialize the Schema-validated JSON value into the requested Rust type.
+    TypedDeserialize,
+}
+
 /// Error produced by generated contracts, validation, or canonicalization.
 #[derive(Debug, Error)]
 pub enum ContractError {
     /// Caller-controlled JSON failed the explicitly selected Schema.
     #[error("JSON schema validation failed for {schema_id}: {detail}")]
     SchemaValidation { schema_id: String, detail: String },
+
+    /// A general generated/root type failed to deserialize after its Schema passed.
+    #[error("typed decode after schema validation failed for {schema_id} at {stage:?}: {detail}")]
+    DecodeAfterSchema {
+        schema_id: String,
+        stage: DecodeStage,
+        detail: String,
+    },
 
     /// A generated raw envelope failed to decode after its Schema had passed.
     #[error("wire decode after schema validation failed for {schema_id}: {detail}")]
@@ -85,6 +102,7 @@ impl ContractError {
     pub fn stage(&self) -> ContractFailureStage {
         match self {
             Self::SchemaValidation { .. } => ContractFailureStage::CallerSchemaValidation,
+            Self::DecodeAfterSchema { .. } => ContractFailureStage::TypedDecodeAfterSchema,
             Self::WireDecodeAfterSchema { .. } => ContractFailureStage::WireDecodeAfterSchema,
             Self::PayloadDecodeAfterSchema { .. } => ContractFailureStage::PayloadDecodeAfterSchema,
             Self::GeneratedDiscriminatorMapping { .. } => {
@@ -118,6 +136,7 @@ impl ContractError {
     fn schema_id(&self) -> Option<&str> {
         match self {
             Self::SchemaValidation { schema_id, .. }
+            | Self::DecodeAfterSchema { schema_id, .. }
             | Self::WireDecodeAfterSchema { schema_id, .. }
             | Self::PayloadDecodeAfterSchema { schema_id, .. }
             | Self::GeneratedDiscriminatorMapping { schema_id, .. }

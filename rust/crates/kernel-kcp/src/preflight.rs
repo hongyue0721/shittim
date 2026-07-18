@@ -138,9 +138,10 @@ fn preflight_value_with_seams(
         None => return wire_error(&request_id, SafeWireErrorKind::InvalidRequest, validator),
     }
 
-    // Current production stage still validates retained v1 envelopes. Active
-    // KCP_*METHODS catalogs are empty until V2 Envelope authority is present;
-    // this legacy preflight path must not consume active names.
+    // Current production stage still validates retained v1 envelopes. The
+    // KCP_ENVELOPE_AUTHORITY_* catalogs describe V2 family structure only and
+    // do not imply executable registration; this legacy preflight path must not
+    // consume authority names.
     let method = match family {
         Family::Command => method_for_family(object, "command_type", KCP_LEGACY_V1_COMMAND_METHODS),
         Family::Query => method_for_family(object, "query_type", KCP_LEGACY_V1_QUERY_METHODS),
