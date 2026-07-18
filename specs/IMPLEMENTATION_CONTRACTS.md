@@ -18,6 +18,7 @@
     crates/
       domain-task/
       domain-policy/
+      kernel-task-creation/      # 未来正式纯业务编排 crate；当前尚未创建
       domain-memory/
       domain-initiative/
       extension-supervisor/
@@ -59,6 +60,14 @@
 ### domain-policy
 
 权限、Side-effect、Approval、Lease、Delegation Match、PolicyRule。
+
+### kernel-task-creation
+
+正式生产 ownership 固定为未来新增的纯 crate `kernel-task-creation`。本阶段职责冻结为：root v2 / child proposal 共用字段规范化；root receipt projection、root idempotency projection及其JCS/SHA-256；child normalized proposal / receipt hash；root/child allocation领域验证。它依赖`kernel-contracts`并调用`domain-policy`提供的权威URI parser/normalizer；不依赖 SQLite/KCP，不分配 ID，不读取 Delegation、parent、Action、PermissionDecision、Approval、Credential、Challenge或任何repository事实，不开启事务也不写存储。全部业务事实必须由caller以typed input显式注入。
+
+`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`不属于本crate本阶段职责，也不得为了task creation方便塞入其中；它们未来由专门的authorization projection owner或独立切片实现。依赖方向只固定为`kernel-contracts + domain-policy -> kernel-task-creation -> kernel-sqlite（未来调用方）`，不据此声称`kernel-contracts`与`domain-policy`彼此依赖。组合根或KCP handler可调用纯API，但不得复制同义normalization/hash/allocation validator。`domain-task`继续只拥有Task/Action状态机与不变量，不增加policy依赖。
+
+URI解析与规范化的当前唯一权威实现仍是`domain-policy`；`kernel-task-creation`只做编排和错误映射，不得复制、分叉或包装出第二套语义。长期如需消除领域命名耦合，可另立ADR把该实现抽到中立URI crate，但在该ADR与迁移完成前不得先制造并行实现。当前`kernel-task-creation`尚未创建，写明名称、边界与依赖方向只关闭后续实现职责猜测，不表示helper/repository已实现。
 
 ### domain-memory
 
@@ -209,7 +218,17 @@ InputTaskScopeV1 {
 }
 ```
 
-三个数组都可为空；元素出现时必须non-empty，保序保重复且不设`uniqueItems`。`expires_at`是required-nullable `date-time`。该对象没有stored `id/task_id/revision/source_refs/created_by/created_at/updated_at`或其它source/time字段；缺失事实不得通过默认值伪造成stored Scope。
+三个数组都可为空；元素出现时必须non-empty，保序保重复且不设`uniqueItems`。`expires_at`是required-nullable string，后续source Schema必须使用Draft 2020-12可编码的`pattern`与已启用assertion的`format: "date-time"`双门：
+
+```json
+{
+  "type": ["string", "null"],
+  "format": "date-time",
+  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\\.0+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$"
+}
+```
+
+`pattern`只固定本合同的canonical raw接受范围：完整文本、只接受大写`T`/`Z`、时区为`Z`或`±HH:MM`、秒为`00..59`、fraction缺失或全部为`0`；它故意不尝试证明月份、日期、小时和offset取值合法。`format`负责完整RFC 3339 date-time解析及日期/时间/offset合法性；即使底层format实现接受小写`t`/`z`，也会被pattern拒绝。两门必须同时通过，不使用custom format，也不得只依赖任一门。任何fraction含非零数字都是caller-invalid，禁止截断、四舍五入或把它伪装成规范化成功；合法值必须先解析为instant，再输出UTC秒精度`YYYY-MM-DDTHH:MM:SSZ`。该对象没有stored `id/task_id/revision/source_refs/created_by/created_at/updated_at`或其它source/time字段；缺失事实不得通过默认值伪造成stored Scope。
 
 `ContentOriginV2`增加Kernel-owned id/received_at/carrier/receipt。v1保持历史读取；active producer使用v2。v2 carrier联合不含transition anchor：
 
@@ -286,7 +305,7 @@ v1历史形状为：
 
 本批12 Schema中，所有普通string值、nullable string的非null值和string array元素在出现时都必须`minLength: 1`；因此`risk_hint`非null时、`upstream_stable_id`非null时也必须non-empty。普通字符串不trim、不作Unicode重写；`" "`是否满足仅由`minLength`判断，不能偷偷引入trim语义。UUID、URI、date-time或enum继续使用更强约束。
 
-通用hash算法固定为：先构造并再次Schema验证对象 → RFC8785 JCS → UTF-8 bytes（无BOM、无尾换行）→ SHA-256 → lowercase hex。签名preimage另见§6.10.3。URI调用`SECURITY_PRIVILEGE.md` §2.1规范化：scheme/host小写、默认端口移除、dot segment解析、percent hex大写且不解码保留字符；query/fragment保留并按该规则规范化。普通字符串不trim、不Unicode重写；UUID按Schema lowercase canonical text；RFC3339时间必须解析为instant后输出UTC、秒精度`YYYY-MM-DDTHH:MM:SSZ`，若业务需要亚秒则Schema必须另立版本。
+通用hash算法固定为：先构造并再次Schema验证对象 → RFC8785 JCS → UTF-8 bytes（无BOM、无尾换行）→ SHA-256 → lowercase hex。签名preimage另见§6.10.3。URI规范化必须调用`domain-policy`当前唯一权威的`SECURITY_PRIVILEGE.md` §2.1 parser/normalizer：scheme/host小写、默认端口移除、dot segment解析、percent hex大写且不解码保留字符；query/fragment保留并按该规则规范化。`kernel-task-creation`只编排调用与错误映射，不复制URI parser；未来抽取中立URI crate必须另立ADR并迁移唯一实现，不能先并存第二套。普通字符串不trim、不Unicode重写；UUID按Schema lowercase canonical text。`InputTaskScopeV1.expires_at` raw由上述`pattern + format`双门约束：大写`T/Z`、`Z|±HH:MM`、秒`00..59`、无fraction或fraction全零；任何非零fraction都是caller-invalid且禁止截断/四舍五入；合法值解析为instant后统一输出UTC秒精度`YYYY-MM-DDTHH:MM:SSZ`。
 
 #### `NormalizedRootTaskCreatePayloadV2`
 
@@ -305,9 +324,9 @@ v1历史形状为：
 | `delegation_ref` | UUID\|null | required-nullable；UUID为lowercase canonical text；非null authority验证不改变该值 |
 | `origin` | `InputContentOriginV1` | required；字段约束通过`https://schemas.shittim.local/task/normalized_root_task_create_payload/v2#/$defs/origin` absolute fragment进入canonical宿主；宿主`$defs/origin`再whole-schema引用`https://schemas.shittim.local/common/input_content_origin/v1`；`schema_version=1,kind,source_uri|null,upstream_stable_id|null,producer_ref{kind,id},parent_origin_refs[]`全量出现；仅`source_uri` URI规范化，parent refs保序保重复 |
 
-数组规则没有未列出的隐式set语义；尤其`capability_hints`、scope hints及parent origin refs不得排序或去重。规范化后必须再次Schema验证；失败`invalid_scope_pattern`仅用于URI-pattern失败，其它post-normalize shape不变量失败为`internal_error`。
+数组规则没有未列出的隐式set语义；尤其`capability_hints`、scope hints及parent origin refs不得排序或去重。raw Schema/preflight之后，`origin.source_uri`、`task_scope.resource_patterns[]`与`task_scope.exclusions[]`的任何normalization失败统一公开映射现有闭集code `invalid_scope_pattern`：details精确为`{input_kind:"origin_source_uri",index:null}`、`{input_kind:"resource_pattern",index:<zero-based integer>}`或`{input_kind:"exclusion",index:<zero-based integer>}`。历史code/message名称不扩大成“只有pattern”；`InputTaskScopeV1.expires_at`非零亚秒则是caller-invalid并映射`invalid_request`，不借用`invalid_scope_pattern`。规范化后必须再次执行normalized Schema验证与typed decode；该阶段失败是本地internal contract failure，最终安全wire映射为`internal_error`，绝不能回退成caller错误。
 
-receipt preimage就是`NormalizedRootTaskCreatePayloadV2`的JCS UTF-8 bytes。v2 idempotency preimage为封闭的`RootTaskCreateIdempotencyProjectionV1 {schema_version:1,actor,entry_point,command_type:"task.create",task_id:null,context,expected_revision:null,payload:NormalizedRootTaskCreatePayloadV2}`；projection自身的`schema_version=1`是required const，参与JCS与idempotency hash，不能在hash前剥离。`context`作为required-nullable Envelope JSON值原样出现一次，JCS只排序object key，不改变其字符串或数组。两者都使用本节通用JCS/SHA-256规则。每个对象有独立fixture：root fixture同时包含raw Envelope、normalized root payload、receipt/idempotency projection、各自JCS bytes/hash，以及URI、数组重复、null、`parent_task_id`拒绝和排除字段tamper向量；不得借用legacy v1或child fixture。
+receipt preimage就是`NormalizedRootTaskCreatePayloadV2`的JCS UTF-8 bytes。v2 idempotency preimage为封闭的`RootTaskCreateIdempotencyProjectionV1 {schema_version:1,actor,entry_point,command_type:"task.create",task_id:null,context,expected_revision:null,payload:NormalizedRootTaskCreatePayloadV2}`；projection自身的`schema_version=1`是required const，参与JCS与idempotency hash，不能在hash前剥离。`context`作为required-nullable Envelope JSON值原样出现一次，JCS只排序object key，不改变其字符串或数组。两者都使用本节通用JCS/SHA-256规则。root official fixture中的`normalized_payload`本身就是receipt projection，禁止再复制一个同义对象字段；不得借用legacy v1或child fixture。
 
 #### `NormalizedChildTaskProposalV1`
 
@@ -326,7 +345,70 @@ receipt preimage就是`NormalizedRootTaskCreatePayloadV2`的JCS UTF-8 bytes。v2
 
 明确排除所有Kernel-owned ID、parent/status/plan/revision/time、receipt/carrier、Action completion和Envelope字段。该对象的JCS hash是child proposal hash，也是ContentOrigin receipt内容边界。
 
+#### Task creation official fixture外层合同
+
+以下三个路径是权威测试制品路径，wrapper字段名也是权威合同，但wrapper本身**不是business JSON Schema**、不得进入`schemas/manifest.json`、不得生成Rust/TS业务类型：
+
+- root：`schemas/fixtures/kcp/task_create_normalized_hash.v2.json`；
+- child：`schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`；
+- allocations：`schemas/fixtures/task/task_creation_allocations.v1.json`。
+
+root fixture外层固定为：
+
+```text
+{
+  fixture_version: 1,
+  raw_envelope: <KcpCommandEnvelopeV2>,
+  normalized_payload: <NormalizedRootTaskCreatePayloadV2>,
+  receipt_preimage: { jcs_utf8_hex: <lowercase hex>, sha256: <lowercase 64-hex> },
+  idempotency_projection: <RootTaskCreateIdempotencyProjectionV1>,
+  idempotency_preimage: { jcs_utf8_hex: <lowercase hex>, sha256: <lowercase 64-hex> },
+  tamper_cases: [{
+    case_id: <non-empty unique string>,
+    operation: add | replace,
+    pointer: <strict RFC6901 pointer into raw_envelope>,
+    value: <JSON value>,
+    expected: {
+      result: raw_schema_rejected | normalization_rejected | hashes_computed,
+      public_error: { code: <Error Catalog code>, details: <exact details|null> } | null,
+      hash_relations: {
+        receipt: same | different | not_computed,
+        idempotency: same | different | not_computed
+      }
+    }
+  }]
+}
+```
+
+child fixture外层固定为：
+
+```text
+{
+  fixture_version: 1,
+  raw_proposal: <ChildTaskProposalV1>,
+  normalized_proposal: <NormalizedChildTaskProposalV1>,
+  proposal_preimage: { jcs_utf8_hex: <lowercase hex>, sha256: <lowercase 64-hex> },
+  tamper_cases: [{
+    case_id: <non-empty unique string>,
+    operation: add | replace,
+    pointer: <strict RFC6901 pointer into raw_proposal>,
+    value: <JSON value>,
+    expected: {
+      result: raw_schema_rejected | normalization_rejected | hash_computed,
+      public_error: { code: <Error Catalog code>, details: <exact details|null> } | null,
+      hash_relation: same | different | not_computed
+    }
+  }]
+}
+```
+
+fixture只保存JCS UTF-8 bytes的lowercase `jcs_utf8_hex`与hash字段`sha256`，不得重复保存canonical JSON string、base64或带前缀digest。tamper `pointer`按raw基准对象解释；`add`要求目标member不存在或array插入位置合法，`replace`要求目标已存在，解析失败必须使fixture harness失败而不是跳过case。
+
+root tamper最小权威矩阵：`auth`改为非null必须在raw合同阶段拒绝且不投影；合法改变`deadline`、`request_id`或`idempotency_key`时两hash均`same`；合法改变`context`时receipt `same`、idempotency `different`；改变任一纳入payload字段时两hash均`different`；增加`payload.parent_task_id`必须raw Schema拒绝；URI lexical equivalent经normalization后两hash均`same`；任一纳入数组重排或改变重复次数时两hash均`different`。child fixture相应覆盖URI lexical equivalent、数组顺序/重复、origin/scope normalization错误与非零`expires_at`亚秒caller-invalid。allocation fixture精确外层见§6.10.6。
+
 #### `ChildTaskDeltaProjectionV1`
+
+> ownership冻结：本投影不属于`kernel-task-creation`本阶段。以下仅定义未来authorization projection合同；未来必须由专门authorization projection owner或独立切片实现，并把所需权威事实作为输入，不能借task creation helper读取repository或顺手生成。
 
 | 字段 | 类型/空值 | 投影规则 |
 |---|---|---|
@@ -460,11 +542,11 @@ Response：
 - 属性：Command；只创建**根 Task** Kernel事实，不执行Task目标中的外部副作用；
 - active payload版本：仅`schema_version=2`。`TaskCreateRequestV1`永久冻结为legacy validation/read/migration，不进入active registration/dispatcher，production请求携带v1时返回`unsupported_schema_version`；
 - Envelope约束：`task_id=null`、`expected_revision=null`；`context`保留为业务关联上下文并进入幂等等价投影；
-- 规范化：仅规范化非null `origin.source_uri`、`task_scope.resource_patterns[]`与`task_scope.exclusions[]`，保序保重复；失败`invalid_scope_pattern`；post-normalize合同失败为`internal_error`；
+- 规范化：只对非null `origin.source_uri`、`task_scope.resource_patterns[]`、`task_scope.exclusions[]`及`task_scope.expires_at`执行本节明确的规范化；前三类URI normalization失败统一`invalid_scope_pattern`并使用§5.3.1精确details，非零亚秒`expires_at`为caller-invalid `invalid_request`；post-normalize Schema/typed合同失败为本地internal contract failure；
 - 幂等scope：`(actor.id, entry_point, "task.create", idempotency_key)`，记录与Task同生命周期；
 - `normalized_payload`必须精确为§5.3.1的`NormalizedRootTaskCreatePayloadV2`（与`NormalizedChildTaskProposalV1`共享字段规则但不是同一Schema，且不含parent）；receipt preimage就是其JCS UTF-8 bytes；
 - v2幂等等价投影必须精确构造为封闭对象`RootTaskCreateIdempotencyProjectionV1 {schema_version:1,actor,entry_point,command_type:"task.create",task_id:null,context,expected_revision:null,payload:NormalizedRootTaskCreatePayloadV2}`；`schema_version=1` required const参与JCS/hash，`context`只在该外层projection出现一次，原样作为JSON值，JCS仅规范object key，不调整其数组/字符串；
-- 两个hash fixture必须同时保存raw envelope、normalized root payload、receipt/idempotency projections、两份JCS bytes与hash，并有URI、数组重复/null、`parent_task_id`拒绝及排除deadline/request/auth/idempotency key的tamper向量；
+- official root fixture必须位于`schemas/fixtures/kcp/task_create_normalized_hash.v2.json`，并按§5.3.1固定wrapper保存raw envelope、normalized payload、idempotency projection、两份`jcs_utf8_hex`/`sha256`及tamper；`normalized_payload`本身就是receipt preimage对象，不得复制同义receipt projection或保存canonical string；
 - v2幂等等价投影排除protocol/message/auth/request/deadline/idempotency key；receipt排除全部Envelope、Kernel IDs、时间、receipt与物化对象；
 - `task.create` Request payload必须解码为`TaskCreateRequestV2`；其九项caller-owned字段均通过absolute fragment引用`NormalizedRootTaskCreatePayloadV2#/$defs`这一canonical宿主，不能直接whole-schema绕过宿主引用`InputTaskScopeV1`或`InputContentOriginV1`。宿主自身properties使用local fragment；宿主`$defs/task_scope`和`$defs/origin`再分别whole-schema引用`https://schemas.shittim.local/task/input_task_scope/v1`与`https://schemas.shittim.local/common/input_content_origin/v1`；其它root同样逐字段使用宿主absolute fragment。不得在Catalog段再维护一份内联平行字段表。
 
@@ -690,7 +772,7 @@ Approval不可变链的每次current-head变化都必须可观察，正式Catalo
 | `parent_task_not_found` | `parent task was not found` | `{task_id}` | false | 仅legacy TaskCreate v1 |
 | `parent_origin_not_found` | `parent content origin was not found` | `{origin_id}` | false | origin ref缺失 |
 | `origin_not_found` | `content origin was not found` | `{origin_id}` | false | stop.activate或通用origin引用缺失 |
-| `invalid_scope_pattern` | `task scope contains an invalid URI pattern` | `{input_kind,index}` | false | scope normalize失败 |
+| `invalid_scope_pattern` | `task scope contains an invalid URI pattern` | 精确三形：`{input_kind:"origin_source_uri",index:null}`、`{input_kind:"resource_pattern",index:<zero-based integer>}`、`{input_kind:"exclusion",index:<zero-based integer>}` | false | task-create origin URI或scope pattern normalization失败；历史code/message保留 |
 | `invalid_cursor` | `cursor is invalid` | `{cursor_kind}` | false | task.list/event cursor结构或范围无效 |
 | `unsupported_event_type` | `event type is not supported` | `{event_type}` | false | subscribe filter含非Catalog type |
 | `subscription_not_found` | `event subscription was not found` | `{subscription_id}` | false | 临时subscription不存在/过期 |
@@ -1373,6 +1455,75 @@ implicit/default/explicit allow与Delegation authority不生成Approval。materi
 `ChildTaskMaterializationAllocationV1`是task component、`kind=object`的正式封闭对象，全部字段required：`schema_version=1,child_task_id,task_scope_id,content_origin_id,kernel_receipt_id,creation_provenance_id,verification_result_id,audit_record_id,task_created_event_id,action_state_changed_event_id,action_transition_id,correlation_id,task_created_dedup_key,action_state_changed_dedup_key`。十个UUID本对象内两两不同；`schema_version`不计入十UUID。三个opaque值只由Schema强制non-empty，不发明hex、base64或长度格式。重放从action materialization mapping与transition intent读取，禁止重新分配。
 
 JSON Schema只验证各字段自身格式/shape，不伪装能表达跨字段UUID互异、allocation UUID不得等于parent/action/PD/Approval/credential/challenge ID，或correlation/dedup彼此独立；这些必须由producer/repository validation与Conformance fake-generator/negative测试闭合。
+
+生产allocation validator由`kernel-task-creation`唯一拥有。其Rust API不得接收自由`Vec<UUID>`/bag，而必须接收版本化、字段闭合的typed input snapshot；这些类型是纯Rust API input，不是source JSON Schema，不进入`schemas/manifest.json`，也不生成业务wire类型：
+
+```text
+RootTaskCreateExternalUuidRefsV1 {
+  command_request_id: UUID,
+  delegation_ref: Option<UUID>,
+  parent_origin_refs: Vec<UUID>
+}
+
+ChildTaskMaterializationExternalUuidRefsV1 {
+  parent_task_id: UUID,
+  action_id: UUID,
+  permission_decision_id: UUID,
+  approval_resolution_ref: Option<UUID>,
+  credential_refs: Vec<UUID>,
+  challenge_refs: Vec<UUID>,
+  delegation_ref: Option<UUID>,
+  parent_origin_refs: Vec<UUID>
+}
+```
+
+root新Task没有parent；actor与upstream stable ID不是UUID关系槽，不进入该类型。child allocation自身创建`verification_result_id`，`action_transition_id`也是内部allocation字段，二者都不是external ref；Lease/generation不是§6.10.6此处要求比较的UUID槽，不得猜入。Credential/Challenge在真实路径可能没有或有多个，因此使用required `Vec`字段而不是猜成单个optional；`Option`/`Vec`本身明确表达“本次无该事实”。两个input对象的每个字段在Rust构造时都required，helper只通过字段穷举flatten该闭集；caller遗漏字段必须编译失败，不能运行时默默漏入自由集合。
+
+helper先再次按对应allocation Schema验证，再验证：七/十个内部UUID分别两两不同；任一内部UUID不等于typed snapshot flatten后的任一external UUID；所有opaque non-empty；同一allocation内opaque彼此不同。新增外部关系槽时必须修改类型并强制所有caller编译期更新；若需要保持旧API兼容则新增显式V2类型，禁止向自由bag追加约定。helper不得查询repository补事实，也不得从allocation/字符串猜关系；调用方必须先读取并验证权威事实，再完整注入snapshot。验证失败在进入repository前fail closed，不依赖数据库constraint碰撞。
+
+allocation official fixture唯一路径为`schemas/fixtures/task/task_creation_allocations.v1.json`，外层固定：
+
+```text
+{
+  fixture_version: 1,
+  root: {
+    schema_id: "https://schemas.shittim.local/task/root_task_create_allocation/v2",
+    external_uuid_refs: {
+      command_request_id: <uuid>,
+      delegation_ref: <uuid> | null,
+      parent_origin_refs: [<uuid>, ...]
+    },
+    valid_allocation: <RootTaskCreateAllocationV2>,
+    tamper_cases: [{
+      case_id: <non-empty unique string>,
+      operation: add | replace,
+      pointer: <strict RFC6901 pointer into valid_allocation>,
+      value: <JSON value>,
+      expected: {
+        schema_valid: <boolean>,
+        domain_result: accepted | duplicate_internal_uuid | external_uuid_collision | empty_opaque | duplicate_opaque | not_evaluated
+      }
+    }]
+  },
+  child: {
+    schema_id: "https://schemas.shittim.local/task/child_task_materialization_allocation/v1",
+    external_uuid_refs: {
+      parent_task_id: <uuid>,
+      action_id: <uuid>,
+      permission_decision_id: <uuid>,
+      approval_resolution_ref: <uuid> | null,
+      credential_refs: [<uuid>, ...],
+      challenge_refs: [<uuid>, ...],
+      delegation_ref: <uuid> | null,
+      parent_origin_refs: [<uuid>, ...]
+    },
+    valid_allocation: <ChildTaskMaterializationAllocationV1>,
+    tamper_cases: [<同形状>]
+  }
+}
+```
+
+该fixture不保存JCS bytes、canonical string或hash，只证明Schema shape与allocation domain validator；`external_uuid_refs`对象字段必须精确对应上述Rust typed snapshot，fixture harness不得把它降格成自由UUID数组。每个root/child都必须至少包含Schema可通过但domain分别以`duplicate_internal_uuid`、`external_uuid_collision`、`duplicate_opaque`拒绝的向量，以及空opaque的Schema拒绝向量。它不证明生产generator随机、全局唯一或“不从caller派生”；generator非派生性必须由独立fake/spy与实现审查证明。
 
 ID generator purpose闭集至少包含Task、TaskScope、ContentOrigin、KernelReceipt、CreationProvenance、VerificationResult、AuditRecord、Event、ActionTransition、Correlation、EventDedup；generator只分配，不拥有业务关系。repository写前验证格式/互异，commit后canonical readback逐项验证allocation。
 
