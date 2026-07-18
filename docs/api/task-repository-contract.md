@@ -12,15 +12,21 @@
 
 ## Root v2
 
-Envelope task_id/expected_revision固定null；payload无parent。`NormalizedRootTaskCreatePayloadV2`完整字段、InputContentOriginV1、数组规则与receipt/idempotency两份preimage均以IC §5.3.1为准：它与TaskCreateRequest v2一一对应，receipt就是该payload的JCS；Envelope context不属于payload，只在idempotency projection出现一次。仅规范化source URI与Scope patterns，保序保重复。root receipt/idempotency各有独立v2 fixture，不能复用legacy或child fixture。
+Envelope task_id/expected_revision固定null；payload无parent。raw `TaskCreateRequestV2`、`ChildTaskProposalV1`与两份 normalized root的caller-owned字段完全同构。canonical字段合同宿主固定为既有root `NormalizedRootTaskCreatePayloadV2#/$defs`：宿主自身properties使用local fragment，另三root的九项caller字段均使用absolute fragment；`task_scope`与`origin`不得由这些root直接whole-schema引用`InputTaskScopeV1`/`InputContentOriginV1`绕过宿主，必须经宿主absolute fragment进入宿主的`$defs/task_scope`与`$defs/origin`，再分别whole-schema引用两个Input Schema。这只是中立task-create proposal字段宿主，不倒置root/child业务语义。保留四个独立root Schema身份，禁止第13个Schema或复制平行约束。`InputTaskScopeV1`是task component独立封闭对象，`InputContentOriginV1`是common component独立封闭对象。所有string数组可空、元素non-empty、保序保重复、无`uniqueItems`；非null `risk_hint`、非null `upstream_stable_id`同样non-empty，普通字符串不trim。
 
-单事务创建Origin v2、Scope、root Task、Provenance、Audit v2与一个`task.created` EventEnvelope v2；使用`RootTaskCreateAllocationV2`逐purpose分配**七个**UUID并验证ID互异/opaque correlation-dedup；所有时间来自唯一accepted_at，commit前canonical readback。legacy v1六UUID allocation不属于active root v2。
+`NormalizedRootTaskCreatePayloadV2`完整字段与receipt/idempotency两份preimage以IC §5.3.1为准；receipt就是该payload的JCS。idempotency必须精确使用`RootTaskCreateIdempotencyProjectionV1 {schema_version:1,actor,entry_point,command_type:"task.create",task_id:null,context,expected_revision:null,payload:NormalizedRootTaskCreatePayloadV2}`，其中`schema_version=1` required且参与JCS/hash；Envelope context不属于payload，只在projection出现一次。仅规范化source URI与Scope patterns。root receipt/idempotency各有独立v2 fixture，不能复用legacy或child fixture。
+
+`TaskCreateResponseV2.task`直接引用当前active retained `https://schemas.shittim.local/v1/task/task_spec.json`；这不使TaskSpec legacy，也不创建TaskSpec v2。
+
+本批12项source依赖不靠实现猜测：Projection是`task→common`并引用normalized payload；TaskCreate Request/Response是`kcp→task/common`；两个Envelope是`kcp→common`且无method payload refs；两个allocation无refs。完整逐Schema表与absolute/local fragment规则见IC §13.6。
+
+单事务创建Origin v2、Scope、root Task、Provenance、Audit v2与一个`task.created` EventEnvelope v2；使用task component `kind=object`、自身`schema_version=2`的`RootTaskCreateAllocationV2`逐purpose分配**七个**UUID；schema_version不计入数量。opaque只要求non-empty，不规定hex。UUID互异和opaque独立由producer/conformance验证，Schema不伪装能表达。所有时间来自唯一accepted_at，commit前canonical readback。legacy v1六UUID allocation不属于active root v2。
 
 ## Child Action
 
 固定capability/operation/class：`kernel.task` / `task.child.create` / S1。proposal完整显式声明child facts、Scope、Delegation与Origin input，禁止child ID/parent/status/revision/time/shadow字段。父Task只取Action.task_id。
 
-proposal的来源类型是`InputContentOriginV1`，stored事实是`ContentOriginV2`，禁止混名。Kernel构造并hash：
+proposal的来源类型是`InputContentOriginV1`，scope类型是`InputTaskScopeV1`，stored事实分别是`ContentOriginV2`与TaskScope；禁止混名。Kernel构造并hash：
 
 - `NormalizedChildTaskProposalV1`；
 - `ChildTaskDeltaProjectionV1`；
@@ -31,7 +37,7 @@ proposal的来源类型是`InputContentOriginV1`，stored事实是`ContentOrigin
 
 ### 原子bundle
 
-同一事务创建Origin/Scope/Task/Provenance/Verification/Audit、child `task.created`、Action `action.state_changed`，并更新Action completed result/revision。使用`ChildTaskMaterializationAllocationV1`；Action event因果是正式`ActionTransitionRefV1`并先持久化`ActionTransitionIntentV1`，禁止self-causation。Action ID是child-by-action唯一业务键，跨generation最多一个child。
+同一事务创建Origin/Scope/Task/Provenance/Verification/Audit、child `task.created`、Action `action.state_changed`，并更新Action completed result/revision。使用task component `kind=object`、自身`schema_version=1`的`ChildTaskMaterializationAllocationV1`；另有十UUID与三个non-empty opaque值，schema_version不计数。跨字段UUID互异/外部ID不等/opaque独立由producer与Conformance闭合，Schema不规定hex。Action event因果是正式`ActionTransitionRefV1`并先持久化`ActionTransitionIntentV1`，禁止self-causation。Action ID是child-by-action唯一业务键，跨generation最多一个child。
 
 同Action同proposal/material hash且bundle完整为合法重放；同Action不同proposal/material为`child_materialization_conflict`；同execution idempotency key绑定不同Action为`idempotency_conflict`；mapping不完整为`stored_data_invalid`，禁止补半包。
 

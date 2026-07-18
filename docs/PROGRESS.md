@@ -116,12 +116,15 @@
 
 - [x] 接受ADR-0006：active KCP TaskCreate v2 root-only；v1 legacy冻结；Child Task唯一通过父Task的`kernel.task/task.child.create` S1 Action创建；child事实直接Action causation，Action自身状态事件使用transition anchor；显式Scope/Delegation delta；原子materialization与legacy provenance。
 - [x] 接受ADR-0007：Approval v2 request/resolution/invalidation判别联合、subject exactly-one、不可变current-head CAS、material/observation fingerprint分离、真实身份/remote challenge证据与plan re-evaluation。
-- [x] 接受ADR-0006/0007并补齐完整contract：JSON Schema TaggedUnion source profile与TypeShape lowering、MethodVersionBinding完整lifecycle/namespace migration、四投影与SubjectProjection hash、canonical confirmation词表、Approval evidence/chain/identity repositories与`approval.state_changed`、ActionTransition intent、allocation/producer/Audit exact wire、全量IC Error Catalog、V2ProductionWriteCutover及repository hard gates。
-- [x] 本轮修改manifest元数据与schema-tool Rust，不修改Schema source、generated Rust或业务crates；因此上述active合同全部仍为contract-only。
+- [x] 接受ADR-0006/0007并补齐完整contract；本轮进一步闭合首批正好12个Schema的component-native exact validator目标、五值compatibility一般规则、`NormalizedRootTaskCreatePayloadV2#/$defs`中立宿主、逐source `$ref`依赖、allocation/projection schema_version、Envelope V2 registry发现、active Catalog命名与MethodVersionBinding production-stage gate。**仅合同闭合，代码未实现。**
+- [x] 本轮只修改规范/ADR/API导航与FILE_MANIFEST，不修改`schemas/manifest.json`、Schema source、Rust或generated artifacts；production bindings仍为空，当前loader仍empty-only。
 
 ## 未完成
 
-- [ ] 新增并生成TaskCreateRequest/Response v2、InputContentOrigin/ChildTaskProposal/四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit v2、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule v2、signature algorithm/credential/challenge/response/local/system evidence；当前41个Schema/生成类型均为v1但按对象lifecycle判断。manifest v2 namespace migration及required empty typed binding扩展点已完成，但这不等于新增任何业务v2 Schema、binding生成或八方法表。
+- [ ] 新增并生成首批12项：InputContentOriginV1、InputTaskScopeV1、TaskCreateRequestV2、NormalizedRootTaskCreatePayloadV2、RootTaskCreateIdempotencyProjectionV1、TaskCreateResponseV2、RootTaskCreateAllocationV2、ChildTaskProposalV1、NormalizedChildTaskProposalV1、ChildTaskMaterializationAllocationV1、KcpCommandEnvelopeV2、KcpQueryEnvelopeV2；同步应用manifest五值compatibility矩阵。当前41个retained Schema/source/生成类型未改。
+- [ ] 将schema-tool从empty-only loader改为完整合法非空MethodVersionBinding validator/catalog，以synthetic 8-method registry测试；active family authority按registry exact V2 Envelope facts唯一选择，删除suffix目标算法；生成`KCP_COMMAND_METHODS`/`KCP_QUERY_METHODS`/`KCP_METHODS`，不再用`KCP_V1_METHODS`命名active总目录；新增`validate_production_manifest_stage`供check/generate挂载production-empty gate，synthetic registry不走该gate。
+- [ ] 用`SchemaRegistry::load`硬门替换当前component-native namespace-only宽松语义：一般对象校验title-derived exact name；KCP envelope hard gate按`component=kcp`、`kind=envelope`及精确title去掉领域前缀`Kcp`，固定`command_envelope`/`query_envelope`及两组exact ID/source stems；同时校验ID segments/authority、source mirror、entry/title/source/root const版本及compatibility；所有synthetic/test manifest同样使用正式五值，无测试旁路。
+- [ ] 后续其它v2 Schema仍包括四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule、signature/credential/challenge/evidence等。
 - [ ] 将Value preflight改为method-aware payload version；active `task.create`只接受2，v1仅migration validator；替换registered v1 handler。
 - [ ] 实现root v2 repository/handler与child Action materializer；同Action最多一child、bundle全有或全无、canonical readback与reconciliation。
 - [ ] 实现Action/PermissionDecision/Approval v2 repositories、current-head CAS、fingerprint失效/复用、身份challenge验证与plan Action重评。
@@ -152,11 +155,12 @@
 
 ## 下一步
 
-1. 先落地ADR-0006/0007的v2 Schema与generated method-version catalog，并增加legacy migration-only validator。
-2. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
-3. 实现root TaskCreate v2与child Action原子materializer、provenance migration和reconciliation。
-4. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
-5. 随后实现Publisher、Extension SDK Base与TypeScript/client。
+1. 先实现首批12 Schema、manifest compatibility/ID矩阵、`SchemaRegistry::load` exact component-native硬门与通用MethodVersionBinding validator/catalog；synthetic非空测试通过，production由`validate_production_manifest_stage`保持empty。
+2. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
+3. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
+4. 实现root TaskCreate v2与child Action原子materializer、provenance migration和reconciliation。
+5. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
+6. 随后实现Publisher、Extension SDK Base与TypeScript/client。
 
 ## 最近验证
 
