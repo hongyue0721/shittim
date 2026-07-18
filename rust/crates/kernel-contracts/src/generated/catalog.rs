@@ -50,11 +50,20 @@ pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
 ];
 
 pub const KCP_COMMAND_METHODS: &[&str] = &[
+];
+
+pub const KCP_QUERY_METHODS: &[&str] = &[
+];
+
+pub const KCP_METHODS: &[&str] = &[
+];
+
+pub const KCP_LEGACY_V1_COMMAND_METHODS: &[&str] = &[
     "task.create",
     "stop.activate",
 ];
 
-pub const KCP_QUERY_METHODS: &[&str] = &[
+pub const KCP_LEGACY_V1_QUERY_METHODS: &[&str] = &[
     "system.ping",
     "task.get",
     "task.list",
@@ -63,7 +72,7 @@ pub const KCP_QUERY_METHODS: &[&str] = &[
     "stop.status",
 ];
 
-pub const KCP_V1_METHODS: &[&str] = &[
+pub const KCP_LEGACY_V1_METHODS: &[&str] = &[
     "event.poll",
     "event.subscribe",
     "stop.activate",
@@ -81,3 +90,82 @@ pub const EVENT_V1_TYPES: &[&str] = &[
 ];
 
 pub const KCP_PROTOCOL_VERSION: &str = "1.0";
+
+/// Manifest-derived method version binding facts (library selectors only).
+/// Does not imply dispatcher registration, handler, repository, or server availability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KcpMethodFamily {
+    Command,
+    Query,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MethodVersionBinding {
+    pub family: KcpMethodFamily,
+    pub method: &'static str,
+    pub active_request_versions: &'static [u32],
+    pub legacy_validation_versions: &'static [u32],
+    pub request_schema_id_by_version: &'static [(u32, &'static str)],
+    pub response_schema_id_by_version: &'static [(u32, &'static str)],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequestVersionSelection {
+    Active { request_schema_id: &'static str, response_schema_id: &'static str },
+    LegacyValidationOnly { request_schema_id: &'static str },
+    Unsupported,
+}
+
+pub const METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[
+];
+
+/// Lookup a method version binding by family + method.
+pub fn method_version_binding(
+    family: KcpMethodFamily,
+    method: &str,
+) -> Option<&'static MethodVersionBinding> {
+    METHOD_VERSION_BINDINGS
+        .iter()
+        .find(|binding| binding.family == family && binding.method == method)
+}
+
+/// Select the complete lifecycle outcome for one request version.
+/// Active response selection is inseparable from the request version.
+pub fn select_request_version(
+    family: KcpMethodFamily,
+    method: &str,
+    request_version: u32,
+) -> RequestVersionSelection {
+    let Some(binding) = method_version_binding(family, method) else {
+        return RequestVersionSelection::Unsupported;
+    };
+    let request_schema_id = binding
+        .request_schema_id_by_version
+        .iter()
+        .find(|(version, _)| *version == request_version)
+        .map(|(_, id)| *id);
+    if binding.active_request_versions.contains(&request_version) {
+        let response_schema_id = binding
+            .response_schema_id_by_version
+            .iter()
+            .find(|(version, _)| *version == request_version)
+            .map(|(_, id)| *id);
+        return match (request_schema_id, response_schema_id) {
+            (Some(request_schema_id), Some(response_schema_id)) => {
+                RequestVersionSelection::Active {
+                    request_schema_id,
+                    response_schema_id,
+                }
+            }
+            _ => RequestVersionSelection::Unsupported,
+        };
+    }
+    if binding.legacy_validation_versions.contains(&request_version) {
+        return request_schema_id
+            .map(|request_schema_id| RequestVersionSelection::LegacyValidationOnly {
+                request_schema_id,
+            })
+            .unwrap_or(RequestVersionSelection::Unsupported);
+    }
+    RequestVersionSelection::Unsupported
+}

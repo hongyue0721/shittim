@@ -143,7 +143,8 @@ fn add_manifest_entry(temp: &Path, entry: serde_json::Value) {
 #[test]
 fn production_graph_keeps_single_defs_node_and_two_policy_rule_clones() {
     let root = repo_root();
-    let (graph, types, _catalog, _typed) = lower_and_render_rust(&root).expect("lower+render");
+    let (graph, types, _catalog, _typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
     let projection = project_rust(&graph).expect("project");
 
     let policy_id = "https://schemas.shittim.local/v1/policy/policy_rule.json";
@@ -203,7 +204,8 @@ fn production_graph_keeps_single_defs_node_and_two_policy_rule_clones() {
 #[test]
 fn production_render_is_byte_identical_to_checked_in_generated() {
     let root = repo_root();
-    let (_graph, types, catalog, typed) = lower_and_render_rust(&root).expect("lower+render");
+    let (_graph, types, catalog, typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
     let expected_types =
         std::fs::read_to_string(root.join("rust/crates/kernel-contracts/src/generated/types.rs"))
             .expect("types.rs");
@@ -230,7 +232,8 @@ fn production_render_is_byte_identical_to_checked_in_generated() {
 #[test]
 fn response_envelope_has_no_typed_binding() {
     let root = repo_root();
-    let (graph, _types, _catalog, typed) = lower_and_render_rust(&root).expect("lower+render");
+    let (graph, _types, _catalog, typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
     let response_id = "https://schemas.shittim.local/v1/kcp/response_envelope.json";
     assert!(graph
         .envelopes
@@ -351,13 +354,9 @@ fn refs_must_target_authoritative_schema_nodes_not_instance_values() {
 fn external_fragment_graph_node_is_unique() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("registry");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let graph = lower_target_contract_graph(&registry, set).expect("graph");
+    let plan =
+        build_target_plan(schema_tool::ProductionRegistry::new(&registry).unwrap()).expect("plan");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("graph");
 
     // Actor is referenced from many schemas; root node must exist once.
     let actor =
@@ -424,7 +423,7 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
 
     // Manifest load rejects non-canonical $id.
     let temp = temporary_repo("root-noncanonical-id");
-    let _schema_id = "https://schemas.shittim.local/kcp/test/bad_id.json";
+    let _schema_id = "https://schemas.shittim.local/kcp/bad_id/v1";
     let source = "schemas/source/kcp/bad_id.v1.json";
     // Write a document whose $id is relative — manifest id will also be set relative.
     write_json(
@@ -432,7 +431,7 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "./bad_id.json",
-            "title": "BadId",
+            "title": "BadIdV1",
             "type": "object",
             "additionalProperties": false,
             "properties": {}
@@ -442,12 +441,12 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
         &temp,
         json!({
             "id": "./bad_id.json",
-            "title": "BadId",
+            "title": "BadIdV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"]
         }),
     );
@@ -465,21 +464,21 @@ fn root_id_must_be_canonical_absolute_without_fragment() {
 #[test]
 fn nested_non_root_id_fails_with_real_location() {
     let temp = temporary_repo("nested-id-location");
-    let schema_id = "https://schemas.shittim.local/kcp/test/nested_id_probe.json";
+    let schema_id = "https://schemas.shittim.local/kcp/nested_id_probe/v1";
     let source = "schemas/source/kcp/nested_id_probe.v1.json";
     write_json(
         &temp.join(source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "NestedIdProbe",
+            "title": "NestedIdProbeV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "nested"],
             "properties": {
                 "schema_version": {"type": "integer", "const": 1},
                 "nested": {
-                    "$id": "https://schemas.shittim.local/kcp/test/nested_id_probe_nested.json",
+                    "$id": "https://schemas.shittim.local/kcp/nested_id_probe_nested/v1",
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
@@ -493,12 +492,12 @@ fn nested_non_root_id_fails_with_real_location() {
         &temp,
         json!({
             "id": schema_id,
-            "title": "NestedIdProbe",
+            "title": "NestedIdProbeV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }),
@@ -630,13 +629,9 @@ fn registry_and_cli_fail_closed_on_dynamic_ref() {
 fn inline_oneof_branch_and_items_use_real_pointers() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("registry");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let graph = lower_target_contract_graph(&registry, set).expect("graph");
+    let plan =
+        build_target_plan(schema_tool::ProductionRegistry::new(&registry).unwrap()).expect("plan");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("graph");
 
     // Response envelope error is oneOf [null, $ref]; the null arm is not a named node,
     // but ActionRequest has $defs/lease referenced from properties/lease.
@@ -681,10 +676,10 @@ fn inline_oneof_branch_and_items_use_real_pointers() {
 #[test]
 fn scc_exact_option_box_self_mutual_and_array_indirect() {
     let temp = temporary_repo("recursive-layout");
-    let self_id = "https://schemas.shittim.local/kcp/test/self_recursive.json";
-    let a_id = "https://schemas.shittim.local/kcp/test/mutual_a.json";
-    let b_id = "https://schemas.shittim.local/kcp/test/mutual_b.json";
-    let c_id = "https://schemas.shittim.local/kcp/test/scc_c.json";
+    let self_id = "https://schemas.shittim.local/kcp/self_recursive/v1";
+    let a_id = "https://schemas.shittim.local/kcp/mutual_a/v1";
+    let b_id = "https://schemas.shittim.local/kcp/mutual_b/v1";
+    let c_id = "https://schemas.shittim.local/kcp/scc_c/v1";
     let self_source = "schemas/source/kcp/self_recursive.v1.json";
     let a_source = "schemas/source/kcp/mutual_a.v1.json";
     let b_source = "schemas/source/kcp/mutual_b.v1.json";
@@ -695,7 +690,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": self_id,
-            "title": "SelfRecursive",
+            "title": "SelfRecursiveV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "name"],
@@ -716,7 +711,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": a_id,
-            "title": "MutualA",
+            "title": "MutualAV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -731,7 +726,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": b_id,
-            "title": "MutualB",
+            "title": "MutualBV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -746,7 +741,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": c_id,
-            "title": "SccC",
+            "title": "SccCV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -761,10 +756,10 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
     let mut manifest = read_json(&manifest_path);
     let schemas = manifest["schemas"].as_array_mut().expect("schemas");
     for (id, title, source) in [
-        (self_id, "SelfRecursive", self_source),
-        (a_id, "MutualA", a_source),
-        (b_id, "MutualB", b_source),
-        (c_id, "SccC", c_source),
+        (self_id, "SelfRecursiveV1", self_source),
+        (a_id, "MutualAV1", a_source),
+        (b_id, "MutualBV1", b_source),
+        (c_id, "SccCV1", c_source),
     ] {
         schemas.push(json!({
             "id": id,
@@ -773,7 +768,7 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -781,7 +776,8 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
     write_json(&manifest_path, &manifest);
 
     let (graph, types, catalog, typed) =
-        lower_and_render_rust(&temp).expect("recursive lower+render");
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+            .expect("recursive lower+render");
     let projection = project_rust(&graph).expect("project");
     assert!(graph
         .nodes
@@ -789,10 +785,10 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
 
     // Exact Option<Box<Self>> form — forbid Box<Option and Vec<Box solely for recursion.
     let next_ty = projection
-        .field_type_expr("SelfRecursive", "next")
+        .field_type_expr("SelfRecursiveV1", "next")
         .expect("next field");
     assert_eq!(
-        next_ty, "Option<Box<SelfRecursive>>",
+        next_ty, "Option<Box<SelfRecursiveV1>>",
         "direct optional recursive field must be Option<Box<T>>, got {next_ty}"
     );
     assert!(
@@ -801,10 +797,10 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
     );
 
     let children_ty = projection
-        .field_type_expr("SelfRecursive", "children")
+        .field_type_expr("SelfRecursiveV1", "children")
         .expect("children field");
     assert_eq!(
-        children_ty, "Option<Vec<SelfRecursive>>",
+        children_ty, "Option<Vec<SelfRecursiveV1>>",
         "array recursion must stay Vec without Box: {children_ty}"
     );
     assert!(
@@ -813,16 +809,16 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
     );
 
     // Three-node direct SCC: each other edge is Option<Box<...>>.
-    let a_other = projection.field_type_expr("MutualA", "other").unwrap();
-    let b_other = projection.field_type_expr("MutualB", "other").unwrap();
-    let c_other = projection.field_type_expr("SccC", "other").unwrap();
-    assert_eq!(a_other, "Option<Box<MutualB>>");
-    assert_eq!(b_other, "Option<Box<SccC>>");
-    assert_eq!(c_other, "Option<Box<MutualA>>");
+    let a_other = projection.field_type_expr("MutualAV1", "other").unwrap();
+    let b_other = projection.field_type_expr("MutualBV1", "other").unwrap();
+    let c_other = projection.field_type_expr("SccCV1", "other").unwrap();
+    assert_eq!(a_other, "Option<Box<MutualBV1>>");
+    assert_eq!(b_other, "Option<Box<SccCV1>>");
+    assert_eq!(c_other, "Option<Box<MutualAV1>>");
 
     // Secondary string oracle still forbids forbidden layouts.
     assert!(!types.contains("Box<Option"));
-    assert!(!types.contains("Vec<Box<SelfRecursive>>"));
+    assert!(!types.contains("Vec<Box<SelfRecursiveV1>>"));
 
     // Nested cargo check retained (offline: use only cached registry deps).
     let gen_dir = temp.join("rust/crates/kernel-contracts/src/generated");
@@ -875,14 +871,14 @@ fn scc_exact_option_box_self_mutual_and_array_indirect() {
 #[test]
 fn root_unsupported_shape_fails_closed() {
     let temp = temporary_repo("root-unsupported");
-    let schema_id = "https://schemas.shittim.local/kcp/test/unsupported_root.json";
+    let schema_id = "https://schemas.shittim.local/kcp/unsupported_root/v1";
     let source = "schemas/source/kcp/unsupported_root.v1.json";
     write_json(
         &temp.join(source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "UnsupportedRoot",
+            "title": "UnsupportedRootV1",
             "anyOf": [
                 {"type": "string"},
                 {"type": "integer"}
@@ -893,23 +889,19 @@ fn root_unsupported_shape_fails_closed() {
         &temp,
         json!({
             "id": schema_id,
-            "title": "UnsupportedRoot",
+            "title": "UnsupportedRootV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"]
         }),
     );
     let registry = SchemaRegistry::load(&temp).expect("load");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let err = lower_target_contract_graph(&registry, set)
+    let plan =
+        build_target_plan(schema_tool::SyntheticRegistry::new(&registry).unwrap()).expect("plan");
+    let err = lower_target_contract_graph(&plan, GenerationTarget::Rust)
         .unwrap_err()
         .to_string();
     assert!(
@@ -1005,7 +997,8 @@ fn artifact_plan_try_new_rejects_evil_absolute_traversal_duplicate_and_nested_ok
 #[test]
 fn root_shared_refs_are_not_cloned_per_use_site() {
     let root = repo_root();
-    let (_graph, types, _, _) = lower_and_render_rust(&root).expect("lower+render");
+    let (_graph, types, _, _) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
     let actor_decls = types.matches("pub struct Actor {").count();
     assert_eq!(actor_decls, 1, "Actor root must be shared");
 }
@@ -1014,14 +1007,16 @@ fn root_shared_refs_are_not_cloned_per_use_site() {
 fn graph_source_schema_ids_match_rust_closure() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("registry");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
+    let plan =
+        build_target_plan(schema_tool::ProductionRegistry::new(&registry).unwrap()).expect("plan");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("graph");
+    let expected: BTreeSet<_> = plan
+        .target(GenerationTarget::Rust)
+        .expect("rust")
+        .closure()
         .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let graph = lower_target_contract_graph(&registry, set).expect("graph");
-    let expected: BTreeSet<_> = set.closure.iter().cloned().collect();
+        .cloned()
+        .collect();
     let actual: BTreeSet<_> = graph.source_schema_ids.iter().cloned().collect();
     assert_eq!(expected, actual);
 }
@@ -1029,7 +1024,8 @@ fn graph_source_schema_ids_match_rust_closure() {
 #[test]
 fn envelopes_reuse_projected_root_fields() {
     let root = repo_root();
-    let (graph, _types, _catalog, typed) = lower_and_render_rust(&root).expect("lower+render");
+    let (graph, _types, _catalog, typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
     assert!(!graph.envelopes.is_empty());
     for binding in &graph.envelopes {
         let node = graph
@@ -1125,7 +1121,7 @@ fn id_base_rejects_entry_outside_and_prefix_spoof() {
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"]
         }),
     );
@@ -1160,7 +1156,7 @@ fn id_base_rejects_entry_outside_and_prefix_spoof() {
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"]
         }),
     );
@@ -1302,37 +1298,57 @@ fn registry_load_rejects_component_ref_gate_before_public_use() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn manifest_v2_requires_empty_typed_method_version_binding_section() {
+fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
     assert!(
         registry.manifest().method_version_bindings.is_empty(),
-        "this migration reserves the typed section; it does not invent business-v2 bindings"
+        "production bindings remain empty in the schema/tool stage"
     );
+    let mut legacy_validation = 0usize;
+    let mut legacy_read = 0usize;
+    let mut stable = 0usize;
+    for entry in &registry.manifest().schemas {
+        match entry.compatibility {
+            schema_tool::SchemaCompatibility::LegacyValidationOnly => legacy_validation += 1,
+            schema_tool::SchemaCompatibility::LegacyReadOnly => legacy_read += 1,
+            schema_tool::SchemaCompatibility::V1Stable => stable += 1,
+            other => panic!(
+                "unexpected production compatibility {other:?} on {}",
+                entry.id
+            ),
+        }
+    }
+    assert_eq!(legacy_validation, 3);
+    assert_eq!(legacy_read, 1);
+    assert_eq!(stable, 37);
+    schema_tool::validate_production_manifest_stage(&registry)
+        .expect("production stage gate accepts empty bindings");
 }
 
 #[test]
-fn manifest_v2_rejects_any_nonempty_method_version_binding_section() {
+fn generic_loader_rejects_incomplete_nonempty_bindings_without_v2_authority() {
     let temp = temporary_repo("manifest-v2-nonempty-method-binding");
     let manifest_path = temp.join("schemas/manifest.json");
     let mut manifest = read_json(&manifest_path);
     manifest["method_version_bindings"] = json!([{
         "family": "command",
-        "method": "future.method",
+        "method": "task.create",
         "active_request_versions": [1],
         "legacy_validation_versions": [],
         "request_schema_id_by_version": {
-            "1": "https://schemas.shittim.local/v1/kcp/system_ping_request.json"
+            "1": "https://schemas.shittim.local/v1/kcp/task_create_request.json"
         },
         "response_schema_id_by_version": {
-            "1": "https://schemas.shittim.local/v1/kcp/system_ping_response.json"
+            "1": "https://schemas.shittim.local/v1/kcp/task_create_response.json"
         }
     }]);
     write_json(&manifest_path, &manifest);
 
     let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
     assert!(
-        error.contains("method_version_bindings must be empty"),
+        error.contains("non-empty method_version_bindings require active V2 Envelope authority")
+            || error.contains("active KCP Envelope authority"),
         "{error}"
     );
     std::fs::remove_dir_all(temp).ok();
@@ -1453,14 +1469,14 @@ fn retained_and_component_native_namespaces_are_mutually_exclusive() {
 #[test]
 fn registry_loads_component_native_entry_and_all_ref_forms() {
     let temp = temporary_repo("component-native-positive");
-    let native_id = "https://schemas.shittim.local/kcp/future/native_request/v2";
+    let native_id = "https://schemas.shittim.local/kcp/future_native_request/v2";
     let native_source = "schemas/source/kcp/future_native_request.v2.json";
     write_json(
         &temp.join(native_source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": native_id,
-            "title": "FutureNativeRequest",
+            "title": "FutureNativeRequestV2",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "actor", "local", "relative", "absolute"],
@@ -1480,12 +1496,12 @@ fn registry_loads_component_native_entry_and_all_ref_forms() {
         &temp,
         json!({
             "id": native_id,
-            "title": "FutureNativeRequest",
+            "title": "FutureNativeRequestV2",
             "version": 2,
             "source": native_source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "future-test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }),
@@ -1499,14 +1515,14 @@ fn registry_loads_component_native_entry_and_all_ref_forms() {
 #[test]
 fn component_gate_can_allow_ref_while_target_closure_still_fails() {
     let temp = temporary_repo("component-gate-target-closure");
-    let native_id = "https://schemas.shittim.local/kcp/future/closure_request/v1";
+    let native_id = "https://schemas.shittim.local/kcp/future_closure_request/v1";
     let native_source = "schemas/source/kcp/future_closure_request.v1.json";
     write_json(
         &temp.join(native_source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": native_id,
-            "title": "FutureClosureRequest",
+            "title": "FutureClosureRequestV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "actor"],
@@ -1520,19 +1536,21 @@ fn component_gate_can_allow_ref_while_target_closure_still_fails() {
         &temp,
         json!({
             "id": native_id,
-            "title": "FutureClosureRequest",
+            "title": "FutureClosureRequestV1",
             "version": 1,
             "source": native_source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "future-test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["typescript"],
             "schema_version_field": "schema_version"
         }),
     );
 
     let registry = SchemaRegistry::load(&temp).expect("kcp allowed_refs permits common");
-    let error = build_target_plan(&registry).unwrap_err().to_string();
+    let error = build_target_plan(schema_tool::SyntheticRegistry::new(&registry).unwrap())
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("generation target closure error"), "{error}");
     std::fs::remove_dir_all(temp).ok();
 }
@@ -1580,8 +1598,8 @@ fn cli_validate_rejects_unauthorized_component_ref_during_registry_load() {
 #[test]
 fn sibling_and_diamond_nominal_projection_and_shared_root() {
     let temp = temporary_repo("sibling-diamond");
-    let shared_id = "https://schemas.shittim.local/kcp/test/shared_leaf.json";
-    let parent_id = "https://schemas.shittim.local/kcp/test/diamond_parent.json";
+    let shared_id = "https://schemas.shittim.local/kcp/shared_leaf/v1";
+    let parent_id = "https://schemas.shittim.local/kcp/diamond_parent/v1";
     let shared_source = "schemas/source/kcp/shared_leaf.v1.json";
     let parent_source = "schemas/source/kcp/diamond_parent.v1.json";
 
@@ -1590,7 +1608,7 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": shared_id,
-            "title": "SharedLeaf",
+            "title": "SharedLeafV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "label"],
@@ -1606,7 +1624,7 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": parent_id,
-            "title": "DiamondParent",
+            "title": "DiamondParentV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "left", "right", "shared_a", "shared_b"],
@@ -1634,8 +1652,8 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
     let mut manifest = read_json(&manifest_path);
     let schemas = manifest["schemas"].as_array_mut().expect("schemas");
     for (id, title, source) in [
-        (shared_id, "SharedLeaf", shared_source),
-        (parent_id, "DiamondParent", parent_source),
+        (shared_id, "SharedLeafV1", shared_source),
+        (parent_id, "DiamondParentV1", parent_source),
     ] {
         schemas.push(json!({
             "id": id,
@@ -1644,14 +1662,15 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
     }
     write_json(&manifest_path, &manifest);
 
-    let (graph, types, _catalog, _typed) = lower_and_render_rust(&temp).expect("lower+render");
+    let (graph, types, _catalog, _typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp).expect("lower+render");
     let projection = project_rust(&graph).expect("project");
 
     let point = schema_tool::ContractTypeId::root(parent_id)
@@ -1662,25 +1681,27 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
         2,
         "sibling non-recursive use-sites must project two Nominal declarations"
     );
-    let left = projection.field_type_expr("DiamondParent", "left").unwrap();
-    let right = projection
-        .field_type_expr("DiamondParent", "right")
+    let left = projection
+        .field_type_expr("DiamondParentV1", "left")
         .unwrap();
-    assert_eq!(left, "DiamondParentLeft");
-    assert_eq!(right, "DiamondParentRight");
+    let right = projection
+        .field_type_expr("DiamondParentV1", "right")
+        .unwrap();
+    assert_eq!(left, "DiamondParentV1Left");
+    assert_eq!(right, "DiamondParentV1Right");
     assert_ne!(left, right);
 
     // Diamond whole-schema roots stay SharedRoot (one declaration).
-    assert_eq!(types.matches("pub struct SharedLeaf {").count(), 1);
+    assert_eq!(types.matches("pub struct SharedLeafV1 {").count(), 1);
     let shared_a = projection
-        .field_type_expr("DiamondParent", "shared_a")
+        .field_type_expr("DiamondParentV1", "shared_a")
         .unwrap();
     let shared_b = projection
-        .field_type_expr("DiamondParent", "shared_b")
+        .field_type_expr("DiamondParentV1", "shared_b")
         .unwrap();
-    assert_eq!(shared_a, "SharedLeaf");
-    assert_eq!(shared_b, "SharedLeaf");
-    assert_eq!(projection.root_name(shared_id), Some("SharedLeaf"));
+    assert_eq!(shared_a, "SharedLeafV1");
+    assert_eq!(shared_b, "SharedLeafV1");
+    assert_eq!(projection.root_name(shared_id), Some("SharedLeafV1"));
 
     std::fs::remove_dir_all(temp).ok();
 }
@@ -1688,14 +1709,14 @@ fn sibling_and_diamond_nominal_projection_and_shared_root() {
 #[test]
 fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
     let temp = temporary_repo("backedge-reuse");
-    let self_id = "https://schemas.shittim.local/kcp/test/backedge_self.json";
+    let self_id = "https://schemas.shittim.local/kcp/backedge_self/v1";
     let source = "schemas/source/kcp/backedge_self.v1.json";
     write_json(
         &temp.join(source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": self_id,
-            "title": "BackedgeSelf",
+            "title": "BackedgeSelfV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -1720,18 +1741,19 @@ fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
         &temp,
         json!({
             "id": self_id,
-            "title": "BackedgeSelf",
+            "title": "BackedgeSelfV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }),
     );
 
-    let (graph, _types, _catalog, _typed) = lower_and_render_rust(&temp).expect("lower+render");
+    let (graph, _types, _catalog, _typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp).expect("lower+render");
     let projection = project_rust(&graph).expect("project");
     let node = schema_tool::ContractTypeId::root(self_id)
         .child("$defs")
@@ -1743,9 +1765,9 @@ fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
         "recursive backedge must reuse active declaration"
     );
     let next = projection
-        .field_type_expr("BackedgeSelfChild", "next")
+        .field_type_expr("BackedgeSelfV1Child", "next")
         .expect("next on projected node");
-    assert_eq!(next, "Option<Box<BackedgeSelfChild>>");
+    assert_eq!(next, "Option<Box<BackedgeSelfV1Child>>");
 
     std::fs::remove_dir_all(temp).ok();
 }
@@ -1754,13 +1776,9 @@ fn recursive_backedge_reuses_active_declaration_not_extra_nominal() {
 fn types_and_typed_share_single_projection_instance_api() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("registry");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let graph = lower_target_contract_graph(&registry, set).expect("graph");
+    let plan =
+        build_target_plan(schema_tool::ProductionRegistry::new(&registry).unwrap()).expect("plan");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("graph");
     let projection = project_rust(&graph).expect("once");
     let types = schema_tool::render_types_module_from_projection(&projection).expect("types");
     let typed =
@@ -1784,14 +1802,14 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
     // surface both targets, but the Rust set/graph must not pull the orphan in. We never
     // call the unimplemented TypeScript renderer — only plan + lower the Rust graph.
     let temp = temporary_repo("ts-only-orphan-plan");
-    let orphan_id = "https://schemas.shittim.local/kcp/test/ts_only_orphan.json";
+    let orphan_id = "https://schemas.shittim.local/kcp/ts_only_orphan/v1";
     let orphan_source = "schemas/source/kcp/ts_only_orphan.v1.json";
     write_json(
         &temp.join(orphan_source),
         &json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": orphan_id,
-            "title": "TsOnlyOrphan",
+            "title": "TsOnlyOrphanV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "note"],
@@ -1805,49 +1823,54 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
         &temp,
         json!({
             "id": orphan_id,
-            "title": "TsOnlyOrphan",
+            "title": "TsOnlyOrphanV1",
             "version": 1,
             "source": orphan_source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["typescript"],
             "schema_version_field": "schema_version"
         }),
     );
 
     let registry = SchemaRegistry::load(&temp).expect("load mixed-target registry");
-    let plan = build_target_plan(&registry).expect("TargetPlan builds without rendering TS");
+    let plan = build_target_plan(schema_tool::SyntheticRegistry::new(&registry).unwrap())
+        .expect("TargetPlan builds without rendering TS");
 
     let rust_set = plan
-        .targets
+        .targets()
         .iter()
-        .find(|set| set.target == GenerationTarget::Rust)
+        .find(|set| set.target() == GenerationTarget::Rust)
         .expect("rust TargetSchemaSet");
     let ts_set = plan
-        .targets
+        .targets()
         .iter()
-        .find(|set| set.target == GenerationTarget::Typescript)
+        .find(|set| set.target() == GenerationTarget::Typescript)
         .expect("typescript TargetSchemaSet");
 
+    assert_eq!(rust_set.target(), GenerationTarget::Rust);
+    assert!(rust_set.active_envelope_authority().is_empty());
+    assert!(rust_set.method_version_bindings().is_empty());
+
     assert!(
-        !rust_set.roots.contains(orphan_id),
+        !rust_set.roots().contains(orphan_id),
         "TS-only orphan must not be a rust root"
     );
     assert!(
-        !rust_set.closure.contains(orphan_id),
+        !rust_set.closure().contains(orphan_id),
         "TS-only orphan must not enter rust closure"
     );
     assert!(
-        ts_set.roots.contains(orphan_id),
+        ts_set.roots().contains(orphan_id),
         "TS-only orphan must be a typescript root"
     );
     assert!(
-        ts_set.closure.contains(orphan_id),
+        ts_set.closure().contains(orphan_id),
         "TS-only orphan must be in typescript closure"
     );
 
-    let graph = lower_target_contract_graph(&registry, rust_set).expect("rust graph");
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("rust graph");
     assert!(
         !graph.source_schema_ids.iter().any(|id| id == orphan_id),
         "rust TargetContractGraph must exclude TS-only orphan"
@@ -1867,9 +1890,11 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
     );
 
     // Declaring typescript still fails closed at ArtifactPlan before any write.
-    let plan_err = schema_tool::codegen::plan_artifacts(&registry)
-        .unwrap_err()
-        .to_string();
+    let plan_err = schema_tool::codegen::plan_artifacts(
+        schema_tool::SyntheticRegistry::new(&registry).unwrap(),
+    )
+    .unwrap_err()
+    .to_string();
     assert!(
         plan_err.contains("typescript") && plan_err.contains("not implemented"),
         "plan_artifacts must fail on declared TS without rendering: {plan_err}"
@@ -1900,13 +1925,9 @@ fn mixed_envelope_payload_ref_and_missing_branch_fails_bijective_mapping() {
     write_json(&envelope_path, &envelope);
 
     let registry = SchemaRegistry::load(&temp).expect("load");
-    let plan = build_target_plan(&registry).expect("plan");
-    let set = plan
-        .targets
-        .iter()
-        .find(|s| s.target == GenerationTarget::Rust)
-        .expect("rust");
-    let err = lower_target_contract_graph(&registry, set)
+    let plan =
+        build_target_plan(schema_tool::SyntheticRegistry::new(&registry).unwrap()).expect("plan");
+    let err = lower_target_contract_graph(&plan, GenerationTarget::Rust)
         .unwrap_err()
         .to_string();
     let lower = err.to_ascii_lowercase();
@@ -1916,7 +1937,9 @@ fn mixed_envelope_payload_ref_and_missing_branch_fails_bijective_mapping() {
     );
 
     // generate path must also fail closed with the same class of error.
-    let graph_err = lower_and_render_rust(&temp).unwrap_err().to_string();
+    let graph_err = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .unwrap_err()
+        .to_string();
     let lower = graph_err.to_ascii_lowercase();
     assert!(
         lower.contains("mapping") || lower.contains("bijective") || lower.contains("payload"),

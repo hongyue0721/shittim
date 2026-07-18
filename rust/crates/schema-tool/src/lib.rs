@@ -8,19 +8,24 @@ pub mod artifact_transaction;
 pub mod canonicalize;
 pub mod check;
 pub mod codegen;
+pub mod compatibility;
 pub mod contract_model;
 pub mod error;
 pub mod generate;
 pub mod json_pointer;
 pub mod manifest;
+pub mod manifest_identity;
+pub mod method_bindings;
 pub mod names;
 pub mod paths;
+pub mod production_stage;
 pub mod resolve;
 pub mod rust_codegen;
 pub mod schema_walk;
 pub mod target;
 pub mod validate;
 
+pub use compatibility::SchemaCompatibility;
 pub use contract_model::{
     lower_target_contract_graph, CatalogFacts, ConstJson, ContractTypeId, ContractTypeNode,
     EnvelopeWireBinding, Nullability, ObjectField, Presence, ScalarKind, SourceSchemaMetadata,
@@ -29,8 +34,16 @@ pub use contract_model::{
 };
 pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
 pub use manifest::{
-    GenerationTarget, Manifest, ManifestComponent, ManifestEntry, MethodFamily, SchemaRegistry,
-    SchemaSourcePath,
+    GenerationTarget, Manifest, ManifestComponent, ManifestEntry, ManifestMethodVersionBinding,
+    MethodFamily, SchemaRegistry, SchemaSourcePath,
+};
+pub use method_bindings::{
+    discover_active_envelope_authority, validate_method_version_bindings, ActiveEnvelopeAuthority,
+    MethodVersionBindingFact,
+};
+pub use production_stage::{
+    validate_production_manifest_stage, ProductionRegistry, ProductionSchemaStage, RegistryProfile,
+    SyntheticNonProduction, SyntheticRegistry, ValidatedRegistry,
 };
 pub use resolve::{
     require_canonical_id_base, require_canonical_schema_id, resolve_ref, schema_at,
@@ -46,18 +59,20 @@ pub use target::{build_target_plan, TargetPlan, TargetSchemaSet};
 use anyhow::Result;
 use std::path::Path;
 
-/// Load the registry, build the rust target graph, and render types/catalog/typed modules.
-pub fn lower_and_render_rust(
+/// Load the registry under an explicit profile, build the rust target graph, and render.
+pub fn lower_and_render_rust<P: RegistryProfile>(
     repo_root: &Path,
 ) -> Result<(TargetContractGraph, String, String, String)> {
     let registry = SchemaRegistry::load(repo_root)?;
-    let plan = target::build_target_plan(&registry)?;
-    let set = plan
-        .targets
-        .iter()
-        .find(|set| set.target == GenerationTarget::Rust)
-        .ok_or_else(|| error::SchemaToolError::msg("no rust generation target in plan"))?;
-    let graph = lower_target_contract_graph(&registry, set)?;
+    lower_and_render_rust_from_registry(ValidatedRegistry::<P>::new(&registry)?)
+}
+
+/// Lower and render from an explicitly profiled registry.
+pub fn lower_and_render_rust_from_registry<P: RegistryProfile>(
+    validated: ValidatedRegistry<'_, P>,
+) -> Result<(TargetContractGraph, String, String, String)> {
+    let plan = target::build_target_plan(validated)?;
+    let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust)?;
     let projection = project_rust(&graph)?;
     let types = render_types_module_from_projection(&projection)?;
     let catalog = render_catalog_module(&graph)?;

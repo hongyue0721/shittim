@@ -5,7 +5,8 @@ use crate::response::{validated_error_response_with_validator, SafeWireErrorKind
 use kernel_contracts::{
     validate_json, ContractError, ContractFailureClassification, KcpResponseEnvelope,
     TypedKcpCommandEnvelope, TypedKcpQueryEnvelope, KCP_COMMAND_ENVELOPE_SCHEMA_ID,
-    KCP_COMMAND_METHODS, KCP_PROTOCOL_VERSION, KCP_QUERY_ENVELOPE_SCHEMA_ID, KCP_QUERY_METHODS,
+    KCP_LEGACY_V1_COMMAND_METHODS, KCP_LEGACY_V1_QUERY_METHODS, KCP_PROTOCOL_VERSION,
+    KCP_QUERY_ENVELOPE_SCHEMA_ID,
 };
 use serde_json::{Map, Value};
 use uuid::Uuid;
@@ -137,9 +138,12 @@ fn preflight_value_with_seams(
         None => return wire_error(&request_id, SafeWireErrorKind::InvalidRequest, validator),
     }
 
+    // Current production stage still validates retained v1 envelopes. Active
+    // KCP_*METHODS catalogs are empty until V2 Envelope authority is present;
+    // this legacy preflight path must not consume active names.
     let method = match family {
-        Family::Command => method_for_family(object, "command_type", KCP_COMMAND_METHODS),
-        Family::Query => method_for_family(object, "query_type", KCP_QUERY_METHODS),
+        Family::Command => method_for_family(object, "command_type", KCP_LEGACY_V1_COMMAND_METHODS),
+        Family::Query => method_for_family(object, "query_type", KCP_LEGACY_V1_QUERY_METHODS),
     };
     match method {
         MethodCheck::Known => {}

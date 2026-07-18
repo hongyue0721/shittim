@@ -1,13 +1,15 @@
 //! Codegen facade and artifact planner.
 //!
 //! Pipeline:
-//! SchemaRegistry -> TargetPlan -> TargetContractGraph (per target) -> target renderer
+//! `SchemaRegistry` -> `ValidatedRegistry<Production|Synthetic>` -> `TargetPlan` ->
+//! target-scoped `TargetSchemaSet`/`TargetContractGraph` -> target renderer
 //! -> ArtifactPlan. Artifacts are fully generated before any write; check compares the
 //! exact recursive file set under each artifact root, allowing only planned path prefixes.
 
 use crate::contract_model::{lower_target_contract_graph, TargetContractGraph};
 use crate::error::SchemaToolError;
-use crate::manifest::{GenerationTarget, SchemaRegistry};
+use crate::manifest::GenerationTarget;
+use crate::production_stage::{RegistryProfile, ValidatedRegistry};
 use crate::rust_codegen;
 use crate::target;
 use anyhow::{bail, Context, Result};
@@ -138,10 +140,12 @@ impl ArtifactPlan {
 
 /// Build the full artifact plan. Fails closed before any write when a declared target
 /// has no renderer (currently TypeScript).
-pub fn plan_artifacts(registry: &SchemaRegistry) -> Result<ArtifactPlan> {
-    let plan = target::build_target_plan(registry)?;
-    for set in &plan.targets {
-        match set.target {
+pub fn plan_artifacts<P: RegistryProfile>(
+    validated: ValidatedRegistry<'_, P>,
+) -> Result<ArtifactPlan> {
+    let plan = target::build_target_plan(validated)?;
+    for set in plan.targets() {
+        match set.target() {
             GenerationTarget::Rust => {}
             GenerationTarget::Typescript => {
                 return Err(SchemaToolError::msg(
@@ -155,10 +159,10 @@ pub fn plan_artifacts(registry: &SchemaRegistry) -> Result<ArtifactPlan> {
     let mut artifacts = Vec::new();
     let mut artifact_roots = BTreeSet::new();
 
-    for set in &plan.targets {
-        match set.target {
+    for set in plan.targets() {
+        match set.target() {
             GenerationTarget::Rust => {
-                let graph = lower_target_contract_graph(registry, set)?;
+                let graph = lower_target_contract_graph(&plan, GenerationTarget::Rust)?;
                 let rust_artifacts = render_rust_artifacts(&graph)?;
                 artifact_roots.insert(rust_codegen::RUST_GENERATED_DIR.to_string());
                 artifacts.extend(rust_artifacts);

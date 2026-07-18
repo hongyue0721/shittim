@@ -1,5 +1,6 @@
 //! schema-tool CLI smoke tests (generate twice, check, validate examples).
 
+use schema_tool::SchemaRegistry;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -101,22 +102,30 @@ fn generate_is_byte_stable_across_two_runs() {
     assert!(text.contains("GENERATED"), "missing GENERATED marker");
     let catalog_text = String::from_utf8(first_catalog).expect("catalog utf8");
     assert!(
-        catalog_text.contains("KCP_V1_METHODS"),
-        "missing method catalog"
+        catalog_text.contains("KCP_LEGACY_V1_METHODS"),
+        "missing explicit legacy method catalog"
+    );
+    assert!(
+        catalog_text.contains("KCP_METHODS"),
+        "missing active method catalog"
+    );
+    assert!(
+        catalog_text.contains("METHOD_VERSION_BINDINGS"),
+        "missing method version binding catalog"
     );
 }
 
 #[test]
 fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
     let temp = temporary_repo("dynamic-typed-binding");
-    let payload_id = "https://schemas.shittim.local/kcp/test/test_dynamic_request.json";
+    let payload_id = "https://schemas.shittim.local/kcp/test_dynamic_request/v1";
     let payload_source = "schemas/source/kcp/test_dynamic_request.v1.json";
     write_json(
         &temp.join(payload_source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": payload_id,
-            "title": "TestDynamicRequest",
+            "title": "TestDynamicRequestV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "value"],
@@ -133,12 +142,12 @@ fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
         .expect("manifest schemas")
         .push(serde_json::json!({
             "id": payload_id,
-            "title": "TestDynamicRequest",
+            "title": "TestDynamicRequestV1",
             "version": 1,
             "source": payload_source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -169,7 +178,7 @@ fn conditional_payload_bindings_follow_schema_without_rust_template_changes() {
     let typed =
         std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/typed.rs"))
             .expect("read generated typed bindings");
-    assert!(typed.contains("TestDynamic(Box<TestDynamicRequest>)"));
+    assert!(typed.contains("TestDynamic(Box<TestDynamicRequestV1>)"));
     assert!(typed.contains("\"test.dynamic\" => KcpCommandPayload::TestDynamic"));
     assert!(typed.contains("pub const KCP_COMMAND_ENVELOPE_SCHEMA_ID: &str"));
     assert!(typed.contains("pub fn decode_after_validation(value: Value)"));
@@ -277,14 +286,14 @@ fn ref_validation_siblings_fail_closed_instead_of_being_ignored() {
 #[test]
 fn optional_non_null_fields_emit_skip_serializing_if() {
     let temp = temporary_repo("optional-non-null-serde");
-    let schema_id = "https://schemas.shittim.local/kcp/test/test_optional_nullability.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test_optional_nullability/v1";
     let schema_source = "schemas/source/kcp/test_optional_nullability.v1.json";
     write_json(
         &temp.join(schema_source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "TestOptionalNullability",
+            "title": "TestOptionalNullabilityV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "required_nullable", "required_present"],
@@ -316,12 +325,12 @@ fn optional_non_null_fields_emit_skip_serializing_if() {
         .expect("manifest schemas")
         .push(serde_json::json!({
             "id": schema_id,
-            "title": "TestOptionalNullability",
+            "title": "TestOptionalNullabilityV1",
             "version": 1,
             "source": schema_source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -334,7 +343,7 @@ fn optional_non_null_fields_emit_skip_serializing_if() {
             .expect("read generated types");
 
     assert!(
-        types.contains("pub struct TestOptionalNullability"),
+        types.contains("pub struct TestOptionalNullabilityV1"),
         "missing generated struct"
     );
     assert!(
@@ -345,13 +354,13 @@ fn optional_non_null_fields_emit_skip_serializing_if() {
     );
     assert!(
         types.contains(
-            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_enum: Option<TestOptionalNullabilityOptionalNonNullEnum>,"
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_enum: Option<TestOptionalNullabilityV1OptionalNonNullEnum>,"
         ),
         "optional non-null enum must omit None"
     );
     assert!(
         types.contains(
-            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_object: Option<TestOptionalNullabilityOptionalNonNullObject>,"
+            "#[serde(skip_serializing_if = \"Option::is_none\")]\n    pub optional_non_null_object: Option<TestOptionalNullabilityV1OptionalNonNullObject>,"
         ),
         "optional non-null object must omit None"
     );
@@ -811,8 +820,8 @@ fn generation_target_closure_rejects_missing_dependency_target() {
 #[test]
 fn relative_external_ref_missing_target_fails_closure() {
     let temp = temporary_repo("relative-external-missing-target");
-    let parent_id = "https://schemas.shittim.local/kcp/test/rel_parent.json";
-    let child_id = "https://schemas.shittim.local/kcp/test/rel_child.json";
+    let parent_id = "https://schemas.shittim.local/kcp/rel_parent/v1";
+    let child_id = "https://schemas.shittim.local/kcp/rel_child/v1";
     let parent_source = "schemas/source/kcp/rel_parent.v1.json";
     let child_source = "schemas/source/kcp/rel_child.v1.json";
 
@@ -821,7 +830,7 @@ fn relative_external_ref_missing_target_fails_closure() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": child_id,
-            "title": "RelChild",
+            "title": "RelChildV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "label"],
@@ -837,13 +846,13 @@ fn relative_external_ref_missing_target_fails_closure() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": parent_id,
-            "title": "RelParent",
+            "title": "RelParentV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "child"],
             "properties": {
                 "schema_version": {"type": "integer", "const": 1},
-                "child": {"$ref": "./rel_child.json"}
+                "child": {"$ref": "../rel_child/v1"}
             }
         }),
     );
@@ -853,24 +862,24 @@ fn relative_external_ref_missing_target_fails_closure() {
     let schemas = manifest["schemas"].as_array_mut().expect("schemas");
     schemas.push(serde_json::json!({
         "id": parent_id,
-        "title": "RelParent",
+        "title": "RelParentV1",
         "version": 1,
         "source": parent_source,
         "component": "kcp",
         "kind": "object",
-        "compatibility": "test-only",
+        "compatibility": "new-contract",
         "generation_targets": ["rust"],
         "schema_version_field": "schema_version"
     }));
     // Child is on the registry but deliberately missing the rust target.
     schemas.push(serde_json::json!({
         "id": child_id,
-        "title": "RelChild",
+        "title": "RelChildV1",
         "version": 1,
         "source": child_source,
         "component": "kcp",
         "kind": "object",
-        "compatibility": "test-only",
+        "compatibility": "new-contract",
         "generation_targets": ["typescript"],
         "schema_version_field": "schema_version"
     }));
@@ -1118,8 +1127,8 @@ fn reserved_property_name_value_still_enforces_real_ref_gate() {
 fn deep_local_fragment_external_ref_joins_target_closure() {
     let temp = temporary_repo("deep-fragment-external");
     // Create parent (rust) with $defs that $ref an external child; child must list rust.
-    let parent_id = "https://schemas.shittim.local/kcp/test/deep_parent.json";
-    let child_id = "https://schemas.shittim.local/kcp/test/deep_child.json";
+    let parent_id = "https://schemas.shittim.local/kcp/deep_parent/v1";
+    let child_id = "https://schemas.shittim.local/kcp/deep_child/v1";
     let parent_source = "schemas/source/kcp/deep_parent.v1.json";
     let child_source = "schemas/source/kcp/deep_child.v1.json";
     write_json(
@@ -1127,7 +1136,7 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": child_id,
-            "title": "DeepChild",
+            "title": "DeepChildV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "label"],
@@ -1142,7 +1151,7 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": parent_id,
-            "title": "DeepParent",
+            "title": "DeepParentV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "nested"],
@@ -1167,23 +1176,23 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
     let schemas = manifest["schemas"].as_array_mut().expect("schemas");
     schemas.push(serde_json::json!({
         "id": parent_id,
-        "title": "DeepParent",
+        "title": "DeepParentV1",
         "version": 1,
         "source": parent_source,
         "component": "kcp",
         "kind": "kcp_request",
-        "compatibility": "test-only",
+        "compatibility": "new-contract",
         "generation_targets": ["rust"],
         "schema_version_field": "schema_version"
     }));
     schemas.push(serde_json::json!({
         "id": child_id,
-        "title": "DeepChild",
+        "title": "DeepChildV1",
         "version": 1,
         "source": child_source,
         "component": "kcp",
         "kind": "kcp_request",
-        "compatibility": "test-only",
+        "compatibility": "new-contract",
         "generation_targets": ["rust"],
         "schema_version_field": "schema_version"
     }));
@@ -1197,9 +1206,9 @@ fn deep_local_fragment_external_ref_joins_target_closure() {
     let types =
         std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
             .expect("types");
-    assert!(types.contains("pub struct DeepParent"));
-    assert!(types.contains("pub struct DeepChild"));
-    assert!(types.contains("pub nested: DeepParentNested"));
+    assert!(types.contains("pub struct DeepParentV1"));
+    assert!(types.contains("pub struct DeepChildV1"));
+    assert!(types.contains("pub nested: DeepParentV1Nested"));
 
     // Child without rust target must fail closure with exact topic + ids.
     set_generation_targets_for_id(&temp, child_id, serde_json::json!(["typescript"]));
@@ -1230,8 +1239,8 @@ fn cyclic_refs_do_not_hang_and_generate() {
     // Self-cycle via optional property $ref to self is enough to exercise seen-set.
     // Restricted codegen forbids most recursive shapes if they aren't simple $ref roots.
     // Use two schemas that $ref each other at the root property level.
-    let a_id = "https://schemas.shittim.local/kcp/test/cycle_a.json";
-    let b_id = "https://schemas.shittim.local/kcp/test/cycle_b.json";
+    let a_id = "https://schemas.shittim.local/kcp/cycle_a/v1";
+    let b_id = "https://schemas.shittim.local/kcp/cycle_b/v1";
     let a_source = "schemas/source/kcp/cycle_a.v1.json";
     let b_source = "schemas/source/kcp/cycle_b.v1.json";
     write_json(
@@ -1239,7 +1248,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": a_id,
-            "title": "CycleA",
+            "title": "CycleAV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -1254,7 +1263,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": b_id,
-            "title": "CycleB",
+            "title": "CycleBV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version"],
@@ -1267,7 +1276,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
     let manifest_path = temp.join("schemas/manifest.json");
     let mut manifest = read_json(&manifest_path);
     let schemas = manifest["schemas"].as_array_mut().expect("schemas");
-    for (id, title, source) in [(a_id, "CycleA", a_source), (b_id, "CycleB", b_source)] {
+    for (id, title, source) in [(a_id, "CycleAV1", a_source), (b_id, "CycleBV1", b_source)] {
         schemas.push(serde_json::json!({
             "id": id,
             "title": title,
@@ -1275,7 +1284,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -1287,11 +1296,11 @@ fn cyclic_refs_do_not_hang_and_generate() {
     let types =
         std::fs::read_to_string(temp.join("rust/crates/kernel-contracts/src/generated/types.rs"))
             .expect("types");
-    assert!(types.contains("pub struct CycleA"));
-    assert!(types.contains("pub struct CycleB"));
+    assert!(types.contains("pub struct CycleAV1"));
+    assert!(types.contains("pub struct CycleBV1"));
     // Direct mutual recursion must be boxed by the recursive layout pass.
     assert!(
-        types.contains("Box<CycleA>") && types.contains("Box<CycleB>"),
+        types.contains("Box<CycleAV1>") && types.contains("Box<CycleBV1>"),
         "mutual recursion must insert Box: {types}"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
@@ -1332,8 +1341,8 @@ fn off_manifest_source_file_fails_load() {
         &temp.join("schemas/source/kcp/not_in_manifest.v1.json"),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "$id": "https://schemas.shittim.local/kcp/test/not_in_manifest.json",
-            "title": "NotInManifest",
+            "$id": "https://schemas.shittim.local/kcp/not_in_manifest/v1",
+            "title": "NotInManifestV1",
             "type": "object",
             "additionalProperties": false,
             "properties": {}
@@ -1349,10 +1358,12 @@ fn off_manifest_source_file_fails_load() {
 }
 
 #[test]
-fn same_title_collision_fails_with_both_identities() {
+fn same_title_cannot_bind_two_component_native_ids() {
+    // Component-native stem is title-derived. Two entries cannot share one title
+    // while claiming different IDs/sources; the hard gate fails at load.
     let temp = temporary_repo("title-collision");
-    let a_id = "https://schemas.shittim.local/kcp/test/title_collision_a.json";
-    let b_id = "https://schemas.shittim.local/kcp/test/title_collision_b.json";
+    let a_id = "https://schemas.shittim.local/kcp/title_collision_a/v1";
+    let b_id = "https://schemas.shittim.local/kcp/title_collision_b/v1";
     let a_source = "schemas/source/kcp/title_collision_a.v1.json";
     let b_source = "schemas/source/kcp/title_collision_b.v1.json";
     for (id, source) in [(a_id, a_source), (b_id, b_source)] {
@@ -1361,7 +1372,7 @@ fn same_title_collision_fails_with_both_identities() {
             &serde_json::json!({
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "$id": id,
-                "title": "SharedTitle",
+                "title": "SharedTitleV1",
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["schema_version", "value"],
@@ -1378,27 +1389,22 @@ fn same_title_collision_fails_with_both_identities() {
     for (id, source) in [(a_id, a_source), (b_id, b_source)] {
         schemas.push(serde_json::json!({
             "id": id,
-            "title": "SharedTitle",
+            "title": "SharedTitleV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
     }
     write_json(&manifest_path, &manifest);
 
-    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
-    assert_ne!(code, 0);
+    let error = SchemaRegistry::load(&temp).unwrap_err().to_string();
     assert!(
-        stderr.contains("collision") || stderr.contains("SharedTitle"),
-        "expected name collision: {stderr}"
-    );
-    assert!(
-        stderr.contains(a_id) && stderr.contains(b_id),
-        "collision must list both identities: {stderr}"
+        error.contains("component-native") || error.contains("title"),
+        "expected component-native title/id mismatch: {error}"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
 }
@@ -1420,14 +1426,14 @@ fn nested_hint_collision_fails_with_both_identities() {
     // Covered by same_title_collision. Here force two nested const types under one schema
     // with property names that PascalCase collide ("status" and "Status") — JSON property
     // names are case-sensitive; "status" and "Status" both become Status under the parent.
-    let schema_id = "https://schemas.shittim.local/kcp/test/nested_hint_collision.json";
+    let schema_id = "https://schemas.shittim.local/kcp/nested_hint_collision/v1";
     let source = "schemas/source/kcp/nested_hint_collision.v1.json";
     write_json(
         &temp.join(source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "NestedHintCollision",
+            "title": "NestedHintCollisionV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "status", "Status"],
@@ -1445,12 +1451,12 @@ fn nested_hint_collision_fails_with_both_identities() {
         .expect("schemas")
         .push(serde_json::json!({
             "id": schema_id,
-            "title": "NestedHintCollision",
+            "title": "NestedHintCollisionV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "object",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -1578,14 +1584,14 @@ fn response_envelope_remains_untyped() {
 #[test]
 fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
     let temp = temporary_repo("string-enum-order");
-    let schema_id = "https://schemas.shittim.local/kcp/test/test_string_enum_order.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test_string_enum_order/v1";
     let source = "schemas/source/kcp/test_string_enum_order.v1.json";
     write_json(
         &temp.join(source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "TestStringEnumOrder",
+            "title": "TestStringEnumOrderV1",
             "type": "string",
             "enum": ["zeta", "alpha", "middle"]
         }),
@@ -1597,12 +1603,12 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
         .expect("manifest schemas")
         .push(serde_json::json!({
             "id": schema_id,
-            "title": "TestStringEnumOrder",
+            "title": "TestStringEnumOrderV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": null
         }));
@@ -1615,7 +1621,7 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
             .expect("types");
 
     let enum_idx = types
-        .find("pub enum TestStringEnumOrder")
+        .find("pub enum TestStringEnumOrderV1")
         .expect("enum declaration");
     let enum_block = &types[enum_idx..];
     let zeta = enum_block.find("Zeta").expect("Zeta variant");
@@ -1626,7 +1632,9 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
         "variants must keep schema order zeta/alpha/middle: {enum_block}"
     );
 
-    let all_idx = types.find("impl TestStringEnumOrder").expect("impl block");
+    let all_idx = types
+        .find("impl TestStringEnumOrderV1")
+        .expect("impl block");
     let impl_block = &types[all_idx..];
     let all_start = impl_block
         .find("pub const ALL: &'static [Self] = &[")
@@ -1652,7 +1660,7 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
     );
 
     assert!(
-        types.contains("fn test_string_enum_order_string_enum_contract"),
+        types.contains("fn test_string_enum_order_v1_string_enum_contract"),
         "auto contract test must be projected for the synthetic enum"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
@@ -1661,14 +1669,14 @@ fn string_enum_all_preserves_schema_declaration_order_not_lexicographic() {
 #[test]
 fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
     let temp = temporary_repo("string-enum-wire-collision");
-    let schema_id = "https://schemas.shittim.local/kcp/test/test_string_enum_collision.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test_string_enum_collision/v1";
     let source = "schemas/source/kcp/test_string_enum_collision.v1.json";
     write_json(
         &temp.join(source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "TestStringEnumCollision",
+            "title": "TestStringEnumCollisionV1",
             "type": "string",
             "enum": ["a-b", "a_b"]
         }),
@@ -1680,12 +1688,12 @@ fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
         .expect("manifest schemas")
         .push(serde_json::json!({
             "id": schema_id,
-            "title": "TestStringEnumCollision",
+            "title": "TestStringEnumCollisionV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": null
         }));
@@ -1699,7 +1707,7 @@ fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
         "expected collision wording: {stderr}"
     );
     assert!(
-        stderr.contains("TestStringEnumCollision") || stderr.contains(schema_id),
+        stderr.contains("TestStringEnumCollisionV1") || stderr.contains(schema_id),
         "error must include type identity: {stderr}"
     );
     assert!(
@@ -1716,14 +1724,14 @@ fn string_enum_wire_collision_fails_with_type_wire_and_variant() {
 #[test]
 fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
     let temp = temporary_repo("nullable-string-enum-all");
-    let schema_id = "https://schemas.shittim.local/kcp/test/test_nullable_string_enum.json";
+    let schema_id = "https://schemas.shittim.local/kcp/test_nullable_string_enum/v1";
     let source = "schemas/source/kcp/test_nullable_string_enum.v1.json";
     write_json(
         &temp.join(source),
         &serde_json::json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": schema_id,
-            "title": "TestNullableStringEnum",
+            "title": "TestNullableStringEnumV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "proposer"],
@@ -1743,12 +1751,12 @@ fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
         .expect("manifest schemas")
         .push(serde_json::json!({
             "id": schema_id,
-            "title": "TestNullableStringEnum",
+            "title": "TestNullableStringEnumV1",
             "version": 1,
             "source": source,
             "component": "kcp",
             "kind": "kcp_request",
-            "compatibility": "test-only",
+            "compatibility": "new-contract",
             "generation_targets": ["rust"],
             "schema_version_field": "schema_version"
         }));
@@ -1761,11 +1769,11 @@ fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
             .expect("types");
 
     assert!(
-        types.contains("pub proposer: Option<TestNullableStringEnumProposer>"),
+        types.contains("pub proposer: Option<TestNullableStringEnumV1Proposer>"),
         "nullable enum field must stay Option: {types}"
     );
     let enum_idx = types
-        .find("pub enum TestNullableStringEnumProposer")
+        .find("pub enum TestNullableStringEnumV1Proposer")
         .expect("proposer enum");
     let enum_end = types[enum_idx..].find("\n}\n").expect("enum end");
     let enum_block = &types[enum_idx..enum_idx + enum_end];
@@ -1781,7 +1789,7 @@ fn nullable_string_enum_all_excludes_null_and_keeps_option_wire() {
     );
 
     let impl_idx = types
-        .find("impl TestNullableStringEnumProposer")
+        .find("impl TestNullableStringEnumV1Proposer")
         .expect("impl");
     let impl_slice = &types[impl_idx..];
     let all_start = impl_slice

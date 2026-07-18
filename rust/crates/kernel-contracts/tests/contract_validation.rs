@@ -14,7 +14,8 @@ use kernel_contracts::{
     PolicyRuleSchemaVersion, PolicyRuleSource, PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest,
     TaskListRequestParentFilter, TaskListRequestParentFilterMode, TaskListRequestProposer,
     TaskListRequestSchemaVersion, TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope,
-    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_PROTOCOL_VERSION, KCP_V1_METHODS,
+    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_LEGACY_V1_METHODS, KCP_METHODS,
+    KCP_PROTOCOL_VERSION,
 };
 use serde_json::{json, Value};
 
@@ -585,11 +586,13 @@ fn kcp_unknown_command_method_rejected() {
 
 #[test]
 fn kcp_eight_methods_closed_set_constants() {
-    assert_eq!(KCP_V1_METHODS.len(), 8);
+    // Production stage: active catalogs are empty; retained first-batch set is LEGACY.
+    assert!(KCP_METHODS.is_empty());
+    assert_eq!(KCP_LEGACY_V1_METHODS.len(), 8);
     assert_eq!(KCP_PROTOCOL_VERSION, "1.0");
     assert_eq!(EVENT_V1_TYPES.len(), 3);
-    assert!(KCP_V1_METHODS.contains(&"task.create"));
-    assert!(KCP_V1_METHODS.contains(&"stop.activate"));
+    assert!(KCP_LEGACY_V1_METHODS.contains(&"task.create"));
+    assert!(KCP_LEGACY_V1_METHODS.contains(&"stop.activate"));
     assert!(EVENT_V1_TYPES.contains(&"task.created"));
 }
 
@@ -836,7 +839,7 @@ fn response_ok_error_are_mutually_exclusive() {
 
 #[test]
 fn catalog_has_no_stop_clear_method() {
-    assert!(!KCP_V1_METHODS.contains(&"stop.clear"));
+    assert!(!KCP_LEGACY_V1_METHODS.contains(&"stop.clear"));
 }
 
 #[test]

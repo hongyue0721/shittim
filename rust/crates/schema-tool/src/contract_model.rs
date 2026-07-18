@@ -1,7 +1,8 @@
 //! Target-scoped language-neutral contract IR.
 //!
 //! Pipeline stage:
-//! `TargetSchemaSet` -> `TargetContractGraph` (nodes keyed by [`ContractTypeId`]).
+//! `SchemaRegistry` -> `ValidatedRegistry<Production|Synthetic>` -> `TargetPlan`/`TargetSchemaSet` ->
+//! target-scoped IR: `TargetContractGraph` (nodes keyed by [`ContractTypeId`]).
 //!
 //! Identity is always schema `$id` + strict RFC 6901 JSON Pointer (root uses empty
 //! pointer). Fragment `$ref` targets keep their true definition pointer; inline
@@ -14,9 +15,10 @@
 
 use crate::error::SchemaToolError;
 use crate::json_pointer::JsonPointer;
-use crate::manifest::{LoadedSchema, SchemaRegistry};
+use crate::manifest::{GenerationTarget, LoadedSchema, SchemaRegistry};
+use crate::production_stage::RegistryProfile;
 use crate::resolve::resolve_ref;
-use crate::target::TargetSchemaSet;
+use crate::target::{TargetPlan, TargetSchemaSet};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -318,15 +320,33 @@ pub struct EnvelopeWireBinding {
 
 /// Neutral catalog facts for a target. Source relative paths are manifest facts,
 /// not language include paths.
+///
+/// Active KCP method catalogs come from V2 Envelope authority when present.
+/// When production bindings are empty and V2 authority is absent, retained v1
+/// Envelope discriminators are exposed only as explicit legacy facts — never as
+/// active authority.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogFacts {
     /// `(schema_id, source_relative_path)` for every schema in the target closure,
     /// ordered by schema_id.
     pub embedded_sources: Vec<(String, String)>,
+    /// Active command methods from unique KcpCommandEnvelopeV2 authority, or empty.
     pub kcp_command_methods: Vec<String>,
+    /// Active query methods from unique KcpQueryEnvelopeV2 authority, or empty.
     pub kcp_query_methods: Vec<String>,
-    pub kcp_v1_methods: Vec<String>,
+    /// Canonical merge of active command+query methods (sorted).
+    pub kcp_methods: Vec<String>,
+    /// Explicit retained v1 command methods. This legacy catalog is independent
+    /// of active V2 authority, so both may be populated at the same time.
+    pub kcp_legacy_v1_command_methods: Vec<String>,
+    /// Explicit retained v1 query methods. This legacy catalog is independent
+    /// of active V2 authority, so both may be populated at the same time.
+    pub kcp_legacy_v1_query_methods: Vec<String>,
+    /// Explicit retained v1 merged methods. This legacy catalog is independent
+    /// of active V2 authority, so both may be populated at the same time.
+    pub kcp_legacy_v1_methods: Vec<String>,
     pub event_v1_types: Vec<String>,
+    pub method_version_bindings: Vec<crate::method_bindings::MethodVersionBindingFact>,
     pub kcp_protocol_version: String,
 }
 
@@ -353,14 +373,30 @@ struct LoweringState {
     emitting: BTreeSet<ContractTypeId>,
 }
 
-/// Lower one target schema set into a neutral contract graph.
-pub fn lower_target_contract_graph(
+/// Lower one target from a profile-validated plan into a neutral contract graph.
+///
+/// The plan keeps the registry/profile proof private, so external callers cannot
+/// combine an arbitrary registry with a separately obtained target closure.
+pub fn lower_target_contract_graph<P: RegistryProfile>(
+    plan: &TargetPlan<'_, P>,
+    target: GenerationTarget,
+) -> Result<TargetContractGraph> {
+    let schema_set = plan.target(target).ok_or_else(|| {
+        SchemaToolError::msg(format!(
+            "generation target {} is not present in the validated target plan",
+            target.as_str()
+        ))
+    })?;
+    lower_target_contract_graph_in_plan(plan.registry(), schema_set)
+}
+
+pub(crate) fn lower_target_contract_graph_in_plan(
     registry: &SchemaRegistry,
     schema_set: &TargetSchemaSet,
 ) -> Result<TargetContractGraph> {
     let mut state = LoweringState::default();
 
-    for schema_id in &schema_set.closure {
+    for schema_id in schema_set.closure() {
         let loaded = registry.get(schema_id)?;
         audit_schema_tree(&loaded.document, schema_id)?;
         let root_id = ContractTypeId::root(schema_id);
@@ -381,11 +417,11 @@ pub fn lower_target_contract_graph(
     audit_graph_integrity(&state.nodes)?;
 
     let catalog = build_catalog_facts(registry, schema_set)?;
-    let mut source_schema_ids: Vec<String> = schema_set.closure.iter().cloned().collect();
+    let mut source_schema_ids: Vec<String> = schema_set.closure().iter().cloned().collect();
     source_schema_ids.sort();
 
     Ok(TargetContractGraph {
-        target: schema_set.target,
+        target: schema_set.target(),
         source_schema_ids,
         nodes: state.nodes,
         envelopes,
@@ -398,57 +434,91 @@ fn build_catalog_facts(
     schema_set: &TargetSchemaSet,
 ) -> Result<CatalogFacts> {
     let mut embedded_sources = Vec::new();
-    for schema_id in &schema_set.closure {
+    for schema_id in schema_set.closure() {
         let loaded = registry.get(schema_id)?;
         embedded_sources.push((schema_id.clone(), loaded.source().as_str().to_owned()));
     }
     embedded_sources.sort_by(|left, right| left.0.cmp(&right.0));
 
-    let commands = envelope_discriminators_in_set(
+    let authority = schema_set.active_envelope_authority();
+    let (kcp_command_methods, kcp_query_methods, kcp_methods) = if authority.is_empty() {
+        (Vec::new(), Vec::new(), Vec::new())
+    } else {
+        (
+            authority.command_methods.clone(),
+            authority.query_methods.clone(),
+            authority.all_methods_sorted(),
+        )
+    };
+
+    // Retained v1 catalogs are lifecycle-orthogonal to active V2 authority and
+    // remain available for legacy preflight until runtime cutover.
+    let commands = retained_envelope_discriminators_in_set(
         registry,
         schema_set,
-        "command_envelope.json",
+        RETAINED_COMMAND_ENVELOPE_ID,
         "command_type",
     )?;
-    let queries =
-        envelope_discriminators_in_set(registry, schema_set, "query_envelope.json", "query_type")?;
-    let events =
-        envelope_discriminators_in_set(registry, schema_set, "event_envelope.json", "type")?;
-    let mut methods = commands.clone();
-    methods.extend(queries.iter().cloned());
-    methods.sort();
+    let queries = retained_envelope_discriminators_in_set(
+        registry,
+        schema_set,
+        RETAINED_QUERY_ENVELOPE_ID,
+        "query_type",
+    )?;
+    let mut kcp_legacy_v1_methods = commands.clone();
+    kcp_legacy_v1_methods.extend(queries.iter().cloned());
+    kcp_legacy_v1_methods.sort();
+    let kcp_legacy_v1_command_methods = commands;
+    let kcp_legacy_v1_query_methods = queries;
+
+    let events = retained_envelope_discriminators_in_set(
+        registry,
+        schema_set,
+        RETAINED_EVENT_ENVELOPE_ID,
+        "type",
+    )?;
 
     Ok(CatalogFacts {
         embedded_sources,
-        kcp_command_methods: commands,
-        kcp_query_methods: queries,
-        kcp_v1_methods: methods,
+        kcp_command_methods,
+        kcp_query_methods,
+        kcp_methods,
+        kcp_legacy_v1_command_methods,
+        kcp_legacy_v1_query_methods,
+        kcp_legacy_v1_methods,
         event_v1_types: events,
+        method_version_bindings: schema_set.method_version_bindings().to_vec(),
         kcp_protocol_version: "1.0".into(),
     })
 }
 
-fn envelope_discriminators_in_set(
+const RETAINED_COMMAND_ENVELOPE_ID: &str =
+    "https://schemas.shittim.local/v1/kcp/command_envelope.json";
+const RETAINED_QUERY_ENVELOPE_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
+const RETAINED_EVENT_ENVELOPE_ID: &str =
+    "https://schemas.shittim.local/v1/event/event_envelope.json";
+
+fn retained_envelope_discriminators_in_set(
     registry: &SchemaRegistry,
     schema_set: &TargetSchemaSet,
-    id_suffix: &str,
+    exact_id: &str,
     property: &str,
 ) -> Result<Vec<String>> {
-    let Some(loaded) = registry
-        .loaded_schemas()
-        .map(|(_, loaded)| loaded)
-        .find(|loaded| {
-            loaded.entry.id.ends_with(id_suffix) && schema_set.closure.contains(&loaded.entry.id)
-        })
-    else {
+    let Some(loaded) = registry.loaded_schemas().find_map(|(id, loaded)| {
+        if id == exact_id && schema_set.closure().contains(id) {
+            Some(loaded)
+        } else {
+            None
+        }
+    }) else {
         return Ok(Vec::new());
     };
     string_enum_values(
         loaded
-            .document
+            .document()
             .pointer(&format!("/properties/{property}"))
             .ok_or_else(|| {
-                SchemaToolError::msg(format!("{} missing {property}", loaded.entry.id))
+                SchemaToolError::msg(format!("{} missing {property}", loaded.entry().id))
             })?,
     )
 }
@@ -1365,19 +1435,22 @@ fn discover_typed_envelopes(
     nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
 ) -> Result<Vec<EnvelopeWireBinding>> {
     let mut bindings = Vec::new();
-    for schema_id in &schema_set.closure {
+    for schema_id in schema_set.closure() {
         let loaded = registry.get(schema_id)?;
         if loaded.entry.kind != "envelope" {
             continue;
         }
         if let Some(binding) = parse_envelope_binding(registry, loaded, nodes)? {
             for mapping in &binding.mappings {
-                if !schema_set.closure.contains(&mapping.payload_type.schema_id) {
+                if !schema_set
+                    .closure()
+                    .contains(&mapping.payload_type.schema_id)
+                {
                     return Err(SchemaToolError::msg(format!(
                         "generation target closure error: envelope {} payload {} is not in target {}",
                         schema_id,
                         mapping.payload_type.schema_id,
-                        schema_set.target.as_str()
+                        schema_set.target().as_str()
                     ))
                     .into());
                 }

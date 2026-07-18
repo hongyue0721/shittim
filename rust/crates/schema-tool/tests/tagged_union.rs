@@ -75,7 +75,7 @@ fn manifest_entry(id: &str, title: &str, source: &str) -> serde_json::Value {
         "source": source,
         "component": "kcp",
         "kind": "object",
-        "compatibility": "test-only",
+        "compatibility": "new-contract",
         "generation_targets": ["rust"],
         "schema_version_field": "schema_version"
     })
@@ -113,24 +113,43 @@ fn cli_generate(root: &Path) -> std::process::Output {
 }
 
 fn add_valid_tagged_union_probe(root: &Path, id: &str, targets: serde_json::Value) {
-    write_json(
-        &root.join("schemas/source/kcp/tagged_union_cli_probe.v1.json"),
-        union_probe_schema(id),
-    );
-    let mut entry = manifest_entry(
-        id,
-        "TaggedUnionCliProbe",
-        "schemas/source/kcp/tagged_union_cli_probe.v1.json",
-    );
+    let stem = component_native_stem_from_id(id);
+    let source = format!("schemas/source/kcp/{stem}.v1.json");
+    let title = format!("{}V1", to_pascal_case(&stem));
+    let mut schema = union_probe_schema(id);
+    schema["title"] = json!(title);
+    write_json(&root.join(&source), schema);
+    let mut entry = manifest_entry(id, &title, &source);
     entry["generation_targets"] = targets;
     add_manifest_entry(root, entry);
 }
 
+fn component_native_stem_from_id(id: &str) -> String {
+    let parts: Vec<&str> = id.trim_end_matches('/').split('/').collect();
+    assert!(parts.len() >= 3, "unexpected component-native id {id}");
+    parts[parts.len() - 2].to_owned()
+}
+
+fn to_pascal_case(stem: &str) -> String {
+    stem.split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 fn union_probe_schema(id: &str) -> serde_json::Value {
+    let stem = component_native_stem_from_id(id);
+    let title = format!("{}V1", to_pascal_case(&stem));
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": id,
-        "title": "TaggedUnionInvalidProbe",
+        "title": title,
         "type": "object",
         "additionalProperties": false,
         "required": ["schema_version", "value"],
@@ -153,7 +172,7 @@ fn union_probe_schema(id: &str) -> serde_json::Value {
 
 fn lower_union_probe(mutator: impl FnOnce(&mut serde_json::Value)) -> String {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/kcp/test/tagged_union_invalid_probe.json";
+    let id = "https://schemas.shittim.local/kcp/tagged_union_invalid_probe/v1";
     let mut schema = union_probe_schema(id);
     mutator(&mut schema);
     write_json(
@@ -164,11 +183,13 @@ fn lower_union_probe(mutator: impl FnOnce(&mut serde_json::Value)) -> String {
         &temp,
         manifest_entry(
             id,
-            "TaggedUnionInvalidProbe",
+            "TaggedUnionInvalidProbeV1",
             "schemas/source/kcp/tagged_union_invalid_probe.v1.json",
         ),
     );
-    let error = lower_and_render_rust(&temp).unwrap_err().to_string();
+    let error = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .unwrap_err()
+        .to_string();
     std::fs::remove_dir_all(temp).ok();
     error
 }
@@ -184,17 +205,17 @@ fn union_branch(schema: &mut serde_json::Value, index: usize) -> &mut serde_json
 #[test]
 fn tagged_unions_are_neutral_strict_and_serde_faithful() {
     let temp = temporary_repo();
-    let probe_id = "https://schemas.shittim.local/kcp/test/tagged_union_probe.json";
-    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_ref_branch.json";
-    let nested_id = "https://schemas.shittim.local/kcp/test/tagged_union_nested_probe.json";
-    let recursive_id = "https://schemas.shittim.local/kcp/test/tagged_union_recursive_probe.json";
+    let probe_id = "https://schemas.shittim.local/kcp/tagged_union_probe/v1";
+    let branch_id = "https://schemas.shittim.local/kcp/tagged_union_ref_branch/v1";
+    let nested_id = "https://schemas.shittim.local/kcp/tagged_union_nested_probe/v1";
+    let recursive_id = "https://schemas.shittim.local/kcp/tagged_union_recursive_probe/v1";
 
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_ref_branch.v1.json"),
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": branch_id,
-            "title": "TaggedUnionRefBranch",
+            "title": "TaggedUnionRefBranchV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "kind", "beta_name"],
@@ -210,7 +231,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": probe_id,
-            "title": "TaggedUnionProbe",
+            "title": "TaggedUnionProbeV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "choice"],
@@ -242,7 +263,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": nested_id,
-            "title": "TaggedUnionNestedProbe",
+            "title": "TaggedUnionNestedProbeV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "record"],
@@ -280,7 +301,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": recursive_id,
-            "title": "TaggedUnionRecursiveProbe",
+            "title": "TaggedUnionRecursiveProbeV1",
             "type": "object",
             "additionalProperties": false,
             "required": ["schema_version", "choice"],
@@ -307,7 +328,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         &temp,
         manifest_entry(
             recursive_id,
-            "TaggedUnionRecursiveProbe",
+            "TaggedUnionRecursiveProbeV1",
             "schemas/source/kcp/tagged_union_recursive_probe.v1.json",
         ),
     );
@@ -315,7 +336,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         &temp,
         manifest_entry(
             branch_id,
-            "TaggedUnionRefBranch",
+            "TaggedUnionRefBranchV1",
             "schemas/source/kcp/tagged_union_ref_branch.v1.json",
         ),
     );
@@ -323,7 +344,7 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         &temp,
         manifest_entry(
             probe_id,
-            "TaggedUnionProbe",
+            "TaggedUnionProbeV1",
             "schemas/source/kcp/tagged_union_probe.v1.json",
         ),
     );
@@ -331,13 +352,14 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
         &temp,
         manifest_entry(
             nested_id,
-            "TaggedUnionNestedProbe",
+            "TaggedUnionNestedProbeV1",
             "schemas/source/kcp/tagged_union_nested_probe.v1.json",
         ),
     );
 
     let (graph, mut types, catalog, typed) =
-        lower_and_render_rust(&temp).expect("lower tagged unions");
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+            .expect("lower tagged unions");
     let choice = ContractTypeId::root(probe_id)
         .child("properties")
         .child("choice");
@@ -382,14 +404,14 @@ fn tagged_unions_are_neutral_strict_and_serde_faithful() {
             >= 3
     );
     assert!(types.contains("#[serde(tag = \"kind\", deny_unknown_fields)]"));
-    assert!(types.contains("pub enum TaggedUnionProbeChoice"));
+    assert!(types.contains("pub enum TaggedUnionProbeV1Choice"));
     assert!(!types.contains("serde(flatten)"));
-    assert!(!types.contains("pub struct TaggedUnionProbeChoice {"));
-    assert!(types.contains("pub choice: Box<TaggedUnionRecursiveProbeChoice>"));
-    assert!(types.contains("next: Option<Box<TaggedUnionRecursiveProbe>>"));
-    assert!(types.contains("children: Option<Vec<TaggedUnionRecursiveProbe>>"));
+    assert!(!types.contains("pub struct TaggedUnionProbeV1Choice {"));
+    assert!(types.contains("pub choice: Box<TaggedUnionRecursiveProbeV1Choice>"));
+    assert!(types.contains("next: Option<Box<TaggedUnionRecursiveProbeV1>>"));
+    assert!(types.contains("children: Option<Vec<TaggedUnionRecursiveProbeV1>>"));
     assert!(!types.contains("Box<Option"));
-    assert!(!types.contains("Vec<Box<TaggedUnionRecursiveProbe>>"));
+    assert!(!types.contains("Vec<Box<TaggedUnionRecursiveProbeV1>>"));
 
     types.push_str(r##"
 #[cfg(test)]
@@ -398,32 +420,32 @@ mod tagged_union_raw_json_contracts {
     #[test]
     fn rejects_missing_unknown_and_duplicate_tags_and_fields_from_raw_json() {
         let alpha = r#"{"kind":"alpha","schema_version":1,"alpha_name":"ok"}"#;
-        assert!(serde_json::from_str::<TaggedUnionProbeChoice>(alpha).is_ok());
-        assert!(serde_json::from_str::<TaggedUnionProbeChoice>(r#"{"alpha_name":"ok"}"#).is_err());
-        assert!(serde_json::from_str::<TaggedUnionProbeChoice>(r#"{"kind":"unknown","alpha_name":"ok"}"#).is_err());
-        assert!(serde_json::from_str::<TaggedUnionProbeChoice>(r#"{"kind":"alpha","kind":"beta","alpha_name":"ok"}"#).is_err());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1Choice>(alpha).is_ok());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1Choice>(r#"{"alpha_name":"ok"}"#).is_err());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1Choice>(r#"{"kind":"unknown","alpha_name":"ok"}"#).is_err());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1Choice>(r#"{"kind":"alpha","kind":"beta","alpha_name":"ok"}"#).is_err());
         for raw in [
             alpha,
             r#"{"kind":"beta","schema_version":1,"beta_name":"ok"}"#,
         ] {
-            let decoded: TaggedUnionProbeChoice = serde_json::from_str(raw).unwrap();
+            let decoded: TaggedUnionProbeV1Choice = serde_json::from_str(raw).unwrap();
             let encoded = serde_json::to_string(&decoded).unwrap();
             assert_eq!(encoded.matches("\"kind\"").count(), 1, "tag serializes once: {encoded}");
-            let roundtrip: TaggedUnionProbeChoice = serde_json::from_str(&encoded).unwrap();
+            let roundtrip: TaggedUnionProbeV1Choice = serde_json::from_str(&encoded).unwrap();
             assert_eq!(roundtrip, decoded);
         }
-        let nested: TaggedUnionNestedProbe = serde_json::from_str(
+        let nested: TaggedUnionNestedProbeV1 = serde_json::from_str(
             r#"{"schema_version":1,"record":{"record_kind":"request","subject":{"subject_kind":"operation","operation":"run"}}}"#,
         ).unwrap();
         let nested_encoded = serde_json::to_string(&nested).unwrap();
         assert_eq!(nested_encoded.matches("\"record_kind\"").count(), 1);
         assert_eq!(nested_encoded.matches("\"subject_kind\"").count(), 1);
         assert_eq!(
-            serde_json::from_str::<TaggedUnionNestedProbe>(&nested_encoded).unwrap(),
+            serde_json::from_str::<TaggedUnionNestedProbeV1>(&nested_encoded).unwrap(),
             nested,
         );
-        assert!(serde_json::from_str::<TaggedUnionProbeChoice>(r#"{"kind":"alpha","alpha_name":"ok","extra":true}"#).is_err());
-        assert!(serde_json::from_str::<TaggedUnionProbe>(r#"{"schema_version":1,"choice":{"kind":"alpha","schema_version":1,"alpha_name":"ok"},"choice":{"kind":"alpha","schema_version":1,"alpha_name":"again"}}"#).is_err());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1Choice>(r#"{"kind":"alpha","alpha_name":"ok","extra":true}"#).is_err());
+        assert!(serde_json::from_str::<TaggedUnionProbeV1>(r#"{"schema_version":1,"choice":{"kind":"alpha","schema_version":1,"alpha_name":"ok"},"choice":{"kind":"alpha","schema_version":1,"alpha_name":"again"}}"#).is_err());
     }
 }
 "##);
@@ -467,7 +489,7 @@ mod tagged_union_raw_json_contracts {
 
 fn assert_nullable_and_non_discriminated_oneof_follow_distinct_contract_paths() {
     let temp = temporary_repo();
-    let nullable_id = "https://schemas.shittim.local/kcp/test/nullable_oneof_probe.json";
+    let nullable_id = "https://schemas.shittim.local/kcp/nullable_one_of_probe/v1";
     let mut nullable = union_probe_schema(nullable_id);
     nullable["properties"]["value"] = json!({
         "oneOf": [
@@ -476,18 +498,19 @@ fn assert_nullable_and_non_discriminated_oneof_follow_distinct_contract_paths() 
         ]
     });
     write_json(
-        &temp.join("schemas/source/kcp/nullable_oneof_probe.v1.json"),
+        &temp.join("schemas/source/kcp/nullable_one_of_probe.v1.json"),
         nullable,
     );
     add_manifest_entry(
         &temp,
         manifest_entry(
             nullable_id,
-            "NullableOneOfProbe",
-            "schemas/source/kcp/nullable_oneof_probe.v1.json",
+            "NullableOneOfProbeV1",
+            "schemas/source/kcp/nullable_one_of_probe.v1.json",
         ),
     );
-    let (graph, _, _, _) = lower_and_render_rust(&temp).expect("nullable oneOf lowers");
+    let (graph, _, _, _) = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .expect("nullable oneOf lowers");
     let nullable_value = ContractTypeId::root(nullable_id)
         .child("properties")
         .child("value");
@@ -533,13 +556,13 @@ fn assert_tagged_union_rejects_unresolved_and_cross_target_ref_branches() {
     );
 
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/kcp/test/tagged_union_cross_target_probe.json";
-    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_cross_target_branch.json";
+    let id = "https://schemas.shittim.local/kcp/tagged_union_cross_target_probe/v1";
+    let branch_id = "https://schemas.shittim.local/kcp/tagged_union_cross_target_branch/v1";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_cross_target_branch.v1.json"),
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": branch_id,
-            "title": "TaggedUnionCrossTargetBranch", "type": "object", "additionalProperties": false,
+            "title": "TaggedUnionCrossTargetBranchV1", "type": "object", "additionalProperties": false,
             "required": ["schema_version", "kind"], "properties": {"schema_version": {"type": "integer", "const": 1}, "kind": {"type": "string", "const": "ref"}}
         }),
     );
@@ -554,18 +577,20 @@ fn assert_tagged_union_rejects_unresolved_and_cross_target_ref_branches() {
         &temp,
         manifest_entry(
             branch_id,
-            "TaggedUnionCrossTargetBranch",
+            "TaggedUnionCrossTargetBranchV1",
             "schemas/source/kcp/tagged_union_cross_target_branch.v1.json",
         ),
     );
     let mut entry = manifest_entry(
         id,
-        "TaggedUnionCrossTargetProbe",
+        "TaggedUnionCrossTargetProbeV1",
         "schemas/source/kcp/tagged_union_cross_target_probe.v1.json",
     );
     entry["generation_targets"] = json!(["typescript"]);
     add_manifest_entry(&temp, entry);
-    let error = lower_and_render_rust(&temp).unwrap_err().to_string();
+    let error = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("generation target closure error") && error.contains(branch_id),
         "cross-target tagged branch must fail target closure: {error}"
@@ -574,17 +599,17 @@ fn assert_tagged_union_rejects_unresolved_and_cross_target_ref_branches() {
 }
 
 fn assert_tagged_union_does_not_change_envelope_bindings() {
-    let baseline = lower_and_render_rust(&repo_root())
+    let baseline = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&repo_root())
         .expect("baseline graph")
         .0
         .envelopes;
     let temp = temporary_repo();
     add_valid_tagged_union_probe(
         &temp,
-        "https://schemas.shittim.local/kcp/test/tagged_union_binding_probe.json",
+        "https://schemas.shittim.local/kcp/tagged_union_binding_probe/v1",
         json!(["rust"]),
     );
-    let after = lower_and_render_rust(&temp)
+    let after = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
         .expect("tagged union graph")
         .0
         .envelopes;
@@ -600,7 +625,7 @@ fn assert_cli_generation_fails_without_partial_artifacts_for_tagged_union_target
     let ts_temp = temporary_repo();
     add_valid_tagged_union_probe(
         &ts_temp,
-        "https://schemas.shittim.local/kcp/test/tagged_union_ts_probe.json",
+        "https://schemas.shittim.local/kcp/tagged_union_ts_probe/v1",
         json!(["rust", "typescript"]),
     );
     let before = generated_artifact_bytes(&ts_temp);
@@ -619,10 +644,11 @@ fn assert_cli_generation_fails_without_partial_artifacts_for_tagged_union_target
     let invalid_temp = temporary_repo();
     add_valid_tagged_union_probe(
         &invalid_temp,
-        "https://schemas.shittim.local/kcp/test/tagged_union_invalid_cli_probe.json",
+        "https://schemas.shittim.local/kcp/tagged_union_invalid_cli_probe/v1",
         json!(["rust"]),
     );
-    let schema_path = invalid_temp.join("schemas/source/kcp/tagged_union_cli_probe.v1.json");
+    let schema_path =
+        invalid_temp.join("schemas/source/kcp/tagged_union_invalid_cli_probe.v1.json");
     let mut schema: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&schema_path).expect("read probe schema"))
             .expect("parse probe schema");
@@ -789,13 +815,13 @@ fn unevaluated_properties_is_tagged_union_only_and_preserves_canonical_ref_objec
     assert!(nullable_error.contains("only supported on a non-null tagged-union classifier"));
 
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_ref_probe.json";
-    let branch_id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_ref_branch.json";
+    let id = "https://schemas.shittim.local/kcp/tagged_union_uep_ref_probe/v1";
+    let branch_id = "https://schemas.shittim.local/kcp/tagged_union_uep_ref_branch/v1";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_uep_ref_branch.v1.json"),
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": branch_id,
-            "title": "TaggedUnionUepRefBranch", "type": "object",
+            "title": "TaggedUnionUepRefBranchV1", "type": "object",
             "required": ["schema_version", "kind"],
             "properties": {"schema_version": {"type": "integer", "const": 1}, "kind": {"type": "string", "const": "ref"}, "note": {"type": "string"}}
         }),
@@ -814,7 +840,7 @@ fn unevaluated_properties_is_tagged_union_only_and_preserves_canonical_ref_objec
         &temp,
         manifest_entry(
             branch_id,
-            "TaggedUnionUepRefBranch",
+            "TaggedUnionUepRefBranchV1",
             "schemas/source/kcp/tagged_union_uep_ref_branch.v1.json",
         ),
     );
@@ -822,12 +848,13 @@ fn unevaluated_properties_is_tagged_union_only_and_preserves_canonical_ref_objec
         &temp,
         manifest_entry(
             id,
-            "TaggedUnionUepRefProbe",
+            "TaggedUnionUepRefProbeV1",
             "schemas/source/kcp/tagged_union_uep_ref_probe.v1.json",
         ),
     );
     let (graph, mut types, catalog, typed) =
-        lower_and_render_rust(&temp).expect("UEP closes union only");
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+            .expect("UEP closes union only");
     let branch = graph
         .nodes
         .get(&ContractTypeId::root(branch_id))
@@ -839,7 +866,7 @@ fn unevaluated_properties_is_tagged_union_only_and_preserves_canonical_ref_objec
             ..
         }
     ));
-    assert!(types.contains("pub struct TaggedUnionUepRefBranch"));
+    assert!(types.contains("pub struct TaggedUnionUepRefBranchV1"));
     assert!(types.contains("#[serde(tag = \"kind\", deny_unknown_fields)]"));
     types.push_str(
         r##"
@@ -849,10 +876,10 @@ mod uep_ref_branch_policy_contracts {
 
     #[test]
     fn canonical_open_ref_stays_open_while_uep_union_variant_is_strict() {
-        assert!(serde_json::from_str::<TaggedUnionUepRefBranch>(
+        assert!(serde_json::from_str::<TaggedUnionUepRefBranchV1>(
             r#"{"schema_version":1,"kind":"ref","note":"ok","extra":true}"#,
         ).is_ok());
-        assert!(serde_json::from_str::<TaggedUnionInvalidProbeValue>(
+        assert!(serde_json::from_str::<TaggedUnionUepRefProbeV1Value>(
             r#"{"kind":"ref","schema_version":1,"note":"ok","extra":true}"#,
         ).is_err());
     }
@@ -899,14 +926,13 @@ mod uep_ref_branch_policy_contracts {
 #[test]
 fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/kcp/test/tagged_union_uep_explicit_open_probe.json";
-    let branch_id =
-        "https://schemas.shittim.local/kcp/test/tagged_union_uep_explicit_open_branch.json";
+    let id = "https://schemas.shittim.local/kcp/tagged_union_uep_explicit_open_probe/v1";
+    let branch_id = "https://schemas.shittim.local/kcp/tagged_union_uep_explicit_open_branch/v1";
     write_json(
         &temp.join("schemas/source/kcp/tagged_union_uep_explicit_open_branch.v1.json"),
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": branch_id,
-            "title": "TaggedUnionUepExplicitOpenBranch", "type": "object", "additionalProperties": true,
+            "title": "TaggedUnionUepExplicitOpenBranchV1", "type": "object", "additionalProperties": true,
             "required": ["schema_version", "kind"],
             "properties": {"schema_version": {"type": "integer", "const": 1}, "kind": {"type": "string", "const": "ref"}}
         }),
@@ -923,7 +949,7 @@ fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
         &temp,
         manifest_entry(
             branch_id,
-            "TaggedUnionUepExplicitOpenBranch",
+            "TaggedUnionUepExplicitOpenBranchV1",
             "schemas/source/kcp/tagged_union_uep_explicit_open_branch.v1.json",
         ),
     );
@@ -931,11 +957,13 @@ fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
         &temp,
         manifest_entry(
             id,
-            "TaggedUnionUepExplicitOpenProbe",
+            "TaggedUnionUepExplicitOpenProbeV1",
             "schemas/source/kcp/tagged_union_uep_explicit_open_probe.v1.json",
         ),
     );
-    let error = lower_and_render_rust(&temp).unwrap_err().to_string();
+    let error = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("tagged union branch must not override"),
         "{error}"
@@ -946,12 +974,12 @@ fn tagged_union_rejects_explicit_open_ref_branch_even_when_uep_closes_union() {
 #[test]
 fn tagged_union_rejects_open_branches_and_non_bijective_tags() {
     let temp = temporary_repo();
-    let id = "https://schemas.shittim.local/kcp/test/invalid_tagged_union.json";
+    let id = "https://schemas.shittim.local/kcp/invalid_tagged_union/v1";
     write_json(
         &temp.join("schemas/source/kcp/invalid_tagged_union.v1.json"),
         json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": id,
-            "title": "InvalidTaggedUnion", "type": "object", "additionalProperties": false,
+            "title": "InvalidTaggedUnionV1", "type": "object", "additionalProperties": false,
             "required": ["schema_version"],
             "properties": {"schema_version": {"type": "integer", "const": 1}, "value": {
                 "type": "object", "required": ["kind"],
@@ -964,11 +992,13 @@ fn tagged_union_rejects_open_branches_and_non_bijective_tags() {
         &temp,
         manifest_entry(
             id,
-            "InvalidTaggedUnion",
+            "InvalidTaggedUnionV1",
             "schemas/source/kcp/invalid_tagged_union.v1.json",
         ),
     );
-    let error = lower_and_render_rust(&temp).unwrap_err().to_string();
+    let error = lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp)
+        .unwrap_err()
+        .to_string();
     assert!(error.contains("bijective"), "{error}");
     std::fs::remove_dir_all(temp).ok();
 }

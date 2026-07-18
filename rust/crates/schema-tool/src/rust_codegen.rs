@@ -1007,6 +1007,7 @@ pub fn render_catalog_module(graph: &TargetContractGraph) -> Result<String> {
     }
     out.push_str("];\n\n");
 
+    // Active catalogs: empty when V2 Envelope authority is absent (current production).
     render_str_slice(
         &mut out,
         "KCP_COMMAND_METHODS",
@@ -1017,13 +1018,183 @@ pub fn render_catalog_module(graph: &TargetContractGraph) -> Result<String> {
         "KCP_QUERY_METHODS",
         &graph.catalog.kcp_query_methods,
     );
-    render_str_slice(&mut out, "KCP_V1_METHODS", &graph.catalog.kcp_v1_methods);
+    render_str_slice(&mut out, "KCP_METHODS", &graph.catalog.kcp_methods);
+
+    // Explicit retained v1 catalogs. Not active authority; consumers that still need
+    // the retained first-batch set must opt into LEGACY names.
+    render_str_slice(
+        &mut out,
+        "KCP_LEGACY_V1_COMMAND_METHODS",
+        &graph.catalog.kcp_legacy_v1_command_methods,
+    );
+    render_str_slice(
+        &mut out,
+        "KCP_LEGACY_V1_QUERY_METHODS",
+        &graph.catalog.kcp_legacy_v1_query_methods,
+    );
+    render_str_slice(
+        &mut out,
+        "KCP_LEGACY_V1_METHODS",
+        &graph.catalog.kcp_legacy_v1_methods,
+    );
+
     render_str_slice(&mut out, "EVENT_V1_TYPES", &graph.catalog.event_v1_types);
     out.push_str(&format!(
         "pub const KCP_PROTOCOL_VERSION: &str = {:?};\n",
         graph.catalog.kcp_protocol_version
     ));
+
+    render_method_version_bindings(&mut out, &graph.catalog.method_version_bindings)?;
     Ok(out)
+}
+
+fn render_method_version_bindings(
+    out: &mut String,
+    bindings: &[crate::method_bindings::MethodVersionBindingFact],
+) -> Result<()> {
+    out.push_str("\n/// Manifest-derived method version binding facts (library selectors only).\n");
+    out.push_str(
+        "/// Does not imply dispatcher registration, handler, repository, or server availability.\n",
+    );
+    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+    out.push_str("pub enum KcpMethodFamily {\n    Command,\n    Query,\n}\n\n");
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub struct MethodVersionBinding {\n");
+    out.push_str("    pub family: KcpMethodFamily,\n");
+    out.push_str("    pub method: &'static str,\n");
+    out.push_str("    pub active_request_versions: &'static [u32],\n");
+    out.push_str("    pub legacy_validation_versions: &'static [u32],\n");
+    out.push_str("    pub request_schema_id_by_version: &'static [(u32, &'static str)],\n");
+    out.push_str("    pub response_schema_id_by_version: &'static [(u32, &'static str)],\n");
+    out.push_str("}\n\n");
+
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub enum RequestVersionSelection {\n");
+    out.push_str(
+        "    Active { request_schema_id: &'static str, response_schema_id: &'static str },\n",
+    );
+    out.push_str("    LegacyValidationOnly { request_schema_id: &'static str },\n");
+    out.push_str("    Unsupported,\n");
+    out.push_str("}\n\n");
+
+    // Emit supporting consts first so the public table can reference them.
+    for (index, binding) in bindings.iter().enumerate() {
+        let active_name = format!("_METHOD_BINDING_{index}_ACTIVE");
+        let legacy_name = format!("_METHOD_BINDING_{index}_LEGACY");
+        let request_name = format!("_METHOD_BINDING_{index}_REQUEST_IDS");
+        let response_name = format!("_METHOD_BINDING_{index}_RESPONSE_IDS");
+
+        out.push_str(&format!(
+            "const {active_name}: &[u32] = &{:?};\n",
+            binding.active_request_versions
+        ));
+        out.push_str(&format!(
+            "const {legacy_name}: &[u32] = &{:?};\n",
+            binding.legacy_validation_versions
+        ));
+        out.push_str(&format!("const {request_name}: &[(u32, &str)] = &[\n"));
+        for (key, id) in &binding.request_schema_id_by_version {
+            let version: u32 = key
+                .parse()
+                .map_err(|_| SchemaToolError::msg(format!("invalid binding version key {key}")))?;
+            out.push_str(&format!("    ({version}, {id:?}),\n"));
+        }
+        out.push_str("];\n");
+        out.push_str(&format!("const {response_name}: &[(u32, &str)] = &[\n"));
+        for (key, id) in &binding.response_schema_id_by_version {
+            let version: u32 = key
+                .parse()
+                .map_err(|_| SchemaToolError::msg(format!("invalid binding version key {key}")))?;
+            out.push_str(&format!("    ({version}, {id:?}),\n"));
+        }
+        out.push_str("];\n");
+    }
+
+    out.push_str("pub const METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[\n");
+    for (index, binding) in bindings.iter().enumerate() {
+        let family = match binding.family {
+            crate::manifest::MethodFamily::Command => "KcpMethodFamily::Command",
+            crate::manifest::MethodFamily::Query => "KcpMethodFamily::Query",
+        };
+        let active_name = format!("_METHOD_BINDING_{index}_ACTIVE");
+        let legacy_name = format!("_METHOD_BINDING_{index}_LEGACY");
+        let request_name = format!("_METHOD_BINDING_{index}_REQUEST_IDS");
+        let response_name = format!("_METHOD_BINDING_{index}_RESPONSE_IDS");
+        out.push_str("    MethodVersionBinding {\n");
+        out.push_str(&format!("        family: {family},\n"));
+        out.push_str(&format!("        method: {:?},\n", binding.method));
+        out.push_str(&format!(
+            "        active_request_versions: {active_name},\n"
+        ));
+        out.push_str(&format!(
+            "        legacy_validation_versions: {legacy_name},\n"
+        ));
+        out.push_str(&format!(
+            "        request_schema_id_by_version: {request_name},\n"
+        ));
+        out.push_str(&format!(
+            "        response_schema_id_by_version: {response_name},\n"
+        ));
+        out.push_str("    },\n");
+    }
+    out.push_str("];\n\n");
+
+    out.push_str(render_binding_query_apis());
+    Ok(())
+}
+
+fn render_binding_query_apis() -> &'static str {
+    r#"/// Lookup a method version binding by family + method.
+pub fn method_version_binding(
+    family: KcpMethodFamily,
+    method: &str,
+) -> Option<&'static MethodVersionBinding> {
+    METHOD_VERSION_BINDINGS
+        .iter()
+        .find(|binding| binding.family == family && binding.method == method)
+}
+
+/// Select the complete lifecycle outcome for one request version.
+/// Active response selection is inseparable from the request version.
+pub fn select_request_version(
+    family: KcpMethodFamily,
+    method: &str,
+    request_version: u32,
+) -> RequestVersionSelection {
+    let Some(binding) = method_version_binding(family, method) else {
+        return RequestVersionSelection::Unsupported;
+    };
+    let request_schema_id = binding
+        .request_schema_id_by_version
+        .iter()
+        .find(|(version, _)| *version == request_version)
+        .map(|(_, id)| *id);
+    if binding.active_request_versions.contains(&request_version) {
+        let response_schema_id = binding
+            .response_schema_id_by_version
+            .iter()
+            .find(|(version, _)| *version == request_version)
+            .map(|(_, id)| *id);
+        return match (request_schema_id, response_schema_id) {
+            (Some(request_schema_id), Some(response_schema_id)) => {
+                RequestVersionSelection::Active {
+                    request_schema_id,
+                    response_schema_id,
+                }
+            }
+            _ => RequestVersionSelection::Unsupported,
+        };
+    }
+    if binding.legacy_validation_versions.contains(&request_version) {
+        return request_schema_id
+            .map(|request_schema_id| RequestVersionSelection::LegacyValidationOnly {
+                request_schema_id,
+            })
+            .unwrap_or(RequestVersionSelection::Unsupported);
+    }
+    RequestVersionSelection::Unsupported
+}
+"#
 }
 
 // ---------------------------------------------------------------------------
@@ -1610,8 +1781,12 @@ mod tests {
                 embedded_sources: vec![],
                 kcp_command_methods: vec![],
                 kcp_query_methods: vec![],
-                kcp_v1_methods: vec![],
+                kcp_methods: vec![],
+                kcp_legacy_v1_command_methods: vec![],
+                kcp_legacy_v1_query_methods: vec![],
+                kcp_legacy_v1_methods: vec![],
                 event_v1_types: vec![],
+                method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
         };
@@ -1703,8 +1878,12 @@ mod tests {
                 embedded_sources: vec![],
                 kcp_command_methods: vec![],
                 kcp_query_methods: vec![],
-                kcp_v1_methods: vec![],
+                kcp_methods: vec![],
+                kcp_legacy_v1_command_methods: vec![],
+                kcp_legacy_v1_query_methods: vec![],
+                kcp_legacy_v1_methods: vec![],
                 event_v1_types: vec![],
+                method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
         };
@@ -1803,8 +1982,12 @@ mod tests {
                 embedded_sources: vec![],
                 kcp_command_methods: vec![],
                 kcp_query_methods: vec![],
-                kcp_v1_methods: vec![],
+                kcp_methods: vec![],
+                kcp_legacy_v1_command_methods: vec![],
+                kcp_legacy_v1_query_methods: vec![],
+                kcp_legacy_v1_methods: vec![],
                 event_v1_types: vec![],
+                method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
         };

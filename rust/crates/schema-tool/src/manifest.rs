@@ -1,6 +1,11 @@
 //! Manifest v2 loading, immutable retained-ID baseline verification, and component policy.
 
+use crate::compatibility::SchemaCompatibility;
 use crate::error::SchemaToolError;
+use crate::manifest_identity::{
+    validate_component_native_identity, validate_schema_version_field, validate_source_title,
+};
+use crate::method_bindings::validate_method_version_bindings;
 use crate::paths;
 use crate::resolve::{
     require_canonical_id_base, require_canonical_schema_id, schema_id_in_namespace,
@@ -67,9 +72,9 @@ pub struct ManifestComponent {
     pub retained_ids: Vec<String>,
 }
 
-/// Future method lifecycle source. The migration deliberately reserves this
-/// typed, required section as an empty array; it does not fabricate the eight
-/// bindings before their business-v2 schemas exist.
+/// Manifest-derived method lifecycle binding. Validated fully by
+/// [`crate::method_bindings::validate_method_version_bindings`]; empty arrays are
+/// allowed by the generic loader, while production emptiness is a separate stage gate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestMethodVersionBinding {
@@ -97,7 +102,7 @@ pub struct ManifestEntry {
     pub source: String,
     pub component: String,
     pub kind: String,
-    pub compatibility: String,
+    pub compatibility: SchemaCompatibility,
     pub generation_targets: Vec<GenerationTarget>,
     #[serde(default)]
     pub schema_version_field: Option<String>,
@@ -329,7 +334,6 @@ impl SchemaRegistry {
             &component_indexes_by_name,
         )?;
         validate_all_source_files_listed(repo_root, &seen_sources)?;
-        validate_method_version_bindings(&manifest.method_version_bindings)?;
 
         let registry = Self {
             repo_root: repo_root.to_path_buf(),
@@ -339,6 +343,10 @@ impl SchemaRegistry {
             schema_node_pointers_by_id,
         };
         crate::resolve::validate_registry_references(&registry)?;
+        // Full MethodVersionBinding validation is stage-independent: empty or
+        // complete legal non-empty registries are accepted. Production emptiness
+        // is enforced later by validate_production_manifest_stage.
+        validate_method_version_bindings(&registry)?;
         Ok(registry)
     }
 
@@ -484,6 +492,7 @@ fn validate_manifest_entry(
         );
     }
     target::validate_generation_targets(&entry.id, &entry.generation_targets)?;
+    crate::compatibility::validate_kind_compatibility(entry)?;
     let component_index = *component_indexes_by_name
         .get(&entry.component)
         .ok_or_else(|| {
@@ -528,6 +537,7 @@ fn validate_manifest_entry(
     }
     require_canonical_schema_id(source_id, &entry.source)?;
     require_canonical_schema_id(&entry.id, "manifest entry id")?;
+    validate_source_title(entry, &document)?;
 
     let identity_class = match retained_by_id.get(&entry.id) {
         Some(baseline) => {
@@ -568,21 +578,13 @@ fn validate_manifest_entry(
                     entry.id, entry.component, components[component_index].namespace
                 ))
             })?;
+            // Exact component-native hard gate: ID/source/title stem/version/URL shape.
+            validate_component_native_identity(entry)?;
             IdentityClass::ComponentNative { component_index }
         }
     };
-    if let Some(field) = &entry.schema_version_field {
-        let has_field = document
-            .get("properties")
-            .and_then(serde_json::Value::as_object)
-            .is_some_and(|properties| properties.contains_key(field));
-        if !has_field {
-            bail!(
-                "manifest entry {} declares missing schema_version_field {field}",
-                entry.id
-            );
-        }
-    }
+    // Retained and component-native entries share the same schema_version_field rule.
+    validate_schema_version_field(entry, &document)?;
 
     identity_classes_by_id.insert(entry.id.clone(), identity_class);
     schema_node_pointers_by_id.insert(entry.id.clone(), schema_node_pointers);
@@ -792,20 +794,6 @@ fn validate_all_source_files_listed(
         }
     }
     Ok(())
-}
-
-fn validate_method_version_bindings(bindings: &[ManifestMethodVersionBinding]) -> Result<()> {
-    if bindings.is_empty() {
-        return Ok(());
-    }
-
-    // The wire shape is deliberately typed above, but no business-v2 source
-    // exists from which a catalog can truthfully be derived. Rejecting every
-    // non-empty section prevents a partial hand-maintained validator from
-    // looking like a usable lifecycle binding.
-    bail!(
-        "method_version_bindings must be empty until a dedicated manifest-derived binding slice supplies business-v2 sources and generated catalog validation"
-    );
 }
 
 fn require_strictly_sorted_unique(values: &[String], location: &str) -> Result<()> {

@@ -1,6 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use kernel_contracts::{
-    validate_json, KcpResponseEnvelopeStatus, KCP_COMMAND_METHODS, KCP_QUERY_METHODS,
+    validate_json, KcpResponseEnvelopeStatus, KCP_LEGACY_V1_COMMAND_METHODS,
+    KCP_LEGACY_V1_QUERY_METHODS,
 };
 use kernel_kcp::{
     narrow_to_registered, preflight_value, BackendError, ClockError, HandlerResult,
@@ -182,7 +183,7 @@ fn all_eight_valid_values_are_accepted_with_exact_method_and_family() {
         assert_eq!(request.family(), family);
     }
     assert_eq!(
-        KCP_COMMAND_METHODS.len() + KCP_QUERY_METHODS.len(),
+        KCP_LEGACY_V1_COMMAND_METHODS.len() + KCP_LEGACY_V1_QUERY_METHODS.len(),
         valid_values().len()
     );
 }

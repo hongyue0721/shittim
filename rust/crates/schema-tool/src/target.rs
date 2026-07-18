@@ -1,9 +1,12 @@
 //! Generation targets, TargetPlan, and target-scoped schema closures.
 //!
-//! Pipeline stage: SchemaRegistry -> SchemaGraph edges -> TargetPlan/TargetSchemaSet.
+//! Pipeline stage: `SchemaRegistry` -> `ValidatedRegistry<Production|Synthetic>` ->
+//! `TargetPlan`/`TargetSchemaSet` -> target-scoped IR.
 
 use crate::error::SchemaToolError;
 use crate::manifest::{GenerationTarget, SchemaRegistry};
+use crate::method_bindings::{ActiveEnvelopeAuthority, MethodVersionBindingFact};
+use crate::production_stage::{RegistryProfile, ValidatedRegistry};
 use crate::resolve::resolve_ref;
 use crate::schema_walk::walk_schema_nodes;
 use anyhow::Result;
@@ -13,18 +16,62 @@ use std::collections::BTreeSet;
 /// One planned generation target with its explicit roots and closed dependency set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetSchemaSet {
-    pub target: GenerationTarget,
+    target: GenerationTarget,
     /// Manifest schemas that explicitly list this target.
-    pub roots: BTreeSet<String>,
+    roots: BTreeSet<String>,
     /// Roots plus every external manifest `$ref` reached from roots (including through
     /// local fragments) and every envelope payload schema required by typed bindings.
-    pub closure: BTreeSet<String>,
+    closure: BTreeSet<String>,
+    /// Active Envelope authority proven complete inside this exact target.
+    active_envelope_authority: ActiveEnvelopeAuthority,
+    /// Complete binding catalog proven present inside this exact target.
+    method_version_bindings: Vec<MethodVersionBindingFact>,
 }
 
-/// Canonical multi-target plan derived from the manifest.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TargetPlan {
-    pub targets: Vec<TargetSchemaSet>,
+impl TargetSchemaSet {
+    pub fn target(&self) -> GenerationTarget {
+        self.target
+    }
+
+    pub fn roots(&self) -> &BTreeSet<String> {
+        &self.roots
+    }
+
+    pub fn closure(&self) -> &BTreeSet<String> {
+        &self.closure
+    }
+
+    pub fn active_envelope_authority(&self) -> &ActiveEnvelopeAuthority {
+        &self.active_envelope_authority
+    }
+
+    pub fn method_version_bindings(&self) -> &[MethodVersionBindingFact] {
+        &self.method_version_bindings
+    }
+}
+
+/// Canonical multi-target plan derived from an explicitly validated registry profile.
+///
+/// The profile type records that a caller selected either the production lifecycle
+/// gate or an explicit synthetic profile before compilation began.
+#[derive(Debug, Clone)]
+pub struct TargetPlan<'a, P: RegistryProfile> {
+    registry: ValidatedRegistry<'a, P>,
+    targets: Vec<TargetSchemaSet>,
+}
+
+impl<'a, P: RegistryProfile> TargetPlan<'a, P> {
+    pub(crate) fn registry(&self) -> &SchemaRegistry {
+        self.registry.registry()
+    }
+
+    pub fn targets(&self) -> &[TargetSchemaSet] {
+        &self.targets
+    }
+
+    pub fn target(&self, target: GenerationTarget) -> Option<&TargetSchemaSet> {
+        self.targets.iter().find(|set| set.target() == target)
+    }
 }
 
 /// Canonical order is defined by [`GenerationTarget`] discriminant order: rust, then typescript.
@@ -58,10 +105,13 @@ pub fn validate_generation_targets(entry_id: &str, targets: &[GenerationTarget])
     Ok(())
 }
 
-/// Build a TargetPlan: every target that appears on at least one schema gets an explicit root
-/// set and a validated closure. Empty targets are omitted. Targets are discovered from the
-/// manifest (no closed `ALL` enum walk).
-pub fn build_target_plan(registry: &SchemaRegistry) -> Result<TargetPlan> {
+/// Build a TargetPlan from an explicitly validated registry. Every target that appears on at
+/// least one schema gets an explicit root set and a validated closure. Empty targets are omitted.
+/// Targets are discovered from the manifest (no closed `ALL` enum walk).
+pub fn build_target_plan<'a, P: RegistryProfile>(
+    validated: ValidatedRegistry<'a, P>,
+) -> Result<TargetPlan<'a, P>> {
+    let registry = validated.registry();
     let mut discovered: BTreeSet<GenerationTarget> = BTreeSet::new();
     for entry in &registry.manifest().schemas {
         for target in &entry.generation_targets {
@@ -81,10 +131,14 @@ pub fn build_target_plan(registry: &SchemaRegistry) -> Result<TargetPlan> {
             continue;
         }
         let closure = compute_and_validate_closure(registry, target, &roots)?;
+        let (active_envelope_authority, method_version_bindings) =
+            crate::method_bindings::compile_target_method_facts(registry, target, &closure)?;
         targets.push(TargetSchemaSet {
             target,
             roots,
             closure,
+            active_envelope_authority,
+            method_version_bindings,
         });
     }
     if targets.is_empty() {
@@ -92,7 +146,10 @@ pub fn build_target_plan(registry: &SchemaRegistry) -> Result<TargetPlan> {
             SchemaToolError::msg("no generation targets requested by any manifest schema").into(),
         );
     }
-    Ok(TargetPlan { targets })
+    Ok(TargetPlan {
+        registry: validated,
+        targets,
+    })
 }
 
 fn compute_and_validate_closure(

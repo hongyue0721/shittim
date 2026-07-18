@@ -263,7 +263,7 @@
       "version": 1,
       "source": "schemas/source/kcp/command_envelope.v1.json",
       "kind": "envelope",
-      "compatibility": "v1-stable",
+      "compatibility": "legacy-validation-only",
       "generation_targets": [
         "rust"
       ],
@@ -341,7 +341,7 @@
       "version": 1,
       "source": "schemas/source/kcp/query_envelope.v1.json",
       "kind": "envelope",
-      "compatibility": "v1-stable",
+      "compatibility": "legacy-validation-only",
       "generation_targets": [
         "rust"
       ],
@@ -445,7 +445,7 @@
       "version": 1,
       "source": "schemas/source/kcp/task_create_request.v1.json",
       "kind": "kcp_request",
-      "compatibility": "v1-stable",
+      "compatibility": "legacy-validation-only",
       "generation_targets": [
         "rust"
       ],
@@ -458,7 +458,7 @@
       "version": 1,
       "source": "schemas/source/kcp/task_create_response.v1.json",
       "kind": "kcp_response",
-      "compatibility": "v1-stable",
+      "compatibility": "legacy-read-only",
       "generation_targets": [
         "rust"
       ],

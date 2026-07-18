@@ -2,15 +2,17 @@ use crate::codegen::{
     artifact_absolute_path, check_artifact_file_set, ensure_trailing_newline, plan_artifacts,
 };
 use crate::manifest::SchemaRegistry;
+use crate::production_stage::ProductionRegistry;
 use crate::validate;
 use anyhow::{bail, Context, Result};
 use std::path::Path;
 
 pub fn run(repo_root: &Path) -> Result<()> {
     let registry = SchemaRegistry::load(repo_root)?;
+    let production = ProductionRegistry::new(&registry)?;
     validate_schema_documents(&registry)?;
 
-    let plan = plan_artifacts(&registry)?;
+    let plan = plan_artifacts(production)?;
     for artifact in plan.artifacts() {
         let path = artifact_absolute_path(repo_root, artifact);
         if !path.is_file() {
