@@ -2002,7 +2002,7 @@ JSON Schema object `oneOf`只有在每branch经canonical `$ref` resolution后均
 
 ### 13.5 MethodVersionBinding权威结构
 
-manifest未来生成的每条`MethodVersionBinding`全部字段required：
+MethodVersionBinding是未来由真实业务v2 source派生并生成catalog的权威结构；该未来切片中的每条binding全部字段required：
 
 ```text
 {
@@ -2015,9 +2015,9 @@ manifest未来生成的每条`MethodVersionBinding`全部字段required：
 }
 ```
 
-`active_request_versions`非空；legacy可空；两数组各自严格升序唯一且互斥。request map keys必须精确等于active∪legacy的十进制版本文本；response map keys必须精确等于active版本（legacy response只有明确named migration API需要时另立binding，不能混入active response map）。每个request active version恰好映射一个response schema，dispatcher按`family+method+request_version`选择两者，不能只按method猜response。schema IDs必须落在同generation target closure、命中唯一source entry且对象version一致。
+未来切片中`active_request_versions`非空；legacy可空；两数组各自严格升序唯一且互斥。request map keys必须精确等于active∪legacy的十进制版本文本；response map keys必须精确等于active版本（legacy response只有明确named migration API需要时另立binding，不能混入active response map）。每个request active version恰好映射一个response schema，未来dispatcher按`family+method+request_version`选择两者，不能只按method猜response。schema IDs必须落在同generation target closure、命中唯一source entry且对象version一致。
 
-首批八方法：
+下表是未来业务v2 lifecycle的合同目标，**不是当前manifest可加载的binding表**：
 
 | family | method | active | legacy |
 |---|---|---|---|
@@ -2030,13 +2030,36 @@ manifest未来生成的每条`MethodVersionBinding`全部字段required：
 | command | `stop.activate` | `[1]` | `[]` |
 | query | `stop.status` | `[1]` | `[]` |
 
-今后所有method lifecycle只修改manifest并重生成binding/catalog/tests；ADR只记录breaking决策，不维护运行时第二份表。
+未来所有method lifecycle只由该独立切片的manifest、生成binding/catalog和测试共同修改；ADR不维护运行时第二份表。当前manifest v2只接受required typed空数组，loader对任意非空`method_version_bindings` fail closed，避免半完成结构被当作可用binding。
 
 ### 13.6 Manifest namespace迁移合同
 
-当前source `$id`与manifest `id_base=https://schemas.shittim.local/v1/`保持不变。本轮不改manifest。后续实施一次明确migration，将`id_base`升级为`https://schemas.shittim.local/`，同时**保留所有现有source `$id`**作为历史稳定标识；新对象按组件namespace发布，例如`https://schemas.shittim.local/<component>/<object>/vN`，不得继续把全局`/v1/`误作组件。
+迁移已实施，manifest 只接受**schema_version=2**，不提供v1 alias或兼容解析。顶层字段固定为`schema_version,draft,id_base,components,method_version_bindings,schemas`，且`id_base`精确为`https://schemas.shittim.local/`。`components`为非空数组，每个对象固定字段如下：
 
-迁移gate：manifest格式版本升级；registry按URL scheme/host/port/path组件校验归属，禁止裸prefix；旧`/v1/` IDs列入explicit retained-id set且不可重用/改写；新entry必须命中声明component namespace；relative `$ref`在新base解析后仍须命中registry/target closure；生成物catalog同时可解析旧ID与新ID。测试覆盖component prefix伪装、dot/double slash、percent encoding、default port、旧ID byte preservation、重复ID、跨component未声明ref、两次生成稳定。全部通过后才切换manifest base。
+```text
+{ name, namespace, allowed_refs, retained_ids }
+```
+
+- `name`是非空 component 标识，唯一；`namespace`必须是 canonical absolute http(s) URL、无 fragment、以`/`结尾，且处于root `id_base`下的单一直接路径组件（`https://schemas.shittim.local/<name>/`）；不得使用prefix、dot segment、double slash、percent-encoded component或显式default port伪装组件；`name`必须等于该单一路径段。
+- `allowed_refs`是严格升序、无重复的其它 component name 数组；不得声明自身或未知component。跨 component `$ref` 只有目标component在源component `allowed_refs`中才可解析；同component可引用。此component-ref gate独立于且不得替代generation target closure：gate通过后，依赖仍必须声明同一generation target。
+- `retained_ids`是严格升序、无重复的canonical absolute schema IDs；一个retained ID恰好对应一个当前manifest entry及其完全未改写的source `$id`。因此retained ID禁止重绑到别的component、禁止孤儿、禁止重复；entry ID如落入任一retained set，必须恰好由其所属component保留。当前41个历史`/v1/` IDs以版本控制的不可变迁移ledger（`schemas/fixtures/manifest/retained_ids.v1.json`）逐项固定`id/component/source/source_sha256`，`SchemaRegistry::load`逐项计算实际source bytes SHA-256并同时核对manifest所有权/路径，因此ledger是每次load的生产gate，不能通过协同移动`retained_ids`和entry `component`、改路径或单独篡改仍合法的Schema bytes绕过。ledger只记录迁移时的41个历史ID，未来新ID不得加入。retained ID不得落在任何component namespace，component-native ID也不得落入retained集合；不允许新的非retained `/v1/` entry。
+- `method_version_bindings`为manifest v2 required typed字段，元素wire shape预留为§13.5的`MethodVersionBinding`全部字段；当前没有业务v2 source，故loader**只接受显式空`method_version_bindings: []`并拒绝任意非空值**，不生成八方法表，也不运行半完成的binding校验。未来独立切片必须以真实v2 source替换此empty gate，并实现manifest-derived完整验证、catalog和测试。
+- 每个entry以`component`替代旧`domain`字段；`component`必须命中唯一 component。entry ID不是该component的retained ID时，必须位于该component `namespace`。`source`必须是UTF-8 JSON string表示的exact lexical-normalized POSIX repo-relative路径，以`schemas/source/`开头；禁止absolute、backslash、空segment、`.`、`..`及`schemas/source-evil`等prefix trick。loader必须拒绝source root、source file及任一ancestor symlink，canonicalize repo/source root/file后确认regular file仍位于canonical source root内。`LoadedSchema`保存verified relative/source path，生成catalog/include path只消费该验证后事实，不允许renderer重新信任未验证输入。全部41个既有`$id`与source bytes保持不变；本次不新增业务v2 Schema。
+- registry在构造公开对象前调用单一权威`SchemaNode` walker。walker以pre-order提供canonical JSON Pointer、`is_root`与object/boolean node callback，并只遍历下列Draft 2020-12 Schema-bearing位置：map value `properties`、`patternProperties`、`dependentSchemas`、`$defs`、`definitions`；single Schema `additionalProperties`、`unevaluatedProperties`、`propertyNames`、`items`、`contains`、`unevaluatedItems`、`contentSchema`、`not`、`if`、`then`、`else`；Schema array `prefixItems`、`allOf`、`anyOf`、`oneOf`。存在但容器/node类型错误立即失败。loader对每个document用该walker建立私有不可变的authoritative SchemaNode pointer index；`resolve_ref`和public `schema_at`必须先验证目标pointer属于该index，raw JSON pointer lookup只能crate-private且命名明确。`$ref`指向`const/default/examples/enum`等实例位置时，即使目标JSON长得像Schema也fail closed；`$defs/properties/items`等合法Schema位置通过。restricted identity audit、registry `$ref` resolution/component gate、generation target dependency closure及restricted codegen support-profile audit均复用该walker callback，不得复制第二套通用位置闭集；target envelope提取只允许作为已命名的特定IR结构读取。`$ref`只在Schema node检查，禁止递归进入实例数据。map中的`$ref/$id/$schema/$dynamicRef`只是普通property/definition名称，其value仍作为Schema遍历。
+- restricted identity/ref profile：仅root允许`$id`与`$schema`；任何nested非root `$id`/`$schema`立即失败；当前不支持的`$anchor`、`$dynamicAnchor`、`$dynamicRef`、`$recursiveAnchor`、`$recursiveRef`、`$vocabulary`均立即失败。上述invariant由`SchemaRegistry::load`统一实施，因此validate/check/generate不能绕过或延后。
+- `generate`在plan/render全部成功后才进入artifact transaction。当前renderer的四个generated artifacts都在同一root，故`ArtifactPlan`和transaction入口要求distinct artifact roots**恰好一个**；0或多root明确unsupported，nested/multi-root泛化不在当前合同，未来实现必须采用新版本状态机并重新验收。transaction当前为**Linux real-platform verified**：repo root持久lock file使用Rust 1.97 `File::try_lock` OS advisory lock，文件描述符锁为权威，owner metadata只诊断；lock file不unlink，不依赖PID/stale回收。锁内先恢复旧journal，再在创建stage前durable写`Preparing`；stage、backup、rollback-discard采用固定transaction-id安全路径，均为artifact root同parent sibling，保证同filesystem。stage复制旧root（含非planned文件）、覆盖planned bytes并fsync tree，随后durable更新`Prepared`；已有root rename为backup并fsync parent，stage rename为root并fsync parent。rollback先durable写`RollingBack` substate，把new root rename到discard、恢复backup（或恢复原“不存在”）、再清discard，任意crash点重复执行不得删除已恢复old root。journal原子写为固定prefix temp regular file→file fsync→rename→repo dir fsync；write API必须区分rename未发生与rename已发生但dir fsync不确定，后者返回`commit outcome uncertain`、保留状态且绝不destructive rollback，下次按正式journal与可见路径恢复。durable `Committed`后只cleanup backup/stage/discard/journal；cleanup失败必须可见且下次可恢复。正式journal损坏fail closed并保留所有paths；无正式journal时只清固定temp prefix且验证regular non-symlink。成功允许持久lock file存在，但不得留下stage/backup/discard/journal/temp。其它平台尚未完成，必须contract-only/fail closed，不宣称跨平台durability。threat model只用advisory lock协调schema-tool generator；同用户恶意filesystem替换不在conformance安全边界，启动与每次操作仍检查symlink/类型，但不得宣称消除TOCTOU。
+
+#### 13.6.1 Artifact transaction 与 LockPort 边界
+
+artifact transaction 从 advisory FD lock 已成功取得且 owner metadata 已发布时开始。lock open/create/type/symlink/try-lock/truncate/seek/write/sync file/sync repo dir 是独立 LockPort 合同，不纳入 TransactionFs 矩阵；任一 owner metadata 失败不得读 journal、创建 stage 或改变 root，释放 FD 后下一次可成功。FD lock 权威，owner 仅诊断；lock file 永不 unlink，不按 PID/stale 回收。
+
+TransactionFs 只覆盖语义 mutation/durability boundary，不宣称底层 OS syscall 穷举；read/metadata inspection 不在 fault 闭集。每个 target 产生 typed OperationEvent（semantic phase、operation、Before/AfterSuccess、logical path roles、journal target phase，动态 occurrence 仅区分重复目录/文件）。正式 Committed journal rename 是提交点：此前 existing=Old/absent=Absent，此后=New。FailureDisposition 为 NoMutation、RolledBackBeforeReturn、RecoveryRequired { RestoreOriginal | CleanResidue }、CommitOutcomeUncertain、CleanupDeferred、StoredStateInvalid；其中 StoredStateInvalid 表示正式journal存在但无法解码或验证，恢复必须fail closed且不得改变root或授权rollback/cleanup。crash sentinel 直接传播。普通补偿错误必须保留 primary+compensation，补偿 crash 不包装为普通错误。
+
+矩阵从真实 typed trace 自动发现 reachable target，逐 target 验证 CrashBefore、CrashAfterSuccess、IoNoEffect 与已声明的代表性 IoPartial；不得把 after hook 当 I/O error。每例断言 target 精确一次、trace 前缀、即时完整 TreeSnapshot、返回 disposition、recover#1 精确终态及 recover#2 Noop/空 mutation trace。snapshot 包含 root/stage/backup/discard/formal journal/temp/lock，independent reference model 只消费 operation effect。control-flow/fault conformance 不是实际掉电介质模型；partial I/O 若无 journal-temp/stage-write/copy/remove 的明确 fake effect 不得声称覆盖。
+
+registry按URL scheme/host/port/path组件校验上述归属，禁止裸prefix。relative `$ref`在新root base下解析后仍须命中registry，并先受component-ref gate、再受target closure约束。生成物catalog同时可解析旧retained ID与未来component ID。
+
+测试覆盖manifest strict/v1拒绝、component prefix伪装、dot/double slash、percent encoding、default port、旧ID byte preservation、retained source合法Schema bytes篡改、retained重绑/协同搬家/真实孤儿/重复、retained与component namespace互斥、source absolute/`..`/source-root外repo-relative/backslash/empty/dot/prefix trick、file/ancestor symlink、nested `$id` load拒绝、`$dynamicRef`跨component在validate/check/generate均load失败、跨component未声明ref、relative/absolute/local refs、target closure独立、CLI validate在registry load时拒绝未授权ref、非空binding拒绝、两次生成稳定与失败无部分写。迁移ledger由每次registry load固定SHA-256验证41份source相对迁移前基线字节不变；四个Rust生成物在迁移提交`7fb25cf`的单次验收证据为：`catalog.rs` `94f6f7f406dd873e1c5b9989d1d007c904b4abe8aa02719c8c03393b2f97483b`、`mod.rs` `996dd678b9a505d089453b885f937de427181efef50c506ad91832eea7399939`、`typed.rs` `9ea476e2de4441af20186536e4d5c661959fef38281ad34896c293e90403ee39`、`types.rs` `e5c671f8882d31adc395a0a3a648133a03f6a0810c37c605eb535465cb9e8d4b`。这些generated hash不进入永久fixture；后续合法生成变更由Git基线与该提交验收记录审阅。
 
 ### 13.7 V2ProductionWriteCutover唯一谓词
 
