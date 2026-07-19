@@ -10,8 +10,10 @@ pub mod canonicalize;
 pub mod check;
 pub mod codegen;
 pub mod compatibility;
+pub mod conditional_envelope;
 pub mod contract_model;
 pub mod error;
+pub mod event_catalog;
 pub mod generate;
 pub mod json_pointer;
 pub mod manifest;
@@ -33,11 +35,16 @@ pub use canonicalize::{
     CanonicalizeResult,
 };
 pub use compatibility::SchemaCompatibility;
+pub use conditional_envelope::{EnvelopeConditionalBinding, EnvelopeConditionalMapping};
 pub use contract_model::{
     lower_target_contract_graph, AliasResolution, CatalogFacts, ConstJson, ContractTypeId,
     ContractTypeNode, EnvelopeWireBinding, IntegerConstraints, JsonInteger, Nullability,
     ObjectField, Presence, ScalarKind, SourceSchemaMetadata, SourceUseSite, TaggedUnionBranch,
     TargetContractGraph, TypeExpr, TypeShape, TypeUse, UnknownFieldPolicy,
+};
+pub use event_catalog::{
+    compile_target_event_catalog_facts, discover_event_catalog_authorities,
+    EventCatalogAuthorities, EventEnvelopeCatalogAuthority, EventTypeBindingFact,
 };
 pub use json_pointer::{
     apply_json_mutation, parse_array_index_token, pointer_from_decoded_fragment, select_json_value,

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/common/action_transition_ref/v1",
+  "title": "ActionTransitionRefV1",
+  "description": "Closed wire ref for an Action transition intent. Schema version is expressed by this identity; revision/generation stay on the intent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "action_id",
+    "transition_id"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "action_transition"
+    },
+    "action_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "transition_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

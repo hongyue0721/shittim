@@ -13,6 +13,7 @@
 //! or target-specific symbol decisions. Rust symbol cloning for shared `$defs`
 //! is a renderer projection concern (`ContractTypeId` ≠ `RustDeclarationId`).
 
+use crate::conditional_envelope::EnvelopeConditionalBinding;
 use crate::error::SchemaToolError;
 use crate::json_pointer::{select_json_value, JsonPointer};
 use crate::manifest::{GenerationTarget, LoadedSchema, SchemaRegistry};
@@ -331,6 +332,8 @@ pub struct ContractTypeNode {
 pub struct PayloadMapping {
     pub discriminator_value: String,
     pub payload_type: ContractTypeId,
+    /// Source `allOf` branch order, retained for diagnostics and projections.
+    pub source_order: usize,
 }
 
 /// Typed envelope wire binding discovered from conditional Schema allOf branches.
@@ -376,7 +379,10 @@ pub struct CatalogFacts {
     /// Explicit retained v1 merged methods. This legacy catalog is independent
     /// of active V2 authority, so both may be populated at the same time.
     pub kcp_legacy_v1_methods: Vec<String>,
-    pub event_v1_types: Vec<String>,
+    /// Active Event catalog bindings derived from exact EventEnvelopeV2 authority.
+    pub event_active_bindings: Vec<crate::event_catalog::EventTypeBindingFact>,
+    /// Legacy retained EventEnvelope v1 bindings. Lifecycle-orthogonal to active.
+    pub event_legacy_v1_bindings: Vec<crate::event_catalog::EventTypeBindingFact>,
     pub method_version_bindings: Vec<crate::method_bindings::MethodVersionBindingFact>,
     pub kcp_protocol_version: String,
 }
@@ -518,12 +524,7 @@ fn build_catalog_facts(
     let kcp_legacy_v1_command_methods = commands;
     let kcp_legacy_v1_query_methods = queries;
 
-    let events = retained_envelope_discriminators_in_set(
-        registry,
-        schema_set,
-        RETAINED_EVENT_ENVELOPE_ID,
-        "type",
-    )?;
+    let event_authorities = schema_set.event_catalog_authorities();
 
     Ok(CatalogFacts {
         embedded_sources,
@@ -533,7 +534,16 @@ fn build_catalog_facts(
         kcp_legacy_v1_command_methods,
         kcp_legacy_v1_query_methods,
         kcp_legacy_v1_methods,
-        event_v1_types: events,
+        event_active_bindings: event_authorities
+            .active
+            .as_ref()
+            .map(|authority| authority.bindings.clone())
+            .unwrap_or_default(),
+        event_legacy_v1_bindings: event_authorities
+            .legacy_v1
+            .as_ref()
+            .map(|authority| authority.bindings.clone())
+            .unwrap_or_default(),
         method_version_bindings: schema_set.method_version_bindings().to_vec(),
         kcp_protocol_version: "1.0".into(),
     })
@@ -542,8 +552,6 @@ fn build_catalog_facts(
 const RETAINED_COMMAND_ENVELOPE_ID: &str =
     "https://schemas.shittim.local/v1/kcp/command_envelope.json";
 const RETAINED_QUERY_ENVELOPE_ID: &str = "https://schemas.shittim.local/v1/kcp/query_envelope.json";
-const RETAINED_EVENT_ENVELOPE_ID: &str =
-    "https://schemas.shittim.local/v1/event/event_envelope.json";
 
 fn retained_envelope_discriminators_in_set(
     registry: &SchemaRegistry,
@@ -566,14 +574,6 @@ fn retained_envelope_discriminators_in_set(
             SchemaToolError::msg(format!("{} missing {property}: {error}", loaded.entry().id))
         })?,
     )
-}
-
-fn select_constant_pointer<'a>(
-    document: &'a Value,
-    decoded_segments: &[&str],
-) -> Result<&'a Value, SchemaToolError> {
-    let pointer = JsonPointer::from_decoded_segments(decoded_segments.iter().copied());
-    select_json_value(document, &pointer)
 }
 
 // ---------------------------------------------------------------------------
@@ -1512,12 +1512,30 @@ fn discover_typed_envelopes(
     nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
 ) -> Result<Vec<EnvelopeWireBinding>> {
     let mut bindings = Vec::new();
+    let event_authorities = schema_set.event_catalog_authorities();
+    let event_binding_ids: BTreeSet<&str> = event_authorities
+        .active
+        .iter()
+        .chain(event_authorities.legacy_v1.iter())
+        .map(|authority| authority.schema_id.as_str())
+        .collect();
     for schema_id in schema_set.closure() {
         let loaded = registry.get(schema_id)?;
         if loaded.entry.kind != "envelope" {
             continue;
         }
-        if let Some(binding) = parse_envelope_binding(registry, loaded, nodes)? {
+        if loaded.entry.component == "event" && !event_binding_ids.contains(schema_id.as_str()) {
+            continue;
+        }
+        let cached_binding = registry.conditional_envelope_binding(schema_id)?;
+        let projected = project_envelope_binding(loaded, cached_binding, nodes)?;
+        if loaded.entry.component == "event" && projected.is_none() {
+            return Err(mapping_error(
+                schema_id,
+                "validated Event authority lost its conditional mapping",
+            ));
+        }
+        if let Some(binding) = projected {
             for mapping in &binding.mappings {
                 if !schema_set
                     .closure()
@@ -1539,199 +1557,22 @@ fn discover_typed_envelopes(
     Ok(bindings)
 }
 
-fn parse_envelope_binding(
-    registry: &SchemaRegistry,
+fn project_envelope_binding(
     loaded: &LoadedSchema,
+    binding: Option<&EnvelopeConditionalBinding>,
     nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
 ) -> Result<Option<EnvelopeWireBinding>> {
-    let document = &loaded.document;
-    let properties = document
-        .get("properties")
-        .and_then(Value::as_object)
-        .ok_or_else(|| SchemaToolError::msg(format!("{} missing properties", loaded.entry.id)))?;
-    if !properties.contains_key("payload") {
-        return Ok(None);
-    }
-    let branches = document.get("allOf").and_then(Value::as_array);
-    let Some(branches) = branches else {
+    let Some(binding) = binding else {
         return Ok(None);
     };
-    if branches.is_empty() {
-        return Ok(None);
-    }
+    Ok(Some(project_envelope_wire_binding(loaded, nodes, binding)?))
+}
 
-    // Unique analysis: count whole-schema payload $ref targets across allOf branches.
-    // 0 => intentionally untyped (response-only success path).
-    // >=1 => every branch must be a complete bijective mapping or fail closed.
-    let mut payload_ref_count = 0usize;
-    for (index, branch) in branches.iter().enumerate() {
-        if let Some(payload_ref) =
-            select_constant_pointer(branch, &["then", "properties", "payload", "$ref"])
-                .ok()
-                .and_then(Value::as_str)
-        {
-            let resolved =
-                resolve_ref(registry, &loaded.entry.id, payload_ref).map_err(|error| {
-                    mapping_error(
-                        &format!("{}/allOf/{index}", loaded.entry.id),
-                        &format!("payload $ref resolution failed: {error}"),
-                    )
-                })?;
-            if resolved.type_id.is_root() {
-                payload_ref_count += 1;
-            } else {
-                return Err(mapping_error(
-                    &format!("{}/allOf/{index}", loaded.entry.id),
-                    "typed payload mapping must reference a whole manifest schema",
-                ));
-            }
-        }
-    }
-    if payload_ref_count == 0 {
-        // Response envelope and other conditional envelopes without whole-schema
-        // payload refs: intentionally untyped.
-        return Ok(None);
-    }
-
-    // >=1 whole-schema payload refs: require a complete bijective discriminator mapping.
-    let first_if_properties = select_constant_pointer(&branches[0], &["if", "properties"])
-        .ok()
-        .and_then(Value::as_object)
-        .ok_or_else(|| mapping_error(&loaded.entry.id, "allOf branch missing if.properties"))?;
-    let discriminator = first_if_properties
-        .iter()
-        .find_map(|(name, schema)| {
-            let is_string_const = schema.get("const").and_then(Value::as_str).is_some();
-            let is_closed_enum = properties.get(name).is_some_and(is_string_enum);
-            let discriminator_const_pointer =
-                JsonPointer::from_decoded_segments(["if", "properties", name.as_str(), "const"]);
-            let all_branches_map_payload = branches.iter().all(|branch| {
-                select_json_value(branch, &discriminator_const_pointer)
-                    .ok()
-                    .and_then(Value::as_str)
-                    .is_some()
-                    && select_constant_pointer(
-                        branch,
-                        &["then", "properties", "payload", "$ref"],
-                    )
-                    .ok()
-                    .and_then(Value::as_str)
-                    .is_some()
-            });
-            (is_string_const && is_closed_enum && all_branches_map_payload).then(|| name.clone())
-        })
-        .ok_or_else(|| {
-            mapping_error(
-                &loaded.entry.id,
-                "envelope has whole-schema payload $ref(s) but no complete bijective discriminator mapping",
-            )
-        })?;
-
-    let enum_values =
-        string_enum_values(properties.get(&discriminator).ok_or_else(|| {
-            mapping_error(&loaded.entry.id, "discriminator property is missing")
-        })?)?;
-    if enum_values.is_empty() {
-        return Err(mapping_error(
-            &loaded.entry.id,
-            "discriminator enum is empty",
-        ));
-    }
-    let enum_set: BTreeSet<_> = enum_values.iter().cloned().collect();
-    if enum_set.len() != enum_values.len() {
-        return Err(mapping_error(
-            &loaded.entry.id,
-            "discriminator enum contains duplicates",
-        ));
-    }
-
-    let mut by_value = BTreeMap::new();
-    for (index, branch) in branches.iter().enumerate() {
-        let branch_location = format!("{}/allOf/{index}", loaded.entry.id);
-        let if_properties = select_constant_pointer(branch, &["if", "properties"])
-            .ok()
-            .and_then(Value::as_object)
-            .ok_or_else(|| mapping_error(&branch_location, "missing if.properties"))?;
-        let discriminator_schema = if_properties.get(&discriminator).ok_or_else(|| {
-            mapping_error(
-                &branch_location,
-                "branch does not use the envelope discriminator",
-            )
-        })?;
-        let value = discriminator_schema
-            .get("const")
-            .and_then(Value::as_str)
-            .ok_or_else(|| mapping_error(&branch_location, "discriminator const must be a string"))?
-            .to_string();
-        let required = select_constant_pointer(branch, &["if", "required"])
-            .ok()
-            .and_then(Value::as_array)
-            .is_some_and(|items| {
-                items
-                    .iter()
-                    .any(|item| item.as_str() == Some(&discriminator))
-            });
-        if !required {
-            return Err(mapping_error(
-                &branch_location,
-                "if.required must contain the discriminator",
-            ));
-        }
-        let payload_ref =
-            select_constant_pointer(branch, &["then", "properties", "payload", "$ref"])
-                .ok()
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    mapping_error(&branch_location, "missing then.properties.payload.$ref")
-                })?;
-        let resolved = resolve_ref(registry, &loaded.entry.id, payload_ref)?;
-        if !resolved.type_id.is_root() {
-            return Err(mapping_error(
-                &branch_location,
-                "typed payload mapping must reference a whole manifest schema",
-            ));
-        }
-        if by_value.contains_key(&value) {
-            return Err(mapping_error(
-                &branch_location,
-                &format!("duplicate payload mapping for discriminator {value:?}"),
-            ));
-        }
-        by_value.insert(
-            value.clone(),
-            PayloadMapping {
-                discriminator_value: value,
-                payload_type: resolved.type_id,
-            },
-        );
-    }
-
-    let mapping_set: BTreeSet<_> = by_value.keys().cloned().collect();
-    if mapping_set != enum_set {
-        let missing: Vec<_> = enum_set.difference(&mapping_set).cloned().collect();
-        let extra: Vec<_> = mapping_set.difference(&enum_set).cloned().collect();
-        return Err(mapping_error(
-            &loaded.entry.id,
-            &format!("discriminator enum/mapping mismatch; missing={missing:?}, extra={extra:?}"),
-        ));
-    }
-    let mappings = enum_values
-        .iter()
-        .map(|value| {
-            by_value
-                .remove(value)
-                .ok_or_else(|| mapping_error(&loaded.entry.id, "internal mapping order failure"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-
-    let required = required_set(document);
-    if !required.contains(&discriminator) || !required.contains("payload") {
-        return Err(mapping_error(
-            &loaded.entry.id,
-            "typed envelope requires discriminator and payload fields",
-        ));
-    }
-
+fn project_envelope_wire_binding(
+    loaded: &LoadedSchema,
+    nodes: &BTreeMap<ContractTypeId, ContractTypeNode>,
+    binding: &EnvelopeConditionalBinding,
+) -> Result<EnvelopeWireBinding> {
     let envelope_type = ContractTypeId::root(&loaded.entry.id);
     let node = nodes.get(&envelope_type).ok_or_else(|| {
         mapping_error(
@@ -1739,31 +1580,28 @@ fn parse_envelope_binding(
             "envelope root object missing from contract graph",
         )
     })?;
-    match &node.shape {
-        TypeShape::Object { fields, .. } => {
-            // Structural check: graph must already hold every non-payload field.
-            for field in fields {
-                if field.json_name == discriminator || field.json_name == "payload" {
-                    continue;
-                }
-                let _ = field;
-            }
-        }
-        _ => {
-            return Err(mapping_error(
-                &loaded.entry.id,
-                "typed envelope root must lower to an object node",
-            ));
-        }
+    if !matches!(node.shape, TypeShape::Object { .. }) {
+        return Err(mapping_error(
+            &loaded.entry.id,
+            "typed envelope root must lower to an object node",
+        ));
     }
 
-    Ok(Some(EnvelopeWireBinding {
+    Ok(EnvelopeWireBinding {
         schema_id: loaded.entry.id.clone(),
         schema_title: loaded.entry.title.clone(),
-        discriminator,
+        discriminator: binding.discriminator.clone(),
         envelope_type,
-        mappings,
-    }))
+        mappings: binding
+            .mappings
+            .iter()
+            .map(|mapping| PayloadMapping {
+                discriminator_value: mapping.discriminator_value.clone(),
+                payload_type: mapping.payload_type.clone(),
+                source_order: mapping.source_order,
+            })
+            .collect(),
+    })
 }
 
 fn mapping_error(location: &str, detail: &str) -> anyhow::Error {

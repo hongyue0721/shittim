@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/approval_record_kind/v2",
+  "title": "ApprovalRecordKindV2",
+  "description": "Approval domain record kind discriminator for immutable chain heads.",
+  "type": "string",
+  "enum": [
+    "request",
+    "resolution",
+    "invalidation"
+  ],
+  "additionalProperties": false
+}

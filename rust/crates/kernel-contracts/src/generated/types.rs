@@ -91,6 +91,31 @@ pub struct ActionRequestVerificationPolicy {
     pub timeout: String,
 }
 
+/// Generated from `https://schemas.shittim.local/event/action_state_changed_payload/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionStateChangedPayloadV1 {
+    pub action_id: String,
+    pub action_revision: i64,
+    pub approval_resolution_ref: Option<String>,
+    pub changed_at: String,
+    pub execution_generation: i64,
+    pub from_status: ActionStatus,
+    pub materialized_child_task_ref: Option<String>,
+    pub permission_decision_ref: Option<String>,
+    pub reason_code: String,
+    pub schema_version: ActionStateChangedPayloadV1SchemaVersion,
+    pub task_id: String,
+    pub to_status: ActionStatus,
+    pub verification_result_refs: Vec<String>,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/event/action_state_changed_payload/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ActionStateChangedPayloadV1SchemaVersion;
+impl Serialize for ActionStateChangedPayloadV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ActionStateChangedPayloadV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated string enum from `https://schemas.shittim.local/v1/common/action_status.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ActionStatus {
@@ -149,6 +174,22 @@ impl ActionStatus {
             Self::Cancelled => "cancelled",
         }
     }
+}
+
+/// Generated from `https://schemas.shittim.local/common/action_transition_ref/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionTransitionRefV1 {
+    pub action_id: String,
+    pub kind: ActionTransitionRefV1Kind,
+    pub transition_id: String,
+}
+
+/// Generated string const from `https://schemas.shittim.local/common/action_transition_ref/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ActionTransitionRefV1Kind {
+    #[serde(rename = "action_transition")]
+    Value,
 }
 
 /// Generated from `https://schemas.shittim.local/v1/common/actor.json`
@@ -324,6 +365,34 @@ impl ApprovalRecordDecision {
     }
 }
 
+/// Generated string enum from `https://schemas.shittim.local/policy/approval_record_kind/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApprovalRecordKindV2 {
+    #[serde(rename = "request")]
+    Request,
+    #[serde(rename = "resolution")]
+    Resolution,
+    #[serde(rename = "invalidation")]
+    Invalidation,
+}
+
+impl ApprovalRecordKindV2 {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Request,
+        Self::Resolution,
+        Self::Invalidation,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Request => "request",
+            Self::Resolution => "resolution",
+            Self::Invalidation => "invalidation",
+        }
+    }
+}
+
 /// Generated integer const from `https://schemas.shittim.local/v1/policy/approval_record.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct ApprovalRecordSchemaVersion;
@@ -340,6 +409,95 @@ pub struct ApprovalRecordTarget {
     pub plan_step_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+}
+
+/// Generated from `https://schemas.shittim.local/event/approval_state_changed_payload/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalStateChangedPayloadV1 {
+    pub action_id: Option<String>,
+    pub approval_chain_id: String,
+    pub change_kind: ApprovalStateChangedPayloadV1ChangeKind,
+    pub changed_at: String,
+    pub confirmation_mode: ConfirmationModeV1,
+    pub from_head_ref: Option<String>,
+    pub from_record_kind: Option<ApprovalRecordKindV2>,
+    pub invalidation_ref: Option<String>,
+    pub permission_decision_ref: Option<String>,
+    pub reason_code: String,
+    pub replacement_request_ref: Option<String>,
+    pub request_ref: Option<String>,
+    pub resolution_ref: Option<String>,
+    pub schema_version: ApprovalStateChangedPayloadV1SchemaVersion,
+    pub subject_kind: ApprovalSubjectKindV2,
+    pub to_head_ref: String,
+    pub to_record_kind: ApprovalRecordKindV2,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/event/approval_state_changed_payload/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApprovalStateChangedPayloadV1ChangeKind {
+    #[serde(rename = "initial_request")]
+    InitialRequest,
+    #[serde(rename = "resolution")]
+    Resolution,
+    #[serde(rename = "invalidation_without_replacement")]
+    InvalidationWithoutReplacement,
+    #[serde(rename = "replacement_request")]
+    ReplacementRequest,
+}
+
+impl ApprovalStateChangedPayloadV1ChangeKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::InitialRequest,
+        Self::Resolution,
+        Self::InvalidationWithoutReplacement,
+        Self::ReplacementRequest,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InitialRequest => "initial_request",
+            Self::Resolution => "resolution",
+            Self::InvalidationWithoutReplacement => "invalidation_without_replacement",
+            Self::ReplacementRequest => "replacement_request",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/event/approval_state_changed_payload/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ApprovalStateChangedPayloadV1SchemaVersion;
+impl Serialize for ApprovalStateChangedPayloadV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ApprovalStateChangedPayloadV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/approval_subject_kind/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApprovalSubjectKindV2 {
+    #[serde(rename = "operation")]
+    Operation,
+    #[serde(rename = "task_proposal")]
+    TaskProposal,
+    #[serde(rename = "plan_revision")]
+    PlanRevision,
+}
+
+impl ApprovalSubjectKindV2 {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Operation,
+        Self::TaskProposal,
+        Self::PlanRevision,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Operation => "operation",
+            Self::TaskProposal => "task_proposal",
+            Self::PlanRevision => "plan_revision",
+        }
+    }
 }
 
 /// Generated from `https://schemas.shittim.local/v1/audit/audit_record.json`
@@ -641,6 +799,29 @@ impl CausationRefKind {
     }
 }
 
+/// Generated internally tagged union from `https://schemas.shittim.local/common/causation_ref/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub enum CausationRefV2 {
+    #[serde(rename = "command_request")]
+    CommandRequest {
+        id: String,
+    },
+    #[serde(rename = "event")]
+    Event {
+        id: String,
+    },
+    #[serde(rename = "action")]
+    Action {
+        id: String,
+    },
+    #[serde(rename = "action_transition")]
+    ActionTransition {
+        action_id: String,
+        transition_id: String,
+    },
+}
+
 /// Generated from `https://schemas.shittim.local/task/child_task_materialization_allocation/v1`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -688,6 +869,42 @@ pub struct ChildTaskProposalV1 {
 pub struct ChildTaskProposalV1SchemaVersion;
 impl Serialize for ChildTaskProposalV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for ChildTaskProposalV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/common/confirmation_mode/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ConfirmationModeV1 {
+    #[serde(rename = "generic")]
+    Generic,
+    #[serde(rename = "local")]
+    Local,
+    #[serde(rename = "system_authentication")]
+    SystemAuthentication,
+    #[serde(rename = "remote_signature")]
+    RemoteSignature,
+    #[serde(rename = "plan_revision")]
+    PlanRevision,
+}
+
+impl ConfirmationModeV1 {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Generic,
+        Self::Local,
+        Self::SystemAuthentication,
+        Self::RemoteSignature,
+        Self::PlanRevision,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::Local => "local",
+            Self::SystemAuthentication => "system_authentication",
+            Self::RemoteSignature => "remote_signature",
+            Self::PlanRevision => "plan_revision",
+        }
+    }
+}
 
 /// Generated from `https://schemas.shittim.local/v1/common/content_origin.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -965,6 +1182,75 @@ impl EventEnvelopeType {
         match self {
             Self::TaskCreated => "task.created",
             Self::TaskStateChanged => "task.state_changed",
+            Self::StopFenceActivated => "stop_fence.activated",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/event/event_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EventEnvelopeV2 {
+    pub aggregate_id: String,
+    pub aggregate_type: String,
+    pub causation_ref: CausationRefV2,
+    pub correlation_id: String,
+    pub dedup_key: String,
+    pub event_id: String,
+    pub occurred_at: String,
+    pub outbox_position: String,
+    pub payload: EventEnvelopeV2OpenPayload,
+    pub schema_version: EventEnvelopeV2SchemaVersion,
+    pub sequence: i64,
+    #[serde(rename = "type")]
+    pub type_: EventEnvelopeV2Type,
+}
+
+/// Generated from `https://schemas.shittim.local/event/event_envelope/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventEnvelopeV2OpenPayload {
+    pub schema_version: i64,
+    #[serde(default, flatten)]
+    pub additional_properties: serde_json::Map<String, JsonValue>,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/event/event_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct EventEnvelopeV2SchemaVersion;
+impl Serialize for EventEnvelopeV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for EventEnvelopeV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/event/event_envelope/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EventEnvelopeV2Type {
+    #[serde(rename = "task.created")]
+    TaskCreated,
+    #[serde(rename = "task.state_changed")]
+    TaskStateChanged,
+    #[serde(rename = "action.state_changed")]
+    ActionStateChanged,
+    #[serde(rename = "approval.state_changed")]
+    ApprovalStateChanged,
+    #[serde(rename = "stop_fence.activated")]
+    StopFenceActivated,
+}
+
+impl EventEnvelopeV2Type {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreated,
+        Self::TaskStateChanged,
+        Self::ActionStateChanged,
+        Self::ApprovalStateChanged,
+        Self::StopFenceActivated,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TaskCreated => "task.created",
+            Self::TaskStateChanged => "task.state_changed",
+            Self::ActionStateChanged => "action.state_changed",
+            Self::ApprovalStateChanged => "approval.state_changed",
             Self::StopFenceActivated => "stop_fence.activated",
         }
     }
@@ -3422,6 +3708,46 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn approval_record_kind_v2_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalRecordKindV2::ALL,
+            &[
+                "request",
+                "resolution",
+                "invalidation",
+            ],
+            ApprovalRecordKindV2::as_str,
+        );
+    }
+
+    #[test]
+    fn approval_state_changed_payload_v1_change_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalStateChangedPayloadV1ChangeKind::ALL,
+            &[
+                "initial_request",
+                "resolution",
+                "invalidation_without_replacement",
+                "replacement_request",
+            ],
+            ApprovalStateChangedPayloadV1ChangeKind::as_str,
+        );
+    }
+
+    #[test]
+    fn approval_subject_kind_v2_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalSubjectKindV2::ALL,
+            &[
+                "operation",
+                "task_proposal",
+                "plan_revision",
+            ],
+            ApprovalSubjectKindV2::as_str,
+        );
+    }
+
+    #[test]
     fn audit_record_audit_type_string_enum_contract() {
         assert_string_enum_contract(
             AuditRecordAuditType::ALL,
@@ -3519,6 +3845,21 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn confirmation_mode_v1_string_enum_contract() {
+        assert_string_enum_contract(
+            ConfirmationModeV1::ALL,
+            &[
+                "generic",
+                "local",
+                "system_authentication",
+                "remote_signature",
+                "plan_revision",
+            ],
+            ConfirmationModeV1::as_str,
+        );
+    }
+
+    #[test]
     fn content_origin_carrier_ref_kind_string_enum_contract() {
         assert_string_enum_contract(
             ContentOriginCarrierRefKind::ALL,
@@ -3595,6 +3936,21 @@ mod string_enum_contracts {
                 "stop_fence.activated",
             ],
             EventEnvelopeType::as_str,
+        );
+    }
+
+    #[test]
+    fn event_envelope_v2_type_string_enum_contract() {
+        assert_string_enum_contract(
+            EventEnvelopeV2Type::ALL,
+            &[
+                "task.created",
+                "task.state_changed",
+                "action.state_changed",
+                "approval.state_changed",
+                "stop_fence.activated",
+            ],
+            EventEnvelopeV2Type::as_str,
         );
     }
 

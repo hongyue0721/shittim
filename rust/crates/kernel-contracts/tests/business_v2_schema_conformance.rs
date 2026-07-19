@@ -1,9 +1,10 @@
-//! First-batch business-v2 Schema/typed conformance.
+//! First-batch task-creation business-v2 Schema/typed conformance.
 //!
-//! Scope: 12 component-native source/manifest entries, generated root types,
-//! shared `$defs` host identity, Envelope V2 structure, allocation shape, and
-//! production-empty MethodVersionBindings. Official JCS/hash fixtures are a
-//! later independent commit and are intentionally not committed here.
+//! Scope: the historical first task-creation batch of 12 component-native roots
+//! remains covered here, while production now also contains the Event v2 eight
+//! schema batch (61 total = 41 retained + 20 component-native). Official
+//! JCS/hash fixtures are a later independent commit and are intentionally not
+//! committed here.
 
 use kernel_contracts::{
     decode_validated, validate_json, ChildTaskMaterializationAllocationV1, ChildTaskProposalV1,
@@ -11,7 +12,8 @@ use kernel_contracts::{
     KcpQueryEnvelopeV2, KcpQueryEnvelopeV2Payload, MethodVersionBinding,
     NormalizedChildTaskProposalV1, NormalizedRootTaskCreatePayloadV2, RootTaskCreateAllocationV2,
     RootTaskCreateIdempotencyProjectionV1, SchemaCatalog, TaskCreateRequestV2,
-    TaskCreateResponseV2, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope, EVENT_V1_TYPES,
+    TaskCreateResponseV2, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope, EVENT_ACTIVE_BINDINGS,
+    EVENT_ACTIVE_TYPES, EVENT_LEGACY_V1_BINDINGS, EVENT_LEGACY_V1_TYPES,
     KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS, KCP_ENVELOPE_AUTHORITY_METHODS,
     KCP_ENVELOPE_AUTHORITY_QUERY_METHODS, KCP_LEGACY_V1_METHODS, KCP_PROTOCOL_VERSION,
     METHOD_VERSION_BINDINGS,
@@ -280,15 +282,15 @@ where
 }
 
 #[test]
-fn embedded_catalog_contains_exactly_53_and_twelve_business_v2_roots() {
+fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_creation_roots() {
     let catalog = catalog();
     let ids = catalog.schema_ids();
-    // Production is exactly 53. Synthetic probe repos used by schema-tool tests may
-    // temporarily append extra component-native entries; those must not weaken the
-    // 12-root identity assertions below.
+    // Production is exactly 61 = 41 retained + 20 component-native. Synthetic probe
+    // repos used by schema-tool tests may temporarily append extra component-native
+    // entries; those must not weaken the 12-root identity assertions below.
     assert!(
-        ids.len() >= 53,
-        "embedded catalog must contain at least production 53 schemas, got {}",
+        ids.len() >= 61,
+        "embedded catalog must contain at least production 61 schemas, got {}",
         ids.len()
     );
     let retained_prefix = "https://schemas.shittim.local/v1/";
@@ -312,14 +314,45 @@ fn embedded_catalog_contains_exactly_53_and_twelve_business_v2_roots() {
             );
         }
     }
-    // When the embedded catalog is pure production, total must be exact.
-    if ids.iter().all(|id| {
-        id.starts_with(retained_prefix)
-            || BUSINESS_V2_ROOTS
-                .iter()
-                .any(|(business_id, _, _)| business_id == id)
-    }) {
-        assert_eq!(ids.len(), 53, "pure production catalog must be exactly 53");
+    assert_eq!(
+        BUSINESS_V2_ROOTS.len(),
+        12,
+        "historical task-creation batch remains 12 roots"
+    );
+    // Pure production catalogs must still be exact 61. Probe-only extras are allowed
+    // only when additional component-native ids are present beyond the production set.
+    let production_native_ids: BTreeSet<&str> = [
+        "https://schemas.shittim.local/common/action_transition_ref/v1",
+        "https://schemas.shittim.local/common/causation_ref/v2",
+        "https://schemas.shittim.local/common/confirmation_mode/v1",
+        "https://schemas.shittim.local/common/input_content_origin/v1",
+        "https://schemas.shittim.local/event/action_state_changed_payload/v1",
+        "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
+        "https://schemas.shittim.local/event/event_envelope/v2",
+        "https://schemas.shittim.local/kcp/command_envelope/v2",
+        "https://schemas.shittim.local/kcp/query_envelope/v2",
+        "https://schemas.shittim.local/kcp/task_create_request/v2",
+        "https://schemas.shittim.local/kcp/task_create_response/v2",
+        "https://schemas.shittim.local/policy/approval_record_kind/v2",
+        "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+        "https://schemas.shittim.local/task/child_task_materialization_allocation/v1",
+        "https://schemas.shittim.local/task/child_task_proposal/v1",
+        "https://schemas.shittim.local/task/input_task_scope/v1",
+        "https://schemas.shittim.local/task/normalized_child_task_proposal/v1",
+        "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2",
+        "https://schemas.shittim.local/task/root_task_create_allocation/v2",
+        "https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1",
+    ]
+    .into_iter()
+    .collect();
+    let extra_native = ids
+        .iter()
+        .filter(|id| {
+            !id.starts_with(retained_prefix) && !production_native_ids.contains(id.as_str())
+        })
+        .count();
+    if extra_native == 0 {
+        assert_eq!(ids.len(), 61, "pure production catalog must be exactly 61");
     }
 }
 
@@ -384,7 +417,10 @@ fn envelope_authority_and_legacy_catalogs_are_each_eight_and_bindings_empty() {
     assert_eq!(KCP_ENVELOPE_AUTHORITY_METHODS.len(), 8);
     assert_eq!(KCP_LEGACY_V1_METHODS.len(), 8);
     assert_eq!(KCP_PROTOCOL_VERSION, "1.0");
-    assert_eq!(EVENT_V1_TYPES.len(), 3);
+    assert_eq!(EVENT_ACTIVE_BINDINGS.len(), 5);
+    assert_eq!(EVENT_ACTIVE_TYPES.len(), 5);
+    assert_eq!(EVENT_LEGACY_V1_BINDINGS.len(), 3);
+    assert_eq!(EVENT_LEGACY_V1_TYPES.len(), 3);
     assert!(METHOD_VERSION_BINDINGS.is_empty());
     for method in [
         "task.create",

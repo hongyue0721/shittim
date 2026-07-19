@@ -38,9 +38,9 @@
 //! not need `Box`.
 
 use crate::contract_model::{
-    ConstJson, ContractTypeId, EnvelopeWireBinding, IntegerConstraints, JsonInteger, Nullability,
-    Presence, ScalarKind, SourceUseSite, TargetContractGraph, TypeExpr, TypeShape, TypeUse,
-    UnknownFieldPolicy,
+    CatalogFacts, ConstJson, ContractTypeId, EnvelopeWireBinding, IntegerConstraints, JsonInteger,
+    Nullability, Presence, ScalarKind, SourceUseSite, TargetContractGraph, TypeExpr, TypeShape,
+    TypeUse, UnknownFieldPolicy,
 };
 use crate::error::SchemaToolError;
 use crate::names::{to_pascal_case, to_snake_case, to_upper_snake_case};
@@ -565,6 +565,26 @@ impl<'a> Projector<'a> {
         Ok(id)
     }
 
+    /// Renderer projection hint selected before declaration naming. This is
+    /// language-local policy derived from typed-envelope symbol reservations.
+    fn projected_field_type_hint(&self, rust_name: &str, json_name: &str) -> String {
+        let default = format!("{rust_name}{}", to_pascal_case(json_name));
+        let reserved: BTreeSet<String> = self
+            .graph
+            .envelopes
+            .iter()
+            .flat_map(|binding| {
+                let (typed, payload, raw) = typed_envelope_symbol_names(&binding.schema_title);
+                [typed, payload, raw]
+            })
+            .collect();
+        if reserved.contains(&default) {
+            format!("{rust_name}Open{}", to_pascal_case(json_name))
+        } else {
+            default
+        }
+    }
+
     fn project_shape(
         &mut self,
         shape: &TypeShape,
@@ -580,7 +600,7 @@ impl<'a> Projector<'a> {
             } => {
                 let mut projected = Vec::new();
                 for field in fields {
-                    let field_name = format!("{rust_name}{}", to_pascal_case(&field.json_name));
+                    let field_name = self.projected_field_type_hint(rust_name, &field.json_name);
                     let child_lineage = {
                         let mut lineage = use_site_lineage.to_vec();
                         lineage.push(field.ty.source.clone());
@@ -1461,7 +1481,7 @@ pub fn render_catalog_module(graph: &TargetContractGraph) -> Result<String> {
         &graph.catalog.kcp_legacy_v1_methods,
     );
 
-    render_str_slice(&mut out, "EVENT_V1_TYPES", &graph.catalog.event_v1_types);
+    render_event_type_bindings(&mut out, &graph.catalog)?;
     out.push_str(&format!(
         "pub const KCP_PROTOCOL_VERSION: &str = {:?};\n",
         graph.catalog.kcp_protocol_version
@@ -1469,6 +1489,81 @@ pub fn render_catalog_module(graph: &TargetContractGraph) -> Result<String> {
 
     render_method_version_bindings(&mut out, &graph.catalog.method_version_bindings)?;
     Ok(out)
+}
+
+fn render_event_type_bindings(out: &mut String, catalog: &CatalogFacts) -> Result<()> {
+    out.push_str(
+        "/// Event type to aggregate/payload binding fact derived from Envelope root mapping.\n",
+    );
+    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+    out.push_str("pub struct EventTypeBinding {\n");
+    out.push_str("    pub event_type: &'static str,\n");
+    out.push_str("    pub aggregate_type: &'static str,\n");
+    out.push_str("    pub payload_schema_id: &'static str,\n");
+    out.push_str("    pub payload_schema_version: u64,\n");
+    out.push_str("}\n\n");
+
+    out.push_str(
+        "const fn project_event_types<const N: usize>(\n    bindings: &[EventTypeBinding; N],\n) -> [&'static str; N] {\n    let mut types = [\"\"; N];\n    let mut index = 0;\n    while index < N {\n        types[index] = bindings[index].event_type;\n        index += 1;\n    }\n    types\n}\n\n",
+    );
+
+    render_event_binding_array(
+        out,
+        "EVENT_ACTIVE_BINDING_ARRAY",
+        &catalog.event_active_bindings,
+    )?;
+    render_event_binding_array(
+        out,
+        "EVENT_LEGACY_V1_BINDING_ARRAY",
+        &catalog.event_legacy_v1_bindings,
+    )?;
+
+    out.push_str(
+        "const EVENT_ACTIVE_TYPE_ARRAY: [&str; EVENT_ACTIVE_BINDING_ARRAY.len()] =\n    project_event_types(&EVENT_ACTIVE_BINDING_ARRAY);\n",
+    );
+    out.push_str(
+        "const EVENT_LEGACY_V1_TYPE_ARRAY: [&str; EVENT_LEGACY_V1_BINDING_ARRAY.len()] =\n    project_event_types(&EVENT_LEGACY_V1_BINDING_ARRAY);\n\n",
+    );
+
+    out.push_str(
+        "pub const EVENT_ACTIVE_BINDINGS: &[EventTypeBinding] = &EVENT_ACTIVE_BINDING_ARRAY;\n",
+    );
+    out.push_str(
+        "pub const EVENT_LEGACY_V1_BINDINGS: &[EventTypeBinding] = &EVENT_LEGACY_V1_BINDING_ARRAY;\n",
+    );
+    out.push_str("pub const EVENT_ACTIVE_TYPES: &[&str] = &EVENT_ACTIVE_TYPE_ARRAY;\n");
+    out.push_str("pub const EVENT_LEGACY_V1_TYPES: &[&str] = &EVENT_LEGACY_V1_TYPE_ARRAY;\n\n");
+    Ok(())
+}
+
+fn render_event_binding_array(
+    out: &mut String,
+    name: &str,
+    bindings: &[crate::event_catalog::EventTypeBindingFact],
+) -> Result<()> {
+    out.push_str(&format!(
+        "const {name}: [EventTypeBinding; {}] = [\n",
+        bindings.len()
+    ));
+    for binding in bindings {
+        out.push_str("    EventTypeBinding {\n");
+        out.push_str(&format!("        event_type: {:?},\n", binding.event_type));
+        out.push_str(&format!(
+            "        aggregate_type: {:?},\n",
+            binding.aggregate_type
+        ));
+        out.push_str(&format!(
+            "        payload_schema_id: {:?},\n",
+            binding.payload_schema_id
+        ));
+        out.push_str(&format!(
+            "        payload_schema_version: {},\n",
+            binding.payload_schema_version
+        ));
+        out.push_str("    },\n");
+    }
+    out.push_str("];\n\n");
+    Ok(())
 }
 
 fn render_method_version_bindings(
@@ -1950,15 +2045,8 @@ fn render_typed_envelope(
     decl_by_id: &BTreeMap<RustDeclarationId, &ProjectedDecl>,
     imports: &mut BTreeSet<String>,
 ) -> Result<String> {
-    let base_name = typed_envelope_base_name(&binding.schema_title);
-    let api_prefix = if binding.schema_title.starts_with("Kcp") {
-        "Kcp"
-    } else {
-        ""
-    };
-    let payload_enum_name = format!("{api_prefix}{base_name}Payload");
-    let typed_name = format!("Typed{api_prefix}{base_name}Envelope");
-    let raw_name = format!("Raw{api_prefix}{base_name}Envelope");
+    let (typed_name, payload_enum_name, raw_name) =
+        typed_envelope_symbol_names(&binding.schema_title);
     let schema_const_name = format!("{}_SCHEMA_ID", to_upper_snake_case(&binding.schema_title));
 
     let mut variant_to_value: BTreeMap<String, String> = BTreeMap::new();
@@ -2124,13 +2212,37 @@ fn collect_named_type_imports(rust_type: &str, imports: &mut BTreeSet<String>) {
     }
 }
 
-fn typed_envelope_base_name(title: &str) -> String {
-    let name = to_pascal_case(title);
-    let without_prefix = name.strip_prefix("Kcp").unwrap_or(&name);
-    without_prefix
-        .strip_suffix("Envelope")
-        .unwrap_or(without_prefix)
-        .to_string()
+/// Renderer-only public symbol policy for typed envelopes.
+///
+/// Neutral IR never carries these names. Event v1 keeps historical
+/// `TypedEventEnvelope`/`EventPayload`; Event v2 uses ADR-0008
+/// `TypedEventEnvelopeV2`/`EventEnvelopeV2Payload`.
+fn typed_envelope_symbol_names(title: &str) -> (String, String, String) {
+    match title {
+        "EventEnvelope" => (
+            "TypedEventEnvelope".to_owned(),
+            "EventPayload".to_owned(),
+            "RawEventEnvelope".to_owned(),
+        ),
+        "EventEnvelopeV2" => (
+            "TypedEventEnvelopeV2".to_owned(),
+            "EventEnvelopeV2Payload".to_owned(),
+            "RawEventEnvelopeV2".to_owned(),
+        ),
+        _ => {
+            let name = to_pascal_case(title);
+            let api_prefix = if name.starts_with("Kcp") { "Kcp" } else { "" };
+            let without_prefix = name.strip_prefix("Kcp").unwrap_or(&name);
+            let base = without_prefix
+                .strip_suffix("Envelope")
+                .unwrap_or(without_prefix);
+            (
+                format!("Typed{api_prefix}{base}Envelope"),
+                format!("{api_prefix}{base}Payload"),
+                format!("Raw{api_prefix}{base}Envelope"),
+            )
+        }
+    }
 }
 
 fn render_typed_decode_helpers() -> &'static str {
@@ -2263,7 +2375,8 @@ mod tests {
                 kcp_legacy_v1_command_methods: vec![],
                 kcp_legacy_v1_query_methods: vec![],
                 kcp_legacy_v1_methods: vec![],
-                event_v1_types: vec![],
+                event_active_bindings: vec![],
+                event_legacy_v1_bindings: vec![],
                 method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
@@ -2324,7 +2437,8 @@ mod tests {
                     kcp_legacy_v1_command_methods: vec![],
                     kcp_legacy_v1_query_methods: vec![],
                     kcp_legacy_v1_methods: vec![],
-                    event_v1_types: vec![],
+                    event_active_bindings: vec![],
+                    event_legacy_v1_bindings: vec![],
                     method_version_bindings: vec![],
                     kcp_protocol_version: "1.0".into(),
                 },
@@ -2459,7 +2573,8 @@ mod tests {
                 kcp_legacy_v1_command_methods: vec![],
                 kcp_legacy_v1_query_methods: vec![],
                 kcp_legacy_v1_methods: vec![],
-                event_v1_types: vec![],
+                event_active_bindings: vec![],
+                event_legacy_v1_bindings: vec![],
                 method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
@@ -2565,7 +2680,8 @@ mod tests {
                 kcp_legacy_v1_command_methods: vec![],
                 kcp_legacy_v1_query_methods: vec![],
                 kcp_legacy_v1_methods: vec![],
-                event_v1_types: vec![],
+                event_active_bindings: vec![],
+                event_legacy_v1_bindings: vec![],
                 method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },
@@ -2865,7 +2981,8 @@ mod tests {
             kcp_legacy_v1_command_methods: vec![],
             kcp_legacy_v1_query_methods: vec![],
             kcp_legacy_v1_methods: vec![],
-            event_v1_types: vec![],
+            event_active_bindings: vec![],
+            event_legacy_v1_bindings: vec![],
             method_version_bindings: vec![],
             kcp_protocol_version: "1.0".into(),
         }
@@ -2984,7 +3101,8 @@ mod tests {
                 kcp_legacy_v1_command_methods: vec![],
                 kcp_legacy_v1_query_methods: vec![],
                 kcp_legacy_v1_methods: vec![],
-                event_v1_types: vec![],
+                event_active_bindings: vec![],
+                event_legacy_v1_bindings: vec![],
                 method_version_bindings: vec![],
                 kcp_protocol_version: "1.0".into(),
             },

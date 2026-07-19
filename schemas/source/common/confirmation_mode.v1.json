@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/common/confirmation_mode/v1",
+  "title": "ConfirmationModeV1",
+  "description": "Cross-domain confirmation mode vocabulary shared by Policy, PermissionDecision, Approval, and public events.",
+  "type": "string",
+  "enum": [
+    "generic",
+    "local",
+    "system_authentication",
+    "remote_signature",
+    "plan_revision"
+  ],
+  "additionalProperties": false
+}

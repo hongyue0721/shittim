@@ -10,10 +10,14 @@
 use crate::error::ContractError;
 use crate::validator::validate_json;
 use super::types::{
+    ActionStateChangedPayloadV1,
     Actor,
+    ApprovalStateChangedPayloadV1,
     CausationRef,
+    CausationRefV2,
     EntryPoint,
     EventEnvelopeSchemaVersion,
+    EventEnvelopeV2SchemaVersion,
     EventPollRequest,
     EventSubscribeRequest,
     KcpCommandEnvelopeMessageKind,
@@ -33,6 +37,88 @@ use super::types::{
 };
 use serde::Deserialize;
 use serde_json::Value;
+
+pub const EVENT_ENVELOPE_V2_SCHEMA_ID: &str = "https://schemas.shittim.local/event/event_envelope/v2";
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedEventEnvelopeV2 {
+    pub aggregate_id: String,
+    pub aggregate_type: String,
+    pub causation_ref: CausationRefV2,
+    pub correlation_id: String,
+    pub dedup_key: String,
+    pub event_id: String,
+    pub occurred_at: String,
+    pub outbox_position: String,
+    pub schema_version: EventEnvelopeV2SchemaVersion,
+    pub sequence: i64,
+    pub type_: String,
+    pub payload: EventEnvelopeV2Payload,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EventEnvelopeV2Payload {
+    TaskCreated(Box<TaskCreatedPayload>),
+    TaskStateChanged(Box<TaskStateChangedPayload>),
+    ActionStateChanged(Box<ActionStateChangedPayloadV1>),
+    ApprovalStateChanged(Box<ApprovalStateChangedPayloadV1>),
+    StopFenceActivated(Box<StopFenceActivatedPayload>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawEventEnvelopeV2 {
+    aggregate_id: String,
+    aggregate_type: String,
+    causation_ref: CausationRefV2,
+    correlation_id: String,
+    dedup_key: String,
+    event_id: String,
+    occurred_at: String,
+    outbox_position: String,
+    payload: Value,
+    schema_version: EventEnvelopeV2SchemaVersion,
+    sequence: i64,
+    #[serde(rename = "type")]
+    type_: String,
+}
+
+impl TypedEventEnvelopeV2 {
+    pub fn decode(value: Value) -> Result<Self, ContractError> {
+        validate_json(EVENT_ENVELOPE_V2_SCHEMA_ID, &value)?;
+        Self::decode_after_validation(value)
+    }
+
+    /// Decodes a value that has already passed this envelope's generated Schema.
+    ///
+    /// Callers must validate with the matching envelope Schema before using this method.
+    pub fn decode_after_validation(value: Value) -> Result<Self, ContractError> {
+        let raw: RawEventEnvelopeV2 = deserialize_wire(EVENT_ENVELOPE_V2_SCHEMA_ID, value)?;
+        let discriminator = raw.type_;
+        let payload = match discriminator.as_str() {
+            "task.created" => EventEnvelopeV2Payload::TaskCreated(Box::new(deserialize_payload(EVENT_ENVELOPE_V2_SCHEMA_ID, "task.created", raw.payload)?)),
+            "task.state_changed" => EventEnvelopeV2Payload::TaskStateChanged(Box::new(deserialize_payload(EVENT_ENVELOPE_V2_SCHEMA_ID, "task.state_changed", raw.payload)?)),
+            "action.state_changed" => EventEnvelopeV2Payload::ActionStateChanged(Box::new(deserialize_payload(EVENT_ENVELOPE_V2_SCHEMA_ID, "action.state_changed", raw.payload)?)),
+            "approval.state_changed" => EventEnvelopeV2Payload::ApprovalStateChanged(Box::new(deserialize_payload(EVENT_ENVELOPE_V2_SCHEMA_ID, "approval.state_changed", raw.payload)?)),
+            "stop_fence.activated" => EventEnvelopeV2Payload::StopFenceActivated(Box::new(deserialize_payload(EVENT_ENVELOPE_V2_SCHEMA_ID, "stop_fence.activated", raw.payload)?)),
+            value => return Err(ContractError::GeneratedDiscriminatorMapping { schema_id: EVENT_ENVELOPE_V2_SCHEMA_ID.to_string(), discriminator: value.to_string() }),
+        };
+        Ok(Self {
+            aggregate_id: raw.aggregate_id,
+            aggregate_type: raw.aggregate_type,
+            causation_ref: raw.causation_ref,
+            correlation_id: raw.correlation_id,
+            dedup_key: raw.dedup_key,
+            event_id: raw.event_id,
+            occurred_at: raw.occurred_at,
+            outbox_position: raw.outbox_position,
+            schema_version: raw.schema_version,
+            sequence: raw.sequence,
+            type_: discriminator,
+            payload,
+        })
+    }
+}
 
 pub const EVENT_ENVELOPE_SCHEMA_ID: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
 

@@ -1327,7 +1327,7 @@ fn cyclic_refs_do_not_hang_and_generate() {
 }
 
 #[test]
-fn envelope_payload_closure_requires_payload_target() {
+fn envelope_payload_closure_requires_payload_target_via_unified_conditional_ir() {
     let temp = temporary_repo("envelope-payload-closure");
     let envelope_id = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
     let payload_id = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
@@ -1352,6 +1352,33 @@ fn envelope_payload_closure_requires_payload_target() {
         "closure error must name the required target: {stderr}"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
+}
+
+#[test]
+fn non_event_kcp_conditional_mapping_shape_drift_fails_closed() {
+    for (label, mutate) in [
+        ("branch-extra-key", "branch"),
+        ("if-extra-key", "if"),
+        ("then-extra-key", "then"),
+        ("payload-annotation-sibling", "payload"),
+    ] {
+        let temp = temporary_repo(label);
+        mutate_command_envelope(&temp, |envelope| {
+            let branch = &mut envelope["allOf"][0];
+            match mutate {
+                "branch" => branch["description"] = serde_json::json!("shape drift"),
+                "if" => branch["if"]["type"] = serde_json::json!("object"),
+                "then" => branch["then"]["required"] = serde_json::json!(["payload"]),
+                "payload" => {
+                    branch["then"]["properties"]["payload"]["description"] =
+                        serde_json::json!("not a pure whole-root ref")
+                }
+                _ => unreachable!(),
+            }
+        });
+        assert_generate_fails(&temp, "exact keys");
+        std::fs::remove_dir_all(temp).expect("clean temp repo");
+    }
 }
 
 #[test]

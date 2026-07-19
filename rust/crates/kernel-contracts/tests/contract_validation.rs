@@ -14,7 +14,8 @@ use kernel_contracts::{
     PolicyRuleSchemaVersion, PolicyRuleSource, PolicyRuleUpdatedBy, SchemaCatalog, TaskListRequest,
     TaskListRequestParentFilter, TaskListRequestParentFilterMode, TaskListRequestProposer,
     TaskListRequestSchemaVersion, TaskStatus, TypedEventEnvelope, TypedKcpCommandEnvelope,
-    TypedKcpQueryEnvelope, EVENT_V1_TYPES, KCP_ENVELOPE_AUTHORITY_METHODS, KCP_LEGACY_V1_METHODS,
+    TypedKcpQueryEnvelope, EVENT_ACTIVE_BINDINGS, EVENT_ACTIVE_TYPES, EVENT_LEGACY_V1_BINDINGS,
+    EVENT_LEGACY_V1_TYPES, KCP_ENVELOPE_AUTHORITY_METHODS, KCP_LEGACY_V1_METHODS,
     KCP_PROTOCOL_VERSION,
 };
 use serde::Deserialize;
@@ -647,12 +648,28 @@ fn kcp_eight_methods_closed_set_constants() {
     assert_eq!(KCP_ENVELOPE_AUTHORITY_METHODS.len(), 8);
     assert_eq!(KCP_LEGACY_V1_METHODS.len(), 8);
     assert_eq!(KCP_PROTOCOL_VERSION, "1.0");
-    assert_eq!(EVENT_V1_TYPES.len(), 3);
+    assert_eq!(EVENT_ACTIVE_BINDINGS.len(), 5);
+    assert_eq!(EVENT_ACTIVE_TYPES.len(), 5);
+    assert_eq!(EVENT_LEGACY_V1_BINDINGS.len(), 3);
+    assert_eq!(EVENT_LEGACY_V1_TYPES.len(), 3);
     assert!(KCP_ENVELOPE_AUTHORITY_METHODS.contains(&"task.create"));
     assert!(KCP_ENVELOPE_AUTHORITY_METHODS.contains(&"stop.activate"));
     assert!(KCP_LEGACY_V1_METHODS.contains(&"task.create"));
     assert!(KCP_LEGACY_V1_METHODS.contains(&"stop.activate"));
-    assert!(EVENT_V1_TYPES.contains(&"task.created"));
+    assert!(EVENT_LEGACY_V1_TYPES.contains(&"task.created"));
+    assert!(EVENT_ACTIVE_TYPES.contains(&"action.state_changed"));
+    assert!(EVENT_ACTIVE_TYPES.contains(&"approval.state_changed"));
+    assert_eq!(
+        EVENT_ACTIVE_TYPES,
+        &[
+            EVENT_ACTIVE_BINDINGS[0].event_type,
+            EVENT_ACTIVE_BINDINGS[1].event_type,
+            EVENT_ACTIVE_BINDINGS[2].event_type,
+            EVENT_ACTIVE_BINDINGS[3].event_type,
+            EVENT_ACTIVE_BINDINGS[4].event_type,
+        ]
+    );
+    assert!(!include_str!("../src/generated/catalog.rs").contains("EVENT_V1_TYPES"));
 }
 
 #[test]

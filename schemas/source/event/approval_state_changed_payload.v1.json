@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
+  "title": "ApprovalStateChangedPayloadV1",
+  "description": "Complete Approval chain head-change snapshot with explicit change_kind truth table.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "change_kind",
+    "approval_chain_id",
+    "from_head_ref",
+    "to_head_ref",
+    "from_record_kind",
+    "to_record_kind",
+    "subject_kind",
+    "confirmation_mode",
+    "request_ref",
+    "resolution_ref",
+    "invalidation_ref",
+    "replacement_request_ref",
+    "permission_decision_ref",
+    "action_id",
+    "reason_code",
+    "changed_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "change_kind": {
+      "type": "string",
+      "enum": [
+        "initial_request",
+        "resolution",
+        "invalidation_without_replacement",
+        "replacement_request"
+      ]
+    },
+    "approval_chain_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "from_head_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "to_head_ref": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "from_record_kind": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://schemas.shittim.local/policy/approval_record_kind/v2"
+        }
+      ]
+    },
+    "to_record_kind": {
+      "$ref": "https://schemas.shittim.local/policy/approval_record_kind/v2"
+    },
+    "subject_kind": {
+      "$ref": "https://schemas.shittim.local/policy/approval_subject_kind/v2"
+    },
+    "confirmation_mode": {
+      "$ref": "https://schemas.shittim.local/common/confirmation_mode/v1"
+    },
+    "request_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "resolution_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "invalidation_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "replacement_request_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "permission_decision_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "action_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid"
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "change_kind": {
+            "const": "initial_request"
+          }
+        },
+        "required": [
+          "change_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from_record_kind": {
+            "type": "null"
+          },
+          "to_record_kind": {
+            "const": "request"
+          },
+          "from_head_ref": {
+            "type": "null"
+          },
+          "request_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resolution_ref": {
+            "type": "null"
+          },
+          "invalidation_ref": {
+            "type": "null"
+          },
+          "replacement_request_ref": {
+            "type": "null"
+          },
+          "to_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_kind": {
+            "const": "resolution"
+          }
+        },
+        "required": [
+          "change_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from_record_kind": {
+            "const": "request"
+          },
+          "to_record_kind": {
+            "const": "resolution"
+          },
+          "from_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resolution_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invalidation_ref": {
+            "type": "null"
+          },
+          "replacement_request_ref": {
+            "type": "null"
+          },
+          "to_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_kind": {
+            "const": "invalidation_without_replacement"
+          }
+        },
+        "required": [
+          "change_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from_record_kind": {
+            "enum": [
+              "request",
+              "resolution"
+            ]
+          },
+          "to_record_kind": {
+            "const": "invalidation"
+          },
+          "from_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invalidation_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "replacement_request_ref": {
+            "type": "null"
+          },
+          "to_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "from_record_kind": {
+                  "const": "resolution"
+                }
+              },
+              "required": [
+                "from_record_kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "resolution_ref": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "resolution_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "change_kind": {
+            "const": "replacement_request"
+          }
+        },
+        "required": [
+          "change_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from_record_kind": {
+            "enum": [
+              "request",
+              "resolution"
+            ]
+          },
+          "to_record_kind": {
+            "const": "request"
+          },
+          "from_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invalidation_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "replacement_request_ref": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_head_ref": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "from_record_kind": {
+                  "const": "resolution"
+                }
+              },
+              "required": [
+                "from_record_kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "resolution_ref": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "resolution_ref": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

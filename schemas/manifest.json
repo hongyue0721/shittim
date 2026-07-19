@@ -31,7 +31,8 @@
       "name": "event",
       "namespace": "https://schemas.shittim.local/event/",
       "allowed_refs": [
-        "common"
+        "common",
+        "policy"
       ],
       "retained_ids": [
         "https://schemas.shittim.local/v1/event/event_envelope.json",
@@ -256,6 +257,110 @@
       ],
       "schema_version_field": "schema_version",
       "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/common/action_transition_ref/v1",
+      "title": "ActionTransitionRefV1",
+      "version": 1,
+      "source": "schemas/source/common/action_transition_ref.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "common"
+    },
+    {
+      "id": "https://schemas.shittim.local/common/confirmation_mode/v1",
+      "title": "ConfirmationModeV1",
+      "version": 1,
+      "source": "schemas/source/common/confirmation_mode.v1.json",
+      "kind": "enum",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "common"
+    },
+    {
+      "id": "https://schemas.shittim.local/common/causation_ref/v2",
+      "title": "CausationRefV2",
+      "version": 2,
+      "source": "schemas/source/common/causation_ref.v2.json",
+      "kind": "object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "common"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/approval_record_kind/v2",
+      "title": "ApprovalRecordKindV2",
+      "version": 2,
+      "source": "schemas/source/policy/approval_record_kind.v2.json",
+      "kind": "enum",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+      "title": "ApprovalSubjectKindV2",
+      "version": 2,
+      "source": "schemas/source/policy/approval_subject_kind.v2.json",
+      "kind": "enum",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/event/action_state_changed_payload/v1",
+      "title": "ActionStateChangedPayloadV1",
+      "version": 1,
+      "source": "schemas/source/event/action_state_changed_payload.v1.json",
+      "kind": "event_payload",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "event"
+    },
+    {
+      "id": "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
+      "title": "ApprovalStateChangedPayloadV1",
+      "version": 1,
+      "source": "schemas/source/event/approval_state_changed_payload.v1.json",
+      "kind": "event_payload",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "event"
+    },
+    {
+      "id": "https://schemas.shittim.local/event/event_envelope/v2",
+      "title": "EventEnvelopeV2",
+      "version": 2,
+      "source": "schemas/source/event/event_envelope.v2.json",
+      "kind": "envelope",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "event"
     },
     {
       "id": "https://schemas.shittim.local/v1/audit/audit_record.json",

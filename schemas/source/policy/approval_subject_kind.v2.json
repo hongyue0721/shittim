@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+  "title": "ApprovalSubjectKindV2",
+  "description": "Approval domain subject kind discriminator.",
+  "type": "string",
+  "enum": [
+    "operation",
+    "task_proposal",
+    "plan_revision"
+  ],
+  "additionalProperties": false
+}

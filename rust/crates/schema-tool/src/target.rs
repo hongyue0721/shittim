@@ -4,7 +4,7 @@
 //! `TargetPlan`/`TargetSchemaSet` -> target-scoped IR.
 
 use crate::error::SchemaToolError;
-use crate::json_pointer::{select_json_value, JsonPointer};
+use crate::event_catalog::EventCatalogAuthorities;
 use crate::manifest::{GenerationTarget, SchemaRegistry};
 use crate::method_bindings::{ActiveEnvelopeAuthority, MethodVersionBindingFact};
 use crate::production_stage::{RegistryProfile, ValidatedRegistry};
@@ -27,6 +27,8 @@ pub struct TargetSchemaSet {
     active_envelope_authority: ActiveEnvelopeAuthority,
     /// Complete binding catalog proven present inside this exact target.
     method_version_bindings: Vec<MethodVersionBindingFact>,
+    /// Event catalog authorities proven complete inside this exact target.
+    event_catalog_authorities: EventCatalogAuthorities,
 }
 
 impl TargetSchemaSet {
@@ -48,6 +50,10 @@ impl TargetSchemaSet {
 
     pub fn method_version_bindings(&self) -> &[MethodVersionBindingFact] {
         &self.method_version_bindings
+    }
+
+    pub fn event_catalog_authorities(&self) -> &EventCatalogAuthorities {
+        &self.event_catalog_authorities
     }
 }
 
@@ -134,12 +140,18 @@ pub fn build_target_plan<'a, P: RegistryProfile>(
         let closure = compute_and_validate_closure(registry, target, &roots)?;
         let (active_envelope_authority, method_version_bindings) =
             crate::method_bindings::compile_target_method_facts(registry, target, &closure)?;
+        let event_catalog_authorities = crate::event_catalog::compile_target_event_catalog_facts(
+            registry,
+            target.as_str(),
+            &closure,
+        )?;
         targets.push(TargetSchemaSet {
             target,
             roots,
             closure,
             active_envelope_authority,
             method_version_bindings,
+            event_catalog_authorities,
         });
     }
     if targets.is_empty() {
@@ -177,7 +189,7 @@ fn compute_and_validate_closure(
         // through conditional allOf branches (already walked), but re-check explicitly so
         // missing payload targets fail with a clear envelope-oriented message.
         if loaded.entry.kind == "envelope" {
-            for payload_id in envelope_payload_ids(registry, &id, &loaded.document)? {
+            for payload_id in envelope_payload_ids(registry, &id)? {
                 ensure_dependency_in_target(registry, target, roots, &id, &payload_id)?;
                 if closure.insert(payload_id.clone()) {
                     stack.push(payload_id);
@@ -267,30 +279,13 @@ fn collect_external_deps(
     })
 }
 
-fn envelope_payload_ids(
-    registry: &SchemaRegistry,
-    base_id: &str,
-    document: &Value,
-) -> Result<BTreeSet<String>> {
-    let mut ids = BTreeSet::new();
-    let Some(branches) = document.get("allOf").and_then(Value::as_array) else {
-        return Ok(ids);
-    };
-    let payload_ref_pointer =
-        JsonPointer::from_decoded_segments(["then", "properties", "payload", "$ref"]);
-    for branch in branches {
-        if let Some(payload_ref) = select_json_value(branch, &payload_ref_pointer)
-            .ok()
-            .and_then(Value::as_str)
-        {
-            if payload_ref.contains('#') {
-                continue;
-            }
-            let resolved = resolve_ref(registry, base_id, payload_ref)?;
-            ids.insert(resolved.type_id.schema_id);
-        }
-    }
-    Ok(ids)
+fn envelope_payload_ids(registry: &SchemaRegistry, base_id: &str) -> Result<BTreeSet<String>> {
+    Ok(registry
+        .conditional_envelope_binding(base_id)?
+        .into_iter()
+        .flat_map(|binding| &binding.mappings)
+        .map(|mapping| mapping.payload_type.schema_id.clone())
+        .collect())
 }
 
 #[cfg(test)]

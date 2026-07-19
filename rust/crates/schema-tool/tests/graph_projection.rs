@@ -1566,7 +1566,7 @@ fn component_namespace_rejects_spoofed_url_component_forms() {
 }
 
 #[test]
-fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sources() {
+fn production_manifest_is_exactly_61_with_41_retained_and_20_component_native_schemas() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
     assert_eq!(registry.manifest().schema_version, 2);
@@ -1578,8 +1578,8 @@ fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sou
     let components = registry.manifest().components.clone();
     assert_eq!(
         registry.schema_count(),
-        53,
-        "production baseline is 41 retained + 12 business-v2 schemas"
+        61,
+        "production baseline is 41 retained + 20 component-native schemas"
     );
 
     let retained: BTreeSet<_> = components
@@ -1609,7 +1609,7 @@ fn production_manifest_v2_retains_all_41_legacy_source_ids_without_rewriting_sou
         }
     }
     assert_eq!(retained_count, 41);
-    assert_eq!(native_count, 12);
+    assert_eq!(native_count, 20);
 }
 
 #[test]
@@ -1707,9 +1707,9 @@ fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
     assert_eq!(legacy_validation, 3);
     assert_eq!(legacy_read, 1);
     assert_eq!(stable, 37);
-    assert_eq!(new_contract, 8);
-    assert_eq!(breaking, 4);
-    assert_eq!(registry.schema_count(), 53);
+    assert_eq!(new_contract, 14);
+    assert_eq!(breaking, 6);
+    assert_eq!(registry.schema_count(), 61);
     schema_tool::validate_production_manifest_stage(&registry)
         .expect("production stage gate accepts empty bindings");
 }
@@ -2329,16 +2329,14 @@ fn mixed_envelope_payload_ref_and_missing_branch_fails_bijective_mapping() {
     });
     write_json(&envelope_path, &envelope);
 
-    let registry = SchemaRegistry::load(&temp).expect("load");
-    let plan =
-        build_target_plan(schema_tool::SyntheticRegistry::new(&registry).unwrap()).expect("plan");
-    let err = lower_target_contract_graph(&plan, GenerationTarget::Rust)
-        .unwrap_err()
-        .to_string();
-    let lower = err.to_ascii_lowercase();
+    let load_err = SchemaRegistry::load(&temp).unwrap_err().to_string();
+    let lower = load_err.to_ascii_lowercase();
     assert!(
-        lower.contains("mapping") || lower.contains("bijective") || lower.contains("payload"),
-        "mixed envelope must fail mapping/bijective path: {err}"
+        lower.contains("mapping")
+            || lower.contains("bijective")
+            || lower.contains("payload")
+            || lower.contains("exact keys"),
+        "mixed envelope must fail during registry conditional IR analysis: {load_err}"
     );
 
     // generate path must also fail closed with the same class of error.

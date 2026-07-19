@@ -6,11 +6,19 @@
 
 /// Embedded schema documents generated from schemas/manifest.json.
 pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
+    ("https://schemas.shittim.local/common/action_transition_ref/v1", include_str!("../../../../../schemas/source/common/action_transition_ref.v1.json")),
+    ("https://schemas.shittim.local/common/causation_ref/v2", include_str!("../../../../../schemas/source/common/causation_ref.v2.json")),
+    ("https://schemas.shittim.local/common/confirmation_mode/v1", include_str!("../../../../../schemas/source/common/confirmation_mode.v1.json")),
     ("https://schemas.shittim.local/common/input_content_origin/v1", include_str!("../../../../../schemas/source/common/input_content_origin.v1.json")),
+    ("https://schemas.shittim.local/event/action_state_changed_payload/v1", include_str!("../../../../../schemas/source/event/action_state_changed_payload.v1.json")),
+    ("https://schemas.shittim.local/event/approval_state_changed_payload/v1", include_str!("../../../../../schemas/source/event/approval_state_changed_payload.v1.json")),
+    ("https://schemas.shittim.local/event/event_envelope/v2", include_str!("../../../../../schemas/source/event/event_envelope.v2.json")),
     ("https://schemas.shittim.local/kcp/command_envelope/v2", include_str!("../../../../../schemas/source/kcp/command_envelope.v2.json")),
     ("https://schemas.shittim.local/kcp/query_envelope/v2", include_str!("../../../../../schemas/source/kcp/query_envelope.v2.json")),
     ("https://schemas.shittim.local/kcp/task_create_request/v2", include_str!("../../../../../schemas/source/kcp/task_create_request.v2.json")),
     ("https://schemas.shittim.local/kcp/task_create_response/v2", include_str!("../../../../../schemas/source/kcp/task_create_response.v2.json")),
+    ("https://schemas.shittim.local/policy/approval_record_kind/v2", include_str!("../../../../../schemas/source/policy/approval_record_kind.v2.json")),
+    ("https://schemas.shittim.local/policy/approval_subject_kind/v2", include_str!("../../../../../schemas/source/policy/approval_subject_kind.v2.json")),
     ("https://schemas.shittim.local/task/child_task_materialization_allocation/v1", include_str!("../../../../../schemas/source/task/child_task_materialization_allocation.v1.json")),
     ("https://schemas.shittim.local/task/child_task_proposal/v1", include_str!("../../../../../schemas/source/task/child_task_proposal.v1.json")),
     ("https://schemas.shittim.local/task/input_task_scope/v1", include_str!("../../../../../schemas/source/task/input_task_scope.v1.json")),
@@ -117,11 +125,90 @@ pub const KCP_LEGACY_V1_METHODS: &[&str] = &[
     "task.list",
 ];
 
-pub const EVENT_V1_TYPES: &[&str] = &[
-    "task.created",
-    "task.state_changed",
-    "stop_fence.activated",
+/// Event type to aggregate/payload binding fact derived from Envelope root mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventTypeBinding {
+    pub event_type: &'static str,
+    pub aggregate_type: &'static str,
+    pub payload_schema_id: &'static str,
+    pub payload_schema_version: u64,
+}
+
+const fn project_event_types<const N: usize>(
+    bindings: &[EventTypeBinding; N],
+) -> [&'static str; N] {
+    let mut types = [""; N];
+    let mut index = 0;
+    while index < N {
+        types[index] = bindings[index].event_type;
+        index += 1;
+    }
+    types
+}
+
+const EVENT_ACTIVE_BINDING_ARRAY: [EventTypeBinding; 5] = [
+    EventTypeBinding {
+        event_type: "task.created",
+        aggregate_type: "task",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/task_created_payload.json",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "task.state_changed",
+        aggregate_type: "task",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/task_state_changed_payload.json",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "action.state_changed",
+        aggregate_type: "action",
+        payload_schema_id: "https://schemas.shittim.local/event/action_state_changed_payload/v1",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "approval.state_changed",
+        aggregate_type: "approval_chain",
+        payload_schema_id: "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "stop_fence.activated",
+        aggregate_type: "stop_fence",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json",
+        payload_schema_version: 1,
+    },
 ];
+
+const EVENT_LEGACY_V1_BINDING_ARRAY: [EventTypeBinding; 3] = [
+    EventTypeBinding {
+        event_type: "task.created",
+        aggregate_type: "task",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/task_created_payload.json",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "task.state_changed",
+        aggregate_type: "task",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/task_state_changed_payload.json",
+        payload_schema_version: 1,
+    },
+    EventTypeBinding {
+        event_type: "stop_fence.activated",
+        aggregate_type: "stop_fence",
+        payload_schema_id: "https://schemas.shittim.local/v1/event/stop_fence_activated_payload.json",
+        payload_schema_version: 1,
+    },
+];
+
+const EVENT_ACTIVE_TYPE_ARRAY: [&str; EVENT_ACTIVE_BINDING_ARRAY.len()] =
+    project_event_types(&EVENT_ACTIVE_BINDING_ARRAY);
+const EVENT_LEGACY_V1_TYPE_ARRAY: [&str; EVENT_LEGACY_V1_BINDING_ARRAY.len()] =
+    project_event_types(&EVENT_LEGACY_V1_BINDING_ARRAY);
+
+pub const EVENT_ACTIVE_BINDINGS: &[EventTypeBinding] = &EVENT_ACTIVE_BINDING_ARRAY;
+pub const EVENT_LEGACY_V1_BINDINGS: &[EventTypeBinding] = &EVENT_LEGACY_V1_BINDING_ARRAY;
+pub const EVENT_ACTIVE_TYPES: &[&str] = &EVENT_ACTIVE_TYPE_ARRAY;
+pub const EVENT_LEGACY_V1_TYPES: &[&str] = &EVENT_LEGACY_V1_TYPE_ARRAY;
 
 pub const KCP_PROTOCOL_VERSION: &str = "1.0";
 

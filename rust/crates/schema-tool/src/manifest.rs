@@ -1,7 +1,11 @@
 //! Manifest v2 loading, immutable retained-ID baseline verification, and component policy.
 
 use crate::compatibility::SchemaCompatibility;
+use crate::conditional_envelope::{
+    analyze_registry_conditional_envelopes, EnvelopeConditionalBinding,
+};
 use crate::error::SchemaToolError;
+use crate::event_catalog::discover_event_catalog_authorities;
 use crate::manifest_identity::{
     validate_component_native_identity, validate_schema_version_field, validate_source_title,
 };
@@ -287,6 +291,8 @@ pub struct SchemaRegistry {
     /// Authoritative identity set for Schema nodes in each loaded document.
     /// Built once by `schema_walk` during load and never inferred from raw JSON shape.
     schema_node_pointers_by_id: BTreeMap<String, BTreeSet<crate::json_pointer::JsonPointer>>,
+    /// Strict conditional-envelope facts parsed once per manifest envelope.
+    conditional_envelope_bindings_by_id: BTreeMap<String, Option<EnvelopeConditionalBinding>>,
 }
 
 impl SchemaRegistry {
@@ -335,18 +341,26 @@ impl SchemaRegistry {
         )?;
         validate_all_source_files_listed(repo_root, &seen_sources)?;
 
-        let registry = Self {
+        let mut registry = Self {
             repo_root: repo_root.to_path_buf(),
             manifest,
             by_id,
             identity_classes_by_id,
             schema_node_pointers_by_id,
+            conditional_envelope_bindings_by_id: BTreeMap::new(),
         };
         crate::resolve::validate_registry_references(&registry)?;
+        crate::event_catalog::validate_event_catalog_claimant_gate(&registry)?;
+        registry.conditional_envelope_bindings_by_id =
+            analyze_registry_conditional_envelopes(&registry)?;
         // Full MethodVersionBinding validation is stage-independent: empty or
         // complete legal non-empty registries are accepted. Production emptiness
         // is enforced later by validate_production_manifest_stage.
         validate_method_version_bindings(&registry)?;
+        // Event catalog authority is independent of KCP MethodVersionBinding.
+        // Reserved-identity/structural claimants and whole-schema mapping bijection
+        // are fail-closed at registry load so partial impostors never lower.
+        let _event_authorities = discover_event_catalog_authorities(&registry)?;
         Ok(registry)
     }
 
@@ -366,6 +380,25 @@ impl SchemaRegistry {
         self.by_id
             .get(id)
             .ok_or_else(|| SchemaToolError::msg(format!("unknown schema $id: {id}")).into())
+    }
+
+    pub(crate) fn conditional_envelope_binding(
+        &self,
+        id: &str,
+    ) -> Result<Option<&EnvelopeConditionalBinding>> {
+        let loaded = self.get(id)?;
+        if loaded.entry().kind != "envelope" {
+            return Ok(None);
+        }
+        self.conditional_envelope_bindings_by_id
+            .get(id)
+            .map(Option::as_ref)
+            .ok_or_else(|| {
+                SchemaToolError::msg(format!(
+                    "envelope {id} is missing its registry conditional analysis"
+                ))
+                .into()
+            })
     }
 
     pub(crate) fn is_schema_node_pointer(
