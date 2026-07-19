@@ -380,6 +380,8 @@ root fixture外层固定为：
 }
 ```
 
+official root fixture harness的执行边界固定为：先执行`KcpCommandEnvelopeV2` raw Schema，再执行`TaskCreateRequestV2` payload Schema，最后调用`kernel-task-creation`完成normalization/projection/hash。该harness不执行Value preflight、`preflight_value`、`narrow_to_registered`或dispatcher；因此不能把未执行层的错误码借入本层。`public_error`只是fixture harness对已执行Schema/normalization层的合同化投影，不是已发送的KCP wire response。特别地，`auth`改为非null时，固定为`raw_schema_rejected`、`public_error={code:"invalid_request",details:null}`，receipt与idempotency两hash均为`not_computed`；不得写成`unsupported_auth_schema`。独立preflight对同一非null`auth`仍按其自身合同返回`unsupported_auth_schema`，两者不互相覆盖。
+
 child fixture外层固定为：
 
 ```text
@@ -404,7 +406,7 @@ child fixture外层固定为：
 
 fixture只保存JCS UTF-8 bytes的lowercase `jcs_utf8_hex`与hash字段`sha256`，不得重复保存canonical JSON string、base64或带前缀digest。tamper `pointer`按raw基准对象解释；`add`要求目标member不存在或array插入位置合法，`replace`要求目标已存在，解析失败必须使fixture harness失败而不是跳过case。
 
-root tamper最小权威矩阵：`auth`改为非null必须在raw合同阶段拒绝且不投影；合法改变`deadline`、`request_id`或`idempotency_key`时两hash均`same`；合法改变`context`时receipt `same`、idempotency `different`；改变任一纳入payload字段时两hash均`different`；增加`payload.parent_task_id`必须raw Schema拒绝；URI lexical equivalent经normalization后两hash均`same`；任一纳入数组重排或改变重复次数时两hash均`different`。child fixture相应覆盖URI lexical equivalent、数组顺序/重复、origin/scope normalization错误与非零`expires_at`亚秒caller-invalid。allocation fixture精确外层见§6.10.6。
+root tamper最小权威矩阵：`auth`改为非null时，只在本fixture实际执行的`KcpCommandEnvelopeV2` raw Schema阶段拒绝，不进入payload Schema、normalization或hash；固定期望为`result=raw_schema_rejected`、`public_error={code:"invalid_request",details:null}`、receipt/idempotency两者均为`not_computed`。该断言不执行也不借用preflight的`unsupported_auth_schema`；独立preflight合同仍单独验证后者。合法改变`deadline`、`request_id`或`idempotency_key`时两hash均`same`；合法改变`context`时receipt `same`、idempotency `different`；改变任一纳入payload字段时两hash均`different`；增加`payload.parent_task_id`必须raw Schema拒绝；URI lexical equivalent经normalization后两hash均`same`；任一纳入数组重排或改变重复次数时两hash均`different`。child fixture相应覆盖URI lexical equivalent、数组顺序/重复、origin/scope normalization错误与非零`expires_at`亚秒caller-invalid。allocation fixture精确外层见§6.10.6。
 
 #### `ChildTaskDeltaProjectionV1`
 
@@ -755,11 +757,11 @@ Approval不可变链的每次current-head变化都必须可观察，正式Catalo
 
 | code | 固定message | details | retryable | 适用场景 |
 |---|---|---|---:|---|
-| `invalid_request` | `request is invalid` | null | false | 可关联但Envelope/payload结构无效 |
-| `unsupported_protocol_version` | `protocol version is not supported` | null | false | protocol string不支持 |
-| `unsupported_schema_version` | `payload schema version is not supported` | null | false | method active version不含请求version |
-| `unsupported_method` | `method is not supported` | null | false | family catalog无method |
-| `unsupported_auth_schema` | `authentication schema is not supported` | null | false | KCP v1 auth非null |
+| `invalid_request` | `request is invalid` | null | false | 已执行的preflight中可关联但Envelope/payload结构无效；official root fixture harness的raw Envelope/payload Schema拒绝也固定投影为此code |
+| `unsupported_protocol_version` | `protocol version is not supported` | null | false | protocol string不支持；仅适用于执行protocol/preflight判定的层 |
+| `unsupported_schema_version` | `payload schema version is not supported` | null | false | method active version不含请求version；仅适用于执行method-aware preflight判定的层 |
+| `unsupported_method` | `method is not supported` | null | false | family catalog无method；仅适用于执行method Catalog/preflight判定的层 |
+| `unsupported_auth_schema` | `authentication schema is not supported` | null | false | **仅**KCP Value preflight执行auth判定时v1 auth非null；official root fixture harness不执行preflight，不得借用此code |
 | `deadline_exceeded` | `request deadline exceeded` | null | true | 入口/完成deadline |
 | `internal_error` | `internal kernel error` | null | false | 未分类内部合同/配置/序列化失败 |
 | `revision_conflict` | `object revision changed` | `{object_kind,object_id,expected_revision,actual_revision}` | true | expected revision CAS失败 |
@@ -1501,7 +1503,7 @@ allocation official fixture唯一路径为`schemas/fixtures/task/task_creation_a
       value: <JSON value>,
       expected: {
         schema_valid: <boolean>,
-        domain_result: accepted | duplicate_internal_uuid | external_uuid_collision | empty_opaque | duplicate_opaque | not_evaluated
+        domain_result: accepted | duplicate_internal_uuid | external_uuid_collision | duplicate_opaque | not_evaluated
       }
     }]
   },
@@ -1522,6 +1524,8 @@ allocation official fixture唯一路径为`schemas/fixtures/task/task_creation_a
   }
 }
 ```
+
+allocation fixture harness的顺序固定为：对应allocation Schema validation → 仅在`schema_valid=true`时typed decode → 仅在typed decode成功后调用allocation domain validator。Schema invalid时必须短路，禁止typed decode与domain validator；因此空opaque向量固定为`schema_valid=false`、`domain_result=not_evaluated`，不得把Schema约束失败伪装成domain结果。wrapper的`domain_result`闭集只允许`accepted`、`duplicate_internal_uuid`、`external_uuid_collision`、`duplicate_opaque`和`not_evaluated`。
 
 该fixture不保存JCS bytes、canonical string或hash，只证明Schema shape与allocation domain validator；`external_uuid_refs`对象字段必须精确对应上述Rust typed snapshot，fixture harness不得把它降格成自由UUID数组。每个root/child都必须至少包含Schema可通过但domain分别以`duplicate_internal_uuid`、`external_uuid_collision`、`duplicate_opaque`拒绝的向量，以及空opaque的Schema拒绝向量。它不证明生产generator随机、全局唯一或“不从caller派生”；generator非派生性必须由独立fake/spy与实现审查证明。
 

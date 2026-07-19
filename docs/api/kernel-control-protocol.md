@@ -19,7 +19,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 - `protocol_version`：第一版为 `1.0`；
 - `actor`：保留 `source`，不包含 EntryPoint；
 - `entry_point`：只在 Envelope；
-- `auth`：v1 必须为 `null`，非 null 返回 `unsupported_auth_schema`；
+- `auth`：v1必须为`null`。在实际执行Value preflight auth判定时，非null返回`unsupported_auth_schema`；official root fixture harness不执行preflight，非null raw Schema拒绝固定投影为`invalid_request`/details null。
 - `actor.kind = owner`：只是未来 Owner/授权系统的预留标签，第一版不据此认定已认证或授予任何权限；
 - `deadline`：必填，过期返回 `deadline_exceeded`，不得静默丢弃；已开始且不能安全取消的外部动作先进入恢复待查；
 - Command 带 `idempotency_key`；Query 不带；

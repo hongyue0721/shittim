@@ -4,7 +4,7 @@
 
 ## 分类索引
 
-- Preflight：`invalid_request`、`unsupported_protocol_version`、`unsupported_schema_version`、`unsupported_method`、`unsupported_auth_schema`。
+- Preflight：`invalid_request`、`unsupported_protocol_version`、`unsupported_schema_version`、`unsupported_method`、`unsupported_auth_schema`；其中`unsupported_auth_schema`仅适用于实际执行Value preflight auth判定的层，official root fixture的raw Schema拒绝固定投影为`invalid_request`。
 - 通用/存储：`deadline_exceeded`、`internal_error`、`revision_conflict`、`idempotency_conflict`、`sqlite_busy`、`sqlite_full`、`sqlite_corrupt`、`stored_data_invalid`。
 - Task/Event/Origin：`task_not_found`、legacy-only `parent_task_not_found`、`parent_origin_not_found`、`origin_not_found`、`invalid_scope_pattern`、`invalid_cursor`、`unsupported_event_type`、`subscription_not_found`。
 - Policy/Action/Lease：`stop_fence_active`、`unsupported_policy_condition`、Delegation三类、Action/PD/Approval-required、Lease/fence generation、`child_materialization_conflict`、Verification/material/observation错误。

@@ -23,11 +23,11 @@
 - `docs/api/domain-task.md` — 122 lines
 - `docs/api/error-catalog.md` — 23 lines
 - `docs/api/event-catalog.md` — 28 lines
-- `docs/api/kcp-preflight-dispatcher.md` — 86 lines
+- `docs/api/kcp-preflight-dispatcher.md` — 90 lines
 - `docs/api/kernel-control-protocol.md` — 90 lines
 - `docs/api/kernel-kcp.md` — 63 lines
 - `docs/api/kernel-sqlite.md` — 144 lines
-- `docs/api/schema-generation.md` — 170 lines
+- `docs/api/schema-generation.md` — 172 lines
 - `docs/api/task-repository-contract.md` — 59 lines
 - `docs/sdk/README.md` — 37 lines
 - `docs/sdk/extension-sdk.md` — 39 lines
@@ -36,7 +36,7 @@
 - `specs/CORE_ARCHITECTURE.md` — 847 lines
 - `specs/EXTENSION_SDK.md` — 682 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 2376 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 2380 lines
 - `specs/MODEL_RUNTIME.md` — 355 lines
 - `specs/REFERENCES.md` — 254 lines
 - `specs/SECURITY_PRIVILEGE.md` — 432 lines

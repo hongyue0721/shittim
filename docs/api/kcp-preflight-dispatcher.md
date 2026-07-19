@@ -48,6 +48,8 @@ preflight_value(value)
 
 当前Rust实现把根payload version全局固定为1；这只描述legacy代码缺口，不是规范规则。active实现必须读取generated `MethodVersionBinding`：`task.create active=[2], legacy=[1]`，其余首批方法active=[1]；按family+method+version选择request及response Schema。Legacy validator必须与active preflight隔离。
 
+preflight的`unsupported_auth_schema`只在实际执行auth判定时适用。它不能被root official fixture harness借用：root harness执行raw Envelope Schema → payload Schema → normalization/projection/hash，auth非null固定为raw schema rejection并投影为`invalid_request`、details为null，两个hash不计算。
+
 ## 结构化 contract error
 
 `kernel-contracts` 公开：
@@ -59,6 +61,8 @@ preflight_value(value)
 schema-tool 生成的 typed decoder 现在先由 `decode` 验证 Schema，再调用公开且有明确前置条件的 `decode_after_validation`。generated raw wire、payload 与 discriminator default 分别返回独立结构化变体。preflight 先单独 `validate_json`；只有 `SchemaValidation` 是 caller invalid，后续任何 decode/catalog 失败都本地 fail closed，不匹配错误文本。
 
 ## 固定错误
+
+这里的错误表只描述Value preflight实际执行的判定层；official root fixture harness不调用preflight，不能复用本表的preflight-only code。root fixture的raw Schema拒绝由其自身合同固定投影为`invalid_request`，而不是`unsupported_auth_schema`。
 
 | code | 固定 message | details | retryable |
 |---|---|---|---:|
