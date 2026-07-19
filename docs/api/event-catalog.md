@@ -1,16 +1,16 @@
 # Event Catalog
 
-> 状态：**active Event v2权威合同已闭合，但仍为contract-only**。当前仓库只实现legacy EventEnvelope v1、三类payload和SQLite v1 Outbox；尚无下述八个Schema、generated active catalog/typed decode、migration 0003、active producer或Publisher。唯一事实源是[`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog)、§6.14–6.15、§13.6.2与[ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)。
+> 状态：**Event v2 Schema/source/generated/catalog/typed decode 已实现**；SQLite migration 0003、mixed Outbox API、active producer/Publisher 仍为 contract-only。唯一事实源是[`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog)、§6.14–6.15、§13.6.2与[ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)。
 
-## 下一Schema闭包
+## Schema闭包（已落地）
 
-下一实现切片必须一次加入八项：
+已一次加入八项：
 
 - common：`ActionTransitionRefV1`、`ConfirmationModeV1`、`CausationRefV2`；
 - policy：`ApprovalRecordKindV2`、`ApprovalSubjectKindV2`；
 - event：`ActionStateChangedPayloadV1`、`ApprovalStateChangedPayloadV1`、`EventEnvelopeV2`。
 
-`ConfirmationModeV1`归common，因为它被Policy、PermissionDecision、Approval和公共事件共同复用；record/subject kind仍归policy。event未来直接引用common与policy，形成`event→policy→common`的无环DAG，不复制平行枚举。精确ID/source/kind/version/compatibility见IC §13.6.2。
+`ConfirmationModeV1`归common，因为它被Policy、PermissionDecision、Approval和公共事件共同复用；record/subject kind仍归policy。event `allowed_refs=[common,policy]`，形成`event→policy→common`的无环DAG，不复制平行枚举。精确ID/source/kind/version/compatibility见IC §13.6.2。
 
 ## CausationRef v2
 
@@ -45,9 +45,9 @@ Envelope版本与payload版本正交；EventEnvelope v2正式承载payload v1。
 
 ## Catalog权威与typed envelope
 
-active集合只能由manifest中的reserved identity/structure候选闭包选出：exact ID/title/source任一占用者，或`component=event,kind=envelope`且具有schema_version=2、root type closed enum与conditional aggregate+whole-schema payload mapping形状者，都会成为claimant候选。候选必须恰好一个且metadata exact；普通Schema不得误抓。root enum与五branch必须双射，whole-schema `$ref`不得换成inline/fragment，missing/duplicate/mixed mapping全部fail closed。禁止按suffix或文件名发现。
+active集合只能由manifest中的reserved identity/structure候选闭包选出：exact ID/title/source任一占用者永远是candidate；结构候选只宽松要求`component=event,kind=envelope`、`schema_version.const=2`、非空string `type` enum及至少一个`if.properties.type.const` + `then.properties`含`aggregate_type/payload`的mapping-like branch。宽松门不调用strict parser、不产生mapping facts，也不要求root `type=object`、`additionalProperties=false`、完整required、whole-root ref或双射；所以缺失/true additionalProperties、错误root type、缺required与partial branch近似伪装都会进入candidate并fail closed。候选必须恰好一个且metadata exact；随后exact root与registry load时缓存的strict `EnvelopeConditionalBinding`再要求closed root、required、五值enum/branch双射与whole-root refs。普通Schema不得误抓，禁止按suffix或文件名发现。
 
-未来generated Rust API固定：
+generated Rust API固定：
 
 ```rust
 pub struct EventTypeBinding {

@@ -1,10 +1,10 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-19（本docs-only切片接受ADR-0008并闭合Active Event v2八Schema、exact claimant/Catalog、typed envelope与SQLite migration 0003统一Outbox权威合同；**Event v2/Outbox合同开放问题=0**，剩余为实现任务；**未新增Schema、manifest entry、generated artifact、Rust或SQL**。仓库仍为53 Schema=41 retained+12 component-native，production MethodVersionBindings仍为空。既有Task creation pure library/official fixtures已实现；active repository/handler/materializer/cutover仍未实现。）
+> 状态日期：2026-07-20（ADR-0008第一实现段已落地：八个Event v2 Schema source/manifest/generated catalog/typed envelope与exact claimant已实现；manifest=61=41 retained+20 component-native；production MethodVersionBindings仍为空。migration 0003、mixed Outbox API、active producer/Publisher仍为contract-only。既有Task creation pure library/official fixtures已实现；active repository/handler/materializer/cutover仍未实现。）
 
 ## 当前阶段
 
-当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。manifest共有53个Schema（41 retained + 12 component-native）；首批12项的source、manifest entries与generated Rust root types已落地，但production MethodVersionBindings仍为空。Active Event v2的八Schema/claimant/generated catalog/migration 0003已经有唯一权威合同但仍未落地；当前generated event常量与SQLite Outbox都仍是legacy v1。active合同还包括TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Audit/ContentOrigin相关v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。根Node/pnpm基座存在，但没有TS包、agentd、server、Publisher或Provider。
+当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。manifest共有61个Schema（41 retained + 20 component-native）：历史task creation 12项 + Event v2八项；production MethodVersionBindings仍为空。Active Event v2的source/manifest/generated `EventTypeBinding`/active-legacy bindings/`TypedEventEnvelopeV2`与exact claimant已落地；SQLite Outbox与migration 0003、mixed API、active producer仍未实现。active合同还包括TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Audit/ContentOrigin相关v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。根Node/pnpm基座存在，但没有TS包、agentd、server、Publisher或Provider。
 
 统一 Extension SDK Base 是基础产品的 Core 阻塞项：目前只有 `contract-only` 规范，没有正式 operation Schema、library、`composition`、public API 或 SDK 包；因此尚未达到 `schema/SDK`。`provider contract` 与 `real-platform` 是可选 Profile claim 的后续成熟度，`distribution_asserted` 则是与 maturity 正交的对外声明事实；当前两者都不存在。Computer Use 已从 Core 必做能力移为 Extension SDK Base 上的 optional Profile；当前同样仅为 `contract-only`，没有专用 Schema、crate、SDK composition、Provider 或真机测试，因而不阻塞 Core 完成。`desktop-client` 也不等同于 Computer Use。
 
@@ -29,9 +29,9 @@
 ### Schema 与 Rust 契约
 
 - [x] 创建 Rust workspace 与 `rust-toolchain.toml`（1.97.0）。
-- [x] 创建 53 个 Draft 2020-12 Schema 和 `schemas/manifest.json`（41 retained + 12 component-native）；首批12项 source/entries 与 generated Rust root types 已落地。
+- [x] 创建 Draft 2020-12 Schema 和 `schemas/manifest.json`；当前 61 entries（41 retained + 20 component-native）。历史 task creation 12 项与 Event v2 八项 source/entries 与 generated Rust root types 均已落地。
 - [x] `schema-tool generate/check/validate/canonicalize` 已有可运行的单root transaction；artifact transaction 的 typed operation trace、独立 LockPort、精确 reference-model matrix 与 structured failure 已完成根因级实现和独立验收。当前验收边界明确为单artifact-root、Linux real-platform；control-flow/fault conformance 不等同真实断电介质模型，multi-root 与 non-Linux platform port 未实现。现有实现：`ArtifactPlan`拒绝0/multi-root；持久lock file用Rust 1.97 OS advisory file lock且不unlink；锁内recover，durable `Preparing/Prepared/RollingBack/Committed` journal协调同filesystem stage/backup/rollback-discard，所有关键syscall前后checkpoint由production闭集枚举；普通journal pre-rename I/O错误须先删除本transaction regular temp并fsync parent才在线rollback，temp清理失败明确返回`rollback deferred/recovery required`并保留journal供下次恢复；commit outcome uncertain不回滚，rollback crash-idempotent，cleanup失败可恢复。成功除lock file外无transaction residue，且保留非planned文件让check继续报告drift；未来multi-root/其它平台port未实现，同用户恶意FS替换不在conformance安全边界。
-- [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> ValidatedRegistry<Production|Synthetic> -> TargetPlan/TargetSchemaSet -> target-scoped IR (TargetContractGraph) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；旧版实现的`manifest.id_base` URL namespace校验已由后续manifest v2 component/retained-ID gate替代；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；envelope 唯一分析（0 payload ref => untyped；≥1 双射，mixed branch fail）；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，`TargetPlan`/`TargetSchemaSet` facts字段private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；生产41个Schema无环，生成两次稳定；TS renderer 仍未实现（声明即整体 fail，无部分写）。
+- [x] 落地 target-scoped language-neutral graph 流水线：`SchemaRegistry -> ValidatedRegistry<Production|Synthetic> -> TargetPlan/TargetSchemaSet -> target-scoped IR (TargetContractGraph) -> RustProjection(single project_rust + use-site lineage + SCC Box layout) -> ArtifactPlan::try_new`；旧版实现的`manifest.id_base` URL namespace校验已由后续manifest v2 component/retained-ID gate替代；`url`+percent-encoding 解析 local/absolute/relative `$ref`；`ContractTypeId` ≠ `RustDeclarationId`；公开 Rust projection 仅 `project_rust` + `render_*_from_projection` + catalog；typed/types 共用同一 projection 实例；conditional envelope由registry load对每个KCP/Event envelope恰好strict解析一次并按schema id缓存`EnvelopeConditionalBinding`，target closure、Event catalog与typed `EnvelopeWireBinding`只读同一不可变事实；通用IR独立位于`conditional_envelope.rs`，`event_catalog.rs`只做authority投影；0 payload ref => untyped，≥1则完整双射且mixed branch fail；`GeneratedArtifact`/`ArtifactPlan` 字段 private + 只读 getters，`TargetPlan`/`TargetSchemaSet` facts字段private + 只读 getters，path component-safe（`try_new` 唯一 plan 构造）；生产41个Schema无环，生成两次稳定；TS renderer 仍未实现（声明即整体 fail，无部分写）。
 - [x] 落地 Schema TaggedUnion：`oneOf` 单一 Nullable/TaggedUnion/Unsupported 分类先于 object lowering；中立 `TypeShape::TaggedUnion` 保存 discriminator、canonical branch identity、`/oneOf/N` arm `SourceUseSite` 与 unknown-field 禁止策略，保持 use-site 与 Rust symbol 分离；inline/`$ref`、nested、one-branch、`unevaluatedProperties:false` 与 branch `additionalProperties:false`均严格验证，UEP 不会改写被引用 object 的自身策略；Rust projection 只消费 IR，生成内部 tag + `deny_unknown_fields` enum（不 flatten/optional mega-struct），并将 union variant fields 纳入 SCC `Option<Box>` / `Vec` layout。引入该 IR 时同步修正普通 Object unknown-field policy：3个 source `additionalProperties:true` 的 Envelope payload 生成 struct 移除错误 `deny_unknown_fields`，因此保留开放 payload 的真实 Schema/serde 行为；Envelope root 仍严格拒绝未知字段。新增 raw JSON duplicate/missing/unknown tag、ordinary duplicate field、每分支及嵌套 serde roundtrip/tag-once、cargo test、nullable/non-discriminated/ref-target/profile 负例、Envelope binding 不变、实际 CLI 四生成物 no-partial 及两次稳定性覆盖；测试数量不作为稳定合同，避免文档随新增用例漂移。
 - [x] 从 Schema 自动生成 Rust 类型、catalog 及 Command/Query/Event typed decode。
 - [x] string enum 生成 declaration-order `pub const ALL: &'static [Self]`（通用 `ProjectedShape::StringEnum` 路径；与 variants/`as_str` 共用有序 mapping；const 不生成 ALL；nullable 过滤 null）；`types.rs` 自动 `string_enum_contracts` 覆盖全部 string enum；`domain-task` 已删除手写 `TASK_STATUS_CATALOG` / `ACTION_STATUS_CATALOG` 与平行 exhaustiveness match，NxN、terminal 和 proptest 直接消费 `TaskStatus::ALL` / `ActionStatus::ALL`。
@@ -130,8 +130,8 @@
 
 ## 未完成
 
-- [ ] 实现ADR-0008八Schema source/manifest/generated types与exact Event claimant：`ApprovalStateChangedPayloadV1`含显式`change_kind`四值enum/完整真值表，claimant使用reserved identity+结构候选fail-closed谓词；届时manifest从53变61，production bindings仍须为空。
-- [ ] 实现generated `EventTypeBinding`、`EVENT_ACTIVE_BINDINGS`/`EVENT_LEGACY_V1_BINDINGS`及从bindings单源const投影的`EVENT_ACTIVE_TYPES`/`EVENT_LEGACY_V1_TYPES`，并实现v1/v2 typed EventEnvelope；删除当前模糊`EVENT_V1_TYPES`，不保留alias或平行mapping表。
+- [x] 实现ADR-0008八Schema source/manifest/generated types与exact Event claimant：`ApprovalStateChangedPayloadV1`含显式`change_kind`四值enum/完整真值表，claimant使用reserved identity+结构候选fail-closed谓词；manifest=61，production bindings仍为空。
+- [x] 实现generated `EventTypeBinding`、`EVENT_ACTIVE_BINDINGS`/`EVENT_LEGACY_V1_BINDINGS`及从bindings单源const投影的`EVENT_ACTIVE_TYPES`/`EVENT_LEGACY_V1_TYPES`，并实现v1/v2 typed EventEnvelope；删除模糊`EVENT_V1_TYPES`，不保留alias或平行mapping表。
 - [ ] 实现SQLite migration 0003统一Outbox：exact version=3/name=`versioned_event_outbox`/single asset=`rust/crates/kernel-sqlite/migrations/0003_versioned_event_outbox.sql`，先同事务升级ledger descriptor列，再以format-v1 JCS descriptor单hash覆盖该asset与exact Rust transform三元组；单表mixed read/write、canonical `causation_json`、post-0003 CHECK、corruption/backup/rollback测试；当前仍是v1列与API。
 - [ ] 实现固定mixed API：`StoredEventEnvelope::{LegacyV1,ActiveV2}`、`OutboxRecord`、逐字段legacy pending、`EventAggregateId`与无caller type/aggregate的`PendingActiveEventV2`、`append_legacy_event_v1/append_active_event_v2`；旧`PendingEvent/append_event`无alias。随后实现五类producer；当前没有Action/Approval producer、Publisher或consumer runtime。retained `event.poll` response v1仍只能返回v1，mixed KCP response须后续独立升级。
 - [ ] 后续独立Action-transition Schema/authority批次实现`ActionTransitionIntentV1`（task component exact ID/source见IC §6.14）及Action持久对象/repository/migration；本八Schema批次只交付ref/wire，producer不得临时造类型。
@@ -168,14 +168,13 @@
 
 ## 下一步
 
-1. 先实现ADR-0008的八Schema、`CausationRefV2` oneOf whole-ref骨架、reserved identity+结构候选exact claimant、`change_kind` Approval真值表、`EventTypeBinding` active/legacy bindings单源投影/typed decode；保持production MethodVersionBindings为空。
-2. 再实现SQLite migration 0003 exact descriptor identity（version/name/single asset/transform三元组）与单表mixed v1/v2 Outbox，以及固定命名/精确字段的active v2/legacy v1 API，不接业务producer；retained KCP poll仍不得返回v2。
-3. 独立实现`ActionTransitionIntentV1` Schema + Action持久对象/transition repository/migration，禁止producer临时类型；再做method-aware preflight、root v2 repository/handler 与 child Action原子materializer，以及最终 V2ProductionWriteCutover。
-4. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
-5. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
-6. 完成Task creation provenance migration和reconciliation，不伪造历史Action/Approval/Verification。
-7. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
-8. 随后实现Publisher、Extension SDK Base与TypeScript/client。
+1. 再实现SQLite migration 0003 exact descriptor identity（version/name/single asset/transform三元组）与单表mixed v1/v2 Outbox，以及固定命名/精确字段的active v2/legacy v1 API，不接业务producer；retained KCP poll仍不得返回v2。
+2. 独立实现`ActionTransitionIntentV1` Schema + Action持久对象/transition repository/migration，禁止producer临时类型；再做method-aware preflight、root v2 repository/handler 与 child Action原子materializer，以及最终 V2ProductionWriteCutover。
+3. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
+4. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
+5. 完成Task creation provenance migration和reconciliation，不伪造历史Action/Approval/Verification。
+6. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
+7. 随后实现Publisher、Extension SDK Base与TypeScript/client。
 
 ## 最近验证
 
@@ -197,12 +196,18 @@ node scripts/sync-docs-repository.mjs --self-test
 export TMPDIR=/mnt/data/shittim-build-tmp
 export CARGO_TARGET_DIR=/mnt/data/shittim-cargo-target
 pnpm install --frozen-lockfile
-# 统一门（先 Node 硬门，再 Rust，再 FILE_MANIFEST）；无跨平台 npm check:all
+# 本切片focused：Event claimant宽松候选/exact门、registry conditional IR缓存、KCP/Event closure与typed投影
+cargo test --manifest-path rust/Cargo.toml -p schema-tool --test event_catalog
+cargo test --manifest-path rust/Cargo.toml -p schema-tool --test graph_projection
+cargo test --manifest-path rust/Cargo.toml -p schema-tool
+# synthetic full gate（当前显式profile路径；不是对尚未切换的production runtime作main gate声明）
 ./scripts/check-schema.sh
+# 上述统一门仅在实际完成后记为通过；本切片仍未提交
+
 git diff --check
 ```
 
-Node/pnpm 基座：`check:toolchain` 通过。`FILE_MANIFEST.md` 由 `scripts/update-file-manifest.mjs` 从 Git source set 生成（tracked + untracked non-ignored `*.md`，路径严格 UTF-8、禁止手改、不扫 ignored build 产物）；`check-schema.sh` 最前跑 toolchain 硬门，最后跑 `--check`。`test:docs-repository` 在 `/mnt/data/shittim-docs-sync-tests` 用 bare remotes 覆盖文档列明的门禁与状态分支（含 `source_identity`/`docs_identity` name+email），不宣称穷尽所有 Git/网络故障组合。本阶段编译/测试运行命令必须显式 `TMPDIR`/`CARGO_TARGET_DIR` 到 `/mnt/data`；Rust 库自身不硬编码 host path。仓库全量以 `export PATH=...` + 显式 TMP/CARGO + `./scripts/check-schema.sh` 为准。主仓未 clean/未推送前不得宣称文档镜像已与当前工作区同步。
+Node/pnpm 基座：`check:toolchain` 通过。本切片focused `event_catalog`、`graph_projection`与`cargo test -p schema-tool`已通过；synthetic full `./scripts/check-schema.sh`也已通过（显式PATH/TMPDIR/CARGO_TARGET_DIR），但这不是对尚未切换的production runtime作main gate声明。当前工作区仍未提交。`FILE_MANIFEST.md` 由 `scripts/update-file-manifest.mjs` 从 Git source set 生成（tracked + untracked non-ignored `*.md`，路径严格 UTF-8、禁止手改、不扫 ignored build 产物）；`check-schema.sh` 最前跑 toolchain硬门，最后跑`--check`。`test:docs-repository` 在 `/mnt/data/shittim-docs-sync-tests` 用 bare remotes 覆盖文档列明的门禁与状态分支（含 `source_identity`/`docs_identity` name+email），不宣称穷尽所有 Git/网络故障组合。本阶段编译/测试运行命令必须显式 `TMPDIR`/`CARGO_TARGET_DIR` 到 `/mnt/data`；Rust 库自身不硬编码 host path。仓库全量以 `export PATH=...` + 显式 TMP/CARGO + `./scripts/check-schema.sh` 为准。主仓未 clean/未推送前不得宣称文档镜像已与当前工作区同步。
 
 ## 事实来源
 

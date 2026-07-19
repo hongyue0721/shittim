@@ -6,7 +6,7 @@
 
 1. `AGENT.md` 是宪法：全局不变量、可信核心边界、依赖方向与编码规则。
 2. `specs/*.md` 是各领域的唯一规范事实源；同一字段、枚举、状态机不得在其他文档复制定义。
-3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。ADR-0006 的首批12项 Schema、Task creation纯library与official fixtures/harness已经实现，但repository、handler、child materializer与production cutover尚未完成；ADR-0007仍为contract-only；ADR-0008已接受Active Event v2八Schema与版本化统一Outbox合同，但同样仍为contract-only。
+3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。ADR-0006 的首批12项 Schema、Task creation纯library与official fixtures/harness已经实现，但repository、handler、child materializer与production cutover尚未完成；ADR-0007仍为contract-only；ADR-0008的Event v2八Schema、manifest/catalog/compiler、generated Rust typed envelope与conformance已经实现，SQLite migration 0003、mixed Outbox API、producer/Publisher/runtime仍未实现。
 4. 源码、Schema 与测试必须实现本规范，不能反向改变规范。
 
 `PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据（由 `scripts/update-file-manifest.mjs` 从 Git Markdown source set 生成，禁止手改）；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。
@@ -28,7 +28,7 @@
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/REPOSITORY_MAINTENANCE.md`](docs/REPOSITORY_MAINTENANCE.md)：主仓与纯文档镜像的持续更新、发布顺序、失败门禁，以及已实现的 `scripts/sync-docs-repository.mjs`（`pnpm run check:docs-repository` / `sync:docs-repository` / `test:docs-repository`）。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
-- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现legacy TaskCreate v1 create/get与不可连接dispatcher，以及ADR-0006首批Schema、Task creation纯library和official fixtures/harness；ADR-0008只完成Event v2/统一Outbox文档合同，active Schema/migration/producer仍未实现；active TaskCreate v2 repository/handler、child Action materializer、Approval v2、`agentd`与可连接server尚未实现。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现legacy TaskCreate v1 create/get与不可连接dispatcher，以及ADR-0006首批Schema、Task creation纯library和official fixtures/harness；ADR-0008的Event v2 Schema/source/generated catalog/typed decode已实现，但SQLite migration 0003、mixed Outbox API、active producer/Publisher/runtime仍未实现；active TaskCreate v2 repository/handler、child Action materializer、Approval v2、`agentd`与可连接server尚未实现。
 - [`docs/sdk/README.md`](docs/sdk/README.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 

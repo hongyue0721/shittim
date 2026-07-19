@@ -38,7 +38,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task不通过KCP创建，只通过父Task的`kernel.task/task.child.create` Action原子materialization。当前`kernel-sqlite`/`kernel-kcp`只实现legacy v1 create/get；active v2、child Action、CausationRef/EventEnvelope/Audit v2尚未实现。
+完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task不通过KCP创建，只通过父Task的`kernel.task/task.child.create` Action原子materialization。当前`kernel-sqlite`/`kernel-kcp` runtime只实现legacy v1 create/get；Event v2 Schema/compiler/generated typed decode已落地，但active runtime、child Action、Audit v2、migration 0003与mixed Outbox尚未实现。
 
 ## Value preflight 与 registration 合同
 

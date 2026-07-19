@@ -2,20 +2,20 @@
 
 - 状态：accepted
 - 日期：2026-07-19
-- 实现状态：contract-only；本 ADR 未新增 Schema、manifest entry、generated artifact、Rust API、SQLite migration、producer、Publisher 或 server
+- 实现状态：第一实现段已完成（八个 Event v2 component-native Schema、manifest 61 entries、schema-tool Event claimant/catalog/bindings、generated Rust typed envelope 与 conformance）；migration 0003、mixed Outbox API、producer、Publisher、server 仍为 contract-only
 - 合同开放问题：0；本ADR所列Event v2/Outbox docs决策已全部拍板，剩余项都是实现工作而非合同待定项
 
 ## 背景
 
-现有仓库只有 retained `EventEnvelope v1`、`CausationRef v1`、三个事件 payload 与 SQLite v1 Outbox。v1 causation 只能表达 `command_request | event`，因此无法诚实表达 Child Task 由 Action 直接产生，也无法在 Action 自身状态事件中避免 self-causation。Approval v2 的 current-head 变化同样没有正式 payload。与此同时，active 合同已经依赖五类事件、CausationRef v2、Action transition anchor 与 Approval head 事件；如果先实现 root v2、child materializer或Approval repository，再临时扩展旧 Outbox，会形成两张表、两套 position/sequence 或 nullable causation 列不断膨胀的长期债务。
+现有仓库历史上只有 retained `EventEnvelope v1`、`CausationRef v1`、三个事件 payload 与 SQLite v1 Outbox。Event v2第一实现段现已补齐八个Schema、compiler/catalog与generated typed decode，但SQLite仍停留在v1 Outbox。v1 causation 只能表达 `command_request | event`，因此无法诚实表达 Child Task 由 Action 直接产生，也无法在 Action 自身状态事件中避免 self-causation。Approval v2 的 current-head 变化同样尚无producer/repository实现。若在migration 0003前先接入root v2、child materializer或Approval repository，并临时扩展旧Outbox，就会形成两张表、两套position/sequence或nullable causation列不断膨胀的长期债务。
 
-本决策先固定下一 generic Core 里程碑的 Event v2 Schema闭包、Catalog权威和SQLite统一存储合同。它不把合同状态虚报为实现，也不启用production MethodVersionBinding或任何active producer。
+本决策固定generic Core里程碑的Event v2 Schema闭包、Catalog权威和SQLite统一存储合同。第一实现段已经落地Schema/compiler/generated产物；它仍不启用production MethodVersionBinding、active producer或mixed Outbox runtime。
 
 ## 决策
 
-### 1. 下一批恰好八个 component-native Schema
+### 1. 已落地的恰好八个 component-native Schema
 
-下一 Schema 实现切片必须一次性加入下表八项；不能只加入 Envelope、只加入payload，或用inline平行枚举绕过闭包：
+Event v2第一实现段已一次性加入下表八项；不能只保留 Envelope、只保留payload，或用inline平行枚举绕过闭包：
 
 | title | component | kind | compatibility | exact ID | exact source | schema_version_field | 直接 `$ref` |
 |---|---|---|---|---|---|---|---|
@@ -28,9 +28,9 @@
 | `ApprovalStateChangedPayloadV1` | event | event_payload | new-contract | `https://schemas.shittim.local/event/approval_state_changed_payload/v1` | `schemas/source/event/approval_state_changed_payload.v1.json` | `schema_version` | whole-schema root refs：`ConfirmationModeV1`、`ApprovalRecordKindV2`、`ApprovalSubjectKindV2` |
 | `EventEnvelopeV2` | event | envelope | breaking-replacement | `https://schemas.shittim.local/event/event_envelope/v2` | `schemas/source/event/event_envelope.v2.json` | `schema_version` | whole-schema root refs：`CausationRefV2`与五个正式payload |
 
-实现该切片后production manifest应为61 entries（41 retained + 20 component-native），但在Schema真正落地前仓库事实仍是53（41 + 12）。production `method_version_bindings`继续为空，因为Event Catalog不通过KCP MethodVersionBinding表达。该“仍为空”仅指本Event Schema/Catalog/Outbox合同切片；未来若升级KCP `event.poll` response以承载v2，必须在独立切片为poll新增/升级binding，不能借此句永久保持为空。
+该切片落地后production manifest现为61 entries（41 retained + 20 component-native）。production `method_version_bindings`继续为空，因为Event Catalog不通过KCP MethodVersionBinding表达。该“仍为空”仅指本Event Schema/Catalog实现段；未来若升级KCP `event.poll` response以承载v2，必须在独立切片为poll新增/升级binding，不能借此句永久保持为空。
 
-`ConfirmationModeV1`归属common，而不是policy。它是PolicyRule、PermissionDecision、Approval request和公共Approval事件共同使用的跨域算法无关词表；放入policy会让所有使用者依赖Approval领域，并阻止common层对象未来安全复用。common继续不引用其它component。为复用policy拥有的record/subject discriminator而不复制枚举，event的future `allowed_refs`精确扩为`["common","policy"]`；policy仍只引用common。完整DAG为`kcp→event|task|common`、`event→policy|common`、`policy→common`、`task→common`、`audit→common`，不存在反向边或cycle。
+`ConfirmationModeV1`归属common，而不是policy。它是PolicyRule、PermissionDecision、Approval request和公共Approval事件共同使用的跨域算法无关词表；放入policy会让所有使用者依赖Approval领域，并阻止common层对象未来安全复用。common继续不引用其它component。event的`allowed_refs`已精确扩为`["common","policy"]`以复用policy拥有的record/subject discriminator；policy仍只引用common。完整DAG为`kcp→event|task|common`、`event→policy|common`、`policy→common`、`task→common`、`audit→common`，不存在反向边或cycle。
 
 ADR涉及的三个enum闭集不在本文件另起版本：`ConfirmationModeV1=generic|local|system_authentication|remote_signature|plan_revision`、`ApprovalRecordKindV2=request|resolution|invalidation`、`ApprovalSubjectKindV2=operation|task_proposal|plan_revision`，权威交叉引用IC §13.6.2。本文“直接/whole-schema `$ref`”统一按IC §13.6.2定义为空fragment且解析到manifest root；inline或fragment ref不算。
 
@@ -120,7 +120,7 @@ pub const EVENT_LEGACY_V1_TYPES: &[&str] = &EVENT_LEGACY_V1_TYPE_ARRAY;
 
 Rust renderer必须先生成private fixed-size `EVENT_ACTIVE_BINDING_ARRAY`与`EVENT_LEGACY_V1_BINDING_ARRAY`，再以上述public slice constants借用它们；一个通用`const fn project_event_types<const N: usize>(&[EventTypeBinding; N]) -> [&'static str; N]`按索引从同一binding array投影private fixed-size `EVENT_ACTIVE_TYPE_ARRAY`/`EVENT_LEGACY_V1_TYPE_ARRAY`，最后暴露上述`&[&str]` type slices。该形态必须在workspace Rust toolchain上编译测试。event type字符串只能出现在binding初始化中一次；禁止再手写第二份type成员/顺序表。删除当前模糊`EVENT_V1_TYPES`，不保留同义alias。active binding五项依次是`task.created/task/retained TaskCreatedPayload v1`、`task.state_changed/task/retained TaskStateChangedPayload v1`、`action.state_changed/action/ActionStateChangedPayload v1`、`approval.state_changed/approval_chain/ApprovalStateChangedPayload v1`、`stop_fence.activated/stop_fence/retained StopFenceActivatedPayload v1`；legacy binding三项按retained root顺序。`payload_schema_id`必须是manifest exact root ID，`payload_schema_version`取该payload root自己的版本事实，不从Envelope版本推断。
 
-active authority发现仍必须使用IC §5.6的同精度谓词：先收集reserved exact ID/title/source任一占用者，以及`component=event,kind=envelope`且具有`schema_version.const=2`、root `type` closed enum和`allOf if(type const)/then(aggregate const + whole-schema payload $ref)`形状的结构候选；候选必须恰好一个且metadata全部exact。普通event schema不会因名字或开放payload被误抓。exact root随后必须有五值type enum与五个一一对应mapping branch；inline payload、fragment `$ref`、缺失/重复/mixed branch、额外mapping或一个branch覆盖多个type全部fail closed。active type集合、aggregate约束与payload Schema绑定只能从该闭包派生，不按ID suffix、source文件名或手写第二张表发现。typed生成必须产生可按Envelope版本区分的v1/v2 typed decode；未知type、Envelope version或type/payload mapping失败不降级到开放JSON。
+active authority发现仍必须使用IC §5.6的宽松候选、严格exact两阶段谓词：reserved exact ID/title/source任一占用者永远是候选；结构候选只要求`component=event,kind=envelope`、`schema_version.const=2`、非空string `type` enum与至少一个`if(type const)/then`同时出现`aggregate_type/payload`键的mapping-like branch。候选门不调用strict parser、不派生mapping facts，也不要求root `type=object`、`additionalProperties=false`、完整required、whole-schema ref或双射，因此近似伪装都先进入candidate再fail closed。候选必须恰好一个且metadata全部exact；exact root随后要求closed object/required，并消费registry load时每个KCP/Event envelope恰好解析一次、按schema id缓存的strict `EnvelopeConditionalBinding`，硬验五值type enum与五个一一对应whole-root mapping branch。inline payload、fragment `$ref`、缺失/重复/mixed branch、额外mapping或一个branch覆盖多个type全部拒绝。Catalog、target closure与typed生成只读取同一缓存IR；通用IR位于独立`conditional_envelope`模块，`event_catalog`只做authority投影。
 
 ### 4. EventEnvelope v2不增加第二套时间或投递字段
 
@@ -248,4 +248,4 @@ impl SqliteStore {
 3. 后续root v2、child、Action transition、Approval repository只能消费上述active入口；不得各自创建临时Event存储。
 4. Conformance必须覆盖Schema正反例、claimant/mapping drift、mixed migration、JCS、sequence/position、SAVEPOINT、corruption、rollback/backup与legacy write gate。
 
-本ADR完成仅表示权威合同已接受；当前仓库仍只有53 Schema、legacy EventEnvelope v1/三类事件/SQLite v1 Outbox，无migration 0003、active producer、Publisher、repository、handler或server。
+本ADR的合同与第一实现段已经完成：当前仓库有61 Schema，Event v2八Schema、active/legacy Catalog与v1/v2 typed decode已落地；SQLite仍是legacy EventEnvelope v1 Outbox。尚无migration 0003、mixed API、active producer、Publisher、repository、handler或server。

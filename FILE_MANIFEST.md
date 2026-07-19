@@ -16,7 +16,7 @@
 - `adr/0008-active-event-v2与版本化统一outbox.md` — 251 lines
 - `adr/README.md` — 26 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 219 lines
+- `docs/PROGRESS.md` — 224 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 147 lines
 - `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 45 lines
@@ -29,12 +29,12 @@
 - `docs/api/kernel-control-protocol.md` — 90 lines
 - `docs/api/kernel-kcp.md` — 63 lines
 - `docs/api/kernel-sqlite.md` — 161 lines
-- `docs/api/schema-generation.md` — 185 lines
+- `docs/api/schema-generation.md` — 187 lines
 - `docs/api/task-repository-contract.md` — 59 lines
 - `docs/sdk/README.md` — 37 lines
 - `docs/sdk/extension-sdk.md` — 39 lines
 - `specs/COMPUTER_USE.md` — 863 lines
-- `specs/CONFORMANCE.md` — 683 lines
+- `specs/CONFORMANCE.md` — 684 lines
 - `specs/CORE_ARCHITECTURE.md` — 856 lines
 - `specs/EXTENSION_SDK.md` — 682 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines

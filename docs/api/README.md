@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有53个Schema（41 retained + 12 component-native）；ADR-0006相关首批12项的source、manifest entries、generated Rust root types、Task creation纯library和三份official fixtures/harness已落地，但production MethodVersionBindings仍为空。ADR-0008已接受Active Event v2八Schema、Catalog与统一Outbox合同，但当前未新增Schema、generated artifacts或migration 0003；SQLite/generated Event仍是legacy v1。ADR-0006后续repository、handler、child materializer、method-aware preflight和cutover仍未完成；ADR-0007的Approval/PermissionDecision v2仍为contract-only。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
+已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有61个Schema（41 retained + 20 component-native）；ADR-0006相关首批12项的source、manifest entries、generated Rust root types、Task creation纯library和三份official fixtures/harness已落地，ADR-0008 Event v2八Schema/source/generated catalog/typed envelope也已落地，但production MethodVersionBindings仍为空。migration 0003、mixed Outbox API与active producer仍未实现；SQLite Outbox仍是v1。ADR-0006后续repository、handler、child materializer、method-aware preflight和cutover仍未完成；ADR-0007的Approval/PermissionDecision v2仍为contract-only。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
 
 本目录是中文导航，不是新的事实源。字段、状态机、错误和兼容规则以 `specs/` 及 `schemas/source` 为准。Core API 不暴露预埋的 Computer Use 方法；未来 Profile 的方法必须在正式 Schema、Catalog 和 Extension SDK Base 组合契约确立后再出现。`desktop-client` 是桌面客户端，不是 Computer Use。
 
@@ -20,7 +20,7 @@
 - [Approval v2与PermissionDecision授权合同](approval-contract.md)（contract-only）
 - [AuditRecord版本合同](audit-record.md)（v1已实现；v2 producer contract-only）
 - [Kernel Control Protocol](kernel-control-protocol.md)（method-aware active生命周期合同；Schema/root types已落地，runtime实现仍为retained v1库级路径）
-- 首批正式事件索引：[Event Catalog](event-catalog.md)（active五类与ADR-0008统一Outbox合同已闭合；当前代码只有legacy v1三payload/Outbox，八Schema与migration 0003未实现）
+- 首批正式事件索引：[Event Catalog](event-catalog.md)（Event v2八Schema/source/generated catalog/typed decode已实现；SQLite migration 0003、mixed Outbox API、active producer/Publisher仍未实现）
 - 稳定错误索引：[Error Catalog](error-catalog.md)（method lifecycle、v2业务/身份/CAS错误）
 
 Core API 不预留 `snapshot`、`user_takeover` 或其他 Computer Use 专用方法；这些能力若未来实现，应通过 Optional Profile 的正式契约接入，而不是扩张 Core API。

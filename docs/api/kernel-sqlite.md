@@ -158,4 +158,4 @@ SQLite adapter 必须按 `StoreErrorCode` 穷举，不匹配 `StoreError.message
 
 ## 明确不在当前实现范围
 
-active TaskCreate v2、Child Action materialization、Task creation provenance、CausationRef/EventEnvelope/ContentOrigin/Audit v2、Action/PermissionDecision/Approval repositories与migration均未实现。Event v2八Schema与migration 0003已有权威文档合同，但没有SQL、Rust或测试实现。
+active TaskCreate v2、Child Action materialization、Task creation provenance、ContentOrigin/Audit v2、Action/PermissionDecision/Approval repositories与相关migration均未实现。Event v2八Schema、compiler/catalog与generated Rust typed decode已实现，但本crate仍没有migration 0003、mixed Outbox API、active producer/Publisher或对应SQLite测试。

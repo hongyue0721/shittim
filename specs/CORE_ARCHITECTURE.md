@@ -199,7 +199,7 @@ UI 退出不触发上述流程。
 
 ### 8.5 EventEnvelope
 
-> active EventEnvelope v2与版本化统一Outbox当前为contract-only；exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。现有Rust/SQLite仍只实现legacy v1。
+> active EventEnvelope v2的Schema/source/compiler/catalog/generated typed decode已实现；版本化统一Outbox仍只完成合同，SQLite当前仍是legacy v1。exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。
 
 所有持久化事件包装在 EventEnvelope 中。`sequence` 只表达同一聚合内的领域顺序：某聚合第一条**已提交**事件固定为 `0`，此后每条已提交事件必须严格等于上一条已提交事件的 `sequence + 1`。事务中暂时分配但最终回滚的序号不构成已提交事实、不得占号；重试事务必须基于当前最后已提交序号重新分配。`outbox_position` 是事件写入 Outbox 时由 Kernel 分配的全局单调递增投递位置，只用于发布、分页和 cursor，不代表跨聚合因果顺序。
 
