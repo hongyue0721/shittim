@@ -199,6 +199,8 @@ UI 退出不触发上述流程。
 
 ### 8.5 EventEnvelope
 
+> active EventEnvelope v2与版本化统一Outbox当前为contract-only；exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。现有Rust/SQLite仍只实现legacy v1。
+
 所有持久化事件包装在 EventEnvelope 中。`sequence` 只表达同一聚合内的领域顺序：某聚合第一条**已提交**事件固定为 `0`，此后每条已提交事件必须严格等于上一条已提交事件的 `sequence + 1`。事务中暂时分配但最终回滚的序号不构成已提交事实、不得占号；重试事务必须基于当前最后已提交序号重新分配。`outbox_position` 是事件写入 Outbox 时由 Kernel 分配的全局单调递增投递位置，只用于发布、分页和 cursor，不代表跨聚合因果顺序。
 
 | 字段 | 说明 |
@@ -640,19 +642,26 @@ Intent persisted
 
 ### 17.2 SQLite Outbox
 
-事件发布使用 Outbox 模式，保证业务事实与待投递记录原子提交，并提供 at-least-once 发布：
+事件发布使用一个跨Envelope版本统一的Outbox，保证业务事实与待投递记录原子提交，并提供 at-least-once 发布。当前代码仍是v1规范化列实现；后续migration 0003按ADR-0008升级同一表，禁止建立并行`outbox_v2`：
 
 1. 在同一个 SQLite 事务中：写入业务状态变更 + 插入 EventEnvelope 到 `outbox` 表，并分配全局单调递增 `outbox_position`；
 2. 事务提交后，Event Publisher 按 `outbox_position` 升序读取未发布记录；
 3. Publisher 成功发布到 Kernel 事件传输层后设置 `delivered_at`（或依保留策略删除记录）；`delivered_at` 只表示 Publisher 已发布，不表示任一或全部订阅者已经消费；
 4. 订阅者使用 `dedup_key` 去重，实现幂等消费。
 
-### 17.3 Outbox 字段
+### 17.3 Outbox 字段（post-0003）
+
+本节字段形态是migration 0003完成后的规范；当前0001/0002数据库仍保存v1 `causation_kind/causation_id`，不得把post-0003描述成现状。
 
 - `event_id`、`type`、`schema_version`、`aggregate_type`、`aggregate_id`、`sequence`、`outbox_position`、`occurred_at`；
-- `causation_ref`（v2 tagged union：`command_request{id}` / `event{id}` / `action{id}` / `action_transition{action_id,transition_id}`；v1历史仅前两支）、`correlation_id`、`dedup_key`；
-- `payload`（JSON）；
+- `causation_ref`持久化为canonical `causation_json`：v2 tagged union为`command_request{id}` / `event{id}` / `action{id}` / `action_transition{action_id,transition_id}`，v1历史仅前两支；不得为分支扩张一组nullable列；
+- `correlation_id`、`dedup_key`；
+- `payload`持久化为canonical `payload_json`；
 - `delivered_at`（可空，仅表示 Publisher 发布完成）。
+
+post-0003 `outbox`表的DB级CHECK必须至少固定以下闭包，不能只用`length()>0`：`schema_version IN (1,2)`；`event_type`在五类active并兼容三类legacy的并集；`schema_version=1`时只允许`task.created|task.state_changed|stop_fence.activated`，`schema_version=2`时允许五类；event→aggregate固定为`task.*→task`、`action.state_changed→action`、`approval.state_changed→approval_chain`、`stop_fence.activated→stop_fence`且后者`aggregate_id='global'`。`payload_json`与`causation_json`至少CHECK `json_valid(...)`且root `json_type(...)='object'`；DB不宣称验证JCS字节、UUID/date-time、causation branch字段闭包、payload schema_version/type mapping或payload业务条件，这些由应用层按row envelope version执行exact Schema、typed decode、canonical byte equality与repository relation validation。payload版本仍由对应payload Schema权威，不能由DB把它推断为Envelope版本。
+
+Outbox不保存完整`envelope_json`双源；读路径按row `schema_version`选择exact v1/v2 Envelope Schema与typed decoder，再从规范化列重建。v1/v2共享单一全局position与单一aggregate sequence空间。
 
 ### 17.4 订阅者 Cursor
 
@@ -719,7 +728,7 @@ Schema 通过顶层 required 字段保证显式事实，并拒绝 `policy_contex
 - `task.created` / `task.state_changed`；
 - `plan.proposed` / `plan.updated`；
 - 其它未来内部Action名称可包括`action.requested` / `action.started` / `action.completed` / `action.failed`，但它们不是首批active Catalog；首批只正式发布通用`action.state_changed`；
-- Approval不发布`approval.requested`/`approval.resolved`平行事实；首批只发布`approval.state_changed`，payload以record kind/ref表达request/resolution/invalidation/replacement；
+- Approval不发布`approval.requested`/`approval.resolved`平行事实；首批只发布`approval.state_changed`。其`ApprovalStateChangedPayloadV1`必须含required `change_kind`，闭集精确为`initial_request|resolution|invalidation_without_replacement|replacement_request`，并以record kind/ref表达request/resolution/invalidation/replacement；四类完整from/to/ref真值表与repository exact-equality边界以`IMPLEMENTATION_CONTRACTS.md` §5.6为唯一权威；
 - `delegation.matched` / `delegation.rejected` / `delegation.revoked`；
 - `memory_candidate.proposed` / `memory_candidate.committed` / `memory_candidate.rejected`；
 - `extension.started` / `extension.stopped` / `extension.crashed`；

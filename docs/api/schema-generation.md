@@ -1,6 +1,6 @@
 # Schema 生成与契约类型
 
-> 状态日期：2026-07-19。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式V2 Envelope authority、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；12业务Schema source/entries与generated root types已落地；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地；中立strict RFC6901 selection/mutation library、`validate/canonicalize --pointer`与canonical Bytes/Hex/Hash模式CLI已落地；三份official task-creation fixtures及共享wrapper/production owner/独立CLI oracle harness已落地。kernel-kcp runtime cutover、repository、handler、materializer与可连接server仍未完成。
+> 状态日期：2026-07-19。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式KCP V2 Envelope authority、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；12业务Schema source/entries与generated root types已落地；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地；中立strict RFC6901 selection/mutation library、`validate/canonicalize --pointer`与canonical Bytes/Hex/Hash模式CLI已落地；三份official task-creation fixtures及共享wrapper/production owner/独立CLI oracle harness已落地。**Event v2下一批八Schema与active/legacy Event catalog命名合同已在IC §13.6.2/ADR-0008拍板，但本批仅文档，尚未修改Schema、manifest、generator或generated artifacts。** kernel-kcp runtime cutover、repository、handler、materializer与可连接server仍未完成。
 
 ## 权威边界
 
@@ -14,7 +14,7 @@
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| Schema 源 | `schemas/source/{audit,common,task,policy,event,kcp}/` | 53 个 Draft 2020-12 schema（41 retained + 12 business-v2）；当前 source Schema 不含 Computer Use Profile Schema |
+| Schema 源 | `schemas/source/{audit,common,task,policy,event,kcp}/` | 当前仍为53个Draft 2020-12 schema（41 retained + 12 component-native）；Event v2下一批八项只是contract-only，尚未创建source；当前source不含Computer Use Profile Schema |
 | Manifest | `schemas/manifest.json` | production为53 entries（41 retained + 12 component-native）与显式空`method_version_bindings`。**library implemented**：正式五值compatibility；component-native exact ID/source/title/version硬门；完整非空MethodVersionBinding validator；registry V2 Envelope唯一发现；production CLI `check`/`generate`在load后plan/render前调用`validate_production_manifest_stage`。family structure authority目录为`KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS`/`KCP_ENVELOPE_AUTHORITY_QUERY_METHODS`/`KCP_ENVELOPE_AUTHORITY_METHODS`；retained v1目录显式为`KCP_LEGACY_V1_*`；binding catalog为`METHOD_VERSION_BINDINGS`。三者职责不同，authority不等于bound/executable。 |
 | 中立 graph | `schema-tool` `contract_model` | target-scoped `TargetContractGraph`；`ContractTypeId` = `$id` + 严格 RFC6901 JSON Pointer；`TypeUse` 携带 source use-site；integer scalar携带language-neutral `IntegerConstraints { minimum, maximum }` JSON整数事实；`TypeShape::Alias`保留root/fragment identity；graph完成后由单一language-neutral resolver建立Alias依赖链与terminal事实，纯Alias SCC无terminal结构化拒绝，合法object/union递归仍交给声明SCC/layout；字段nullability消费同一resolution事实。`AliasResolution`由schema-tool crate root正式re-export。未来TypeScript renderer必须读取同一表，不得平行递归。 |
 | 身份分离 | `ContractTypeId` ≠ `RustDeclarationId` | 中立 graph 按 canonical fragment 唯一；Rust renderer采用权威全序 **`SharedRoot > SharedCanonicalFragment > NominalInstantiation`**。whole-schema `$ref`固定为`SharedRoot`；任意named canonical fragment一旦被两个或更多source roots**实际投影使用**，`SharedCanonicalFragment`就在该canonical的所有use-site全局生效，会覆盖其中某个root内原本可生成的same-root nominal clones，并生成一个host-derived Rust declaration（当前四个task-create root的`$defs/proposer`共用`NormalizedRootTaskCreatePayloadV2Proposer`）；仅一个source root使用时才按use-site lineage保留`NominalInstantiation`，如`PolicyRuleCreatedBy`/`PolicyRuleUpdatedBy`。这是renderer语言策略，不改变neutral IR identity。新增第二root引用可能把既有公共字段类型/符号从多个nominal类型改成一个shared类型，属于生成Rust公共API变化，必须由generated drift与人工review明确接受，不能因canonical identity未变而静默视为无变化；symbol/member/artifact collision均fail closed。 |
@@ -22,7 +22,7 @@
 | Artifact 规划与提交 | `codegen` `ArtifactPlan::try_new` + `artifact_transaction` | 唯一plan构造入口要求distinct roots恰好一个，并校验path/duplicate/component-safe/planned prefixes；拒绝0/multi-root、`generated_evil`、absolute、traversal、duplicate、outside root。generate在完整plan/render后进入当前**单root/Linux real-platform verified** transaction：持久lock file使用Rust 1.97 OS advisory file lock（不unlink，owner metadata仅诊断），锁内先recover；durable `Preparing/Prepared/RollingBack/Committed` journal协调同filesystem sibling stage/backup/rollback-discard。transaction 边界在 FD advisory lock 成功且 owner metadata 发布后开始；LockPort（open/type/try-lock/owner metadata）独立验收，FD lock 权威、owner 仅诊断、不 unlink/PID 回收。TransactionFs 使用 typed `OperationEvent`（semantic phase、operation、Before/AfterSuccess、path role、journal target phase、仅用于重复操作的 occurrence）记录 mutation/durability boundary；read/metadata inspection 不进矩阵。正式 `Committed` journal rename 是提交点，之前 existing=Old/absent=Absent，之后=New。exact matrix 已通过真实 trace 自动发现 reachable target，断言即时完整snapshot、structured disposition、recover#1精确终态与recover#2 Noop；`StoredStateInvalid` 对正式journal损坏fail closed且不改变root。control-flow/fault conformance不等同真实断电介质模型；partial I/O只有明确fake effect才可声明覆盖。 |
 | Rust projection | `RustProjection` / `project_rust` | 公开 API 只保留 `project_rust`、`render_types_module_from_projection`、`render_typed_module_from_projection`、`render_catalog_module`；禁止 graph 级 convenience re-project；`plan`/`render_rust_artifacts`/`lower_and_render_rust` 只 project 一次；catalog 直接读 graph |
 | 生成类型 | `generated/types.rs` | struct/enum、const 单值类型、`NullOnly`；renderer为每个struct先建立统一Rust member namespace plan，声明字段经过snake_case/keyword归一后与synthetic `additional_properties` flatten member一并审计，碰撞错误携带Schema/declaration/字段身份；open object未知字段无损round-trip。integer仅在neutral IR同时证明inclusive min/max时选择最窄准确Rust整数类型；`1..=u32::MAX`生成`u32`，无完整安全范围的既有integer继续保持`i64` public bytes。**string enum**统一生成`ALL`并自动测试；递归SCC规则保持不变。 |
-| 生成目录 | `generated/catalog.rs` | 由 manifest 生成的 embedded schema 与方法/事件闭集（不经 projection） |
+| 生成目录 | `generated/catalog.rs` | 由 manifest 生成的 embedded schema 与方法/事件闭集（不经 projection）。当前Event常量仍是legacy `EVENT_V1_TYPES`代码事实；下一实现切片必须生成named `EventTypeBinding`、`EVENT_ACTIVE_BINDINGS`/`EVENT_LEGACY_V1_BINDINGS`，再从bindings单源const投影`EVENT_ACTIVE_TYPES`/`EVENT_LEGACY_V1_TYPES`并删除模糊alias，不能在本docs-only切片虚报完成。 |
 | Typed decode | `kernel-contracts::decode_validated` + `generated/typed.rs` | 外部JSON通用入口固定Schema validate→typed deserialize，失败使用结构化`ContractError::DecodeAfterSchema`/`DecodeStage`；retained typed Envelope继续复用`decode_after_validation`内部阶段。12 root覆盖decode→serialize→revalidate；closed root拒绝unknown，required-nullable区分missing/null，validation-only约束不会被direct serde绕过。 |
 | JCS 向量 | `schemas/examples/jcs/`、`schemas/fixtures/kcp/task_create_normalized_hash.v1.json`、三份official task creation fixtures | 现有 RFC 8785 示例、legacy fixture，以及root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation `schemas/fixtures/task/task_creation_allocations.v1.json`均已落地；official wrappers不进manifest |
 | 检查脚本 | `scripts/check-schema.sh` | 仓库当前统一门（历史名保留）：先 `node scripts/check-node-toolchain.mjs`（要求调用者 PATH 已指 Node 24.18.0 / pnpm 11.3.0），再 generate×2、meta/check、fmt、clippy、test、generated drift、最后 `FILE_MANIFEST` Git source set check；**不是** Rust-only |
@@ -86,6 +86,7 @@ cargo run --manifest-path rust/Cargo.toml -p schema-tool -- --repo-root "$PWD" \
 - KCP/Event 条件 payload：discriminator property 闭集 enum 与每个 `allOf` 分支的 `if.properties.<discriminator>.const` + `then.properties.payload.$ref` 必须一一对应、无重复。
 - payload `$ref` 必须解析到 manifest 中的完整 Schema。
 - `type` 含多个非 null 分支、歧义 `oneOf`、schema-valued `additionalProperties`、`anyOf`、`not`、`patternProperties`、`dependentSchemas`、`prefixItems`、`contains`、`unevaluatedProperties`（仅 non-null TaggedUnion classifier 的精确 `false` 例外）等形状关键字明确失败。
+- Event v2 claimant discovery是命名的专用registry分析器，不扩张通用Envelope detector：它按IC §5.6收集reserved ID/title/source与event-envelope结构候选，并复用`schema_walk`/`resolve_ref`/现有conditional mapping parser；ordinary event object/payload/envelope必须保持非候选。
 
 ### 递归 layout（SCC Box）
 
@@ -140,6 +141,18 @@ root official fixture harness只执行`KcpCommandEnvelopeV2` raw Schema、`TaskC
 - KcpCommandEnvelopeV2/KcpQueryEnvelopeV2保持protocol 1.0，0个method payload conditional `$ref`；只禁止这两个generic typed decode及其0-ref同义wrapper；family structure authority由registry exact V2 Envelope facts唯一选择，不按ID suffix；authority常量为`KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS`/`KCP_ENVELOPE_AUTHORITY_QUERY_METHODS`/`KCP_ENVELOPE_AUTHORITY_METHODS`，binding另行选择业务payload/version；
 - production bindings继续为空；后续通用loader接受synthetic 8-method manifest，`validate_production_manifest_stage`由check/generate单独挂载production-empty gate，最终cutover才启用production。
 
+## Event v2下一批八Schema（contract-only；尚未落地）
+
+精确清单见IC §13.6.2与ADR-0008：common三项、policy两项、event三项。实现后manifest才会从53变为61；当前不得修改该计数。
+
+- `ConfirmationModeV1`放common，供Policy/PD/Approval/Event共同引用；event未来`allowed_refs=[common,policy]`，policy仍只指common，保持无环DAG；
+- `CausationRefV2.action_transition`整支引用`ActionTransitionRefV1`，不得复制字段；source最小骨架固定为union层required `kind`四值enum + closed `oneOf`，前三支inline `{kind const,id UUID}`，第四支whole-schema root `$ref`，并以`unevaluatedProperties:false`闭合；
+- `EventEnvelopeV2`是active Event claimant；发现谓词与KCP authority同精度：reserved exact ID/title/source任一占用者或event-envelope结构候选都进入候选集，恰好一个metadata exact后再校验root enum+五个完整mapping；普通Schema不误抓；
+- mapping payload必须是whole-schema root `$ref`（空fragment、解析后等于manifest root）；inline、fragment ref、missing/duplicate/mixed mapping全部fail closed；
+- Envelope v2复用三个retained payload v1并引用两个新payload v1，Envelope/payload版本正交；`ApprovalStateChangedPayloadV1`新增显式`change_kind`四值enum与四branch真值表；
+- generator未来必须输出named `EventTypeBinding { event_type:&'static str, aggregate_type:&'static str, payload_schema_id:&'static str, payload_schema_version:u64 }`、按v2/v1 Envelope root enum声明顺序的private fixed-size binding arrays与public `EVENT_ACTIVE_BINDINGS`/`EVENT_LEGACY_V1_BINDINGS` slices，并由通用`const fn project_event_types<const N: usize>`投影private type arrays后暴露`EVENT_ACTIVE_TYPES`/`EVENT_LEGACY_V1_TYPES`；event type字符串禁止平行重复，生成artifact必须真实Rust编译，不保留`EVENT_V1_TYPES`；typed decode显式区分Envelope v1/v2；
+- production MethodVersionBindings在本Event Schema/Catalog/Outbox切片继续为空，因为Event Catalog本身不是KCP method binding；未来`event.poll` response升级为可承载v2时必须在独立切片新增/升级poll binding。
+
 ## 已实现
 
 - 正式五值`compatibility`（无test-only旁路）；retained 4项compatibility演化标签已改标，其余37 `v1-stable`；
@@ -156,7 +169,7 @@ root official fixture harness只执行`KcpCommandEnvelopeV2` raw Schema、`TaskC
 - production非空MethodVersionBinding / V2ProductionWriteCutover；
 - TaskCreateRequest/Response v2 root-only runtime handler/repository（包括把已实现的`kernel-task-creation` helper接入生产路径）；
 - ChildTaskDelta/TaskCreationProvenance 及其余未列入本批12项的对象；
-- CausationRef/EventEnvelope/ContentOrigin/Audit v2；
+- CausationRef/EventEnvelope/ContentOrigin/Audit v2；其中Event v2 exact八Schema/claimant/catalog/typed与Outbox migration 0003已完成文档合同，但source/generator/runtime均未实现；
 - ApprovalRecord/PermissionDecision/auth challenge/evidence v2；
 - `agentd`、KCP bytes/frame/transport 与任何可运行服务端；
 - Task 更新/list、Action、PermissionDecision 等后续业务 repository 与 KCP handler；

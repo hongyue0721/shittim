@@ -21,6 +21,10 @@ ApprovalRecord v2外层`record_kind=request|resolution|invalidation`，内层`su
 
 每次成功head变化与Audit、Action/PD关系及Lease更新同事务写恰好一条`approval.state_changed`；atomic replacement不发布中间invalidation head。
 
+### Approval head event payload truth table
+
+`approval.state_changed`只用一个payload，但payload内必须显式携带`change_kind=initial_request|resolution|invalidation_without_replacement|replacement_request`。完整Schema真值表由IC §5.6权威定义；它逐类固定from/to record kind，以及from/to head、request、resolution、invalidation、replacement refs的required null/non-null。Schema不具备任意字符串字段等值能力，repository必须核对head/ref exact equality与replacement predecessor；不能根据`to_record_kind=request`猜initial或replacement。
+
 ## Material/observation
 
 Material projection排除PD id/revision/self-reference；PD revision仍进入operation subject freshness。`content_origin_refs`按lowercase canonical UUID文本UTF-8排序去重；Task child capability hints只来自TaskScope hints。Observation projection为`not_applicable|observed` tagged union，不伪造provider。

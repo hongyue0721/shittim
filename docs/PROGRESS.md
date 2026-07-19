@@ -1,10 +1,10 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-19（首批12个 business-v2 Schema source/manifest entries 与 generated Rust types已落地；`expires_at` pattern+format硬门、kernel-contracts canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper、schema-tool中立pointer/mutation/selected validate/canonicalize CLI，以及三份official task creation fixtures与harness已实现；production MethodVersionBindings仍为空；repository/handler/materializer/cutover仍未实现。）
+> 状态日期：2026-07-19（本docs-only切片接受ADR-0008并闭合Active Event v2八Schema、exact claimant/Catalog、typed envelope与SQLite migration 0003统一Outbox权威合同；**Event v2/Outbox合同开放问题=0**，剩余为实现任务；**未新增Schema、manifest entry、generated artifact、Rust或SQL**。仓库仍为53 Schema=41 retained+12 component-native，production MethodVersionBindings仍为空。既有Task creation pure library/official fixtures已实现；active repository/handler/materializer/cutover仍未实现。）
 
 ## 当前阶段
 
-当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。manifest共有53个Schema（41 retained + 12 component-native）；首批12项的source、manifest entries与generated Rust root types已落地，但production MethodVersionBindings仍为空。active合同已经是TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Event/Audit/ContentOrigin相关v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。根Node/pnpm基座存在，但没有TS包、agentd、server、Publisher或Provider。
+当前**代码事实**是v1 Rust/Schema基座、`domain-task`/`domain-policy`、legacy TaskCreate v1 create/get repository，以及不可连接的v1 preflight/dispatcher/三handler。manifest共有53个Schema（41 retained + 12 component-native）；首批12项的source、manifest entries与generated Rust root types已落地，但production MethodVersionBindings仍为空。Active Event v2的八Schema/claimant/generated catalog/migration 0003已经有唯一权威合同但仍未落地；当前generated event常量与SQLite Outbox都仍是legacy v1。active合同还包括TaskCreate v2 root-only、Action-only Child Task、Approval/PermissionDecision v2、Audit/ContentOrigin相关v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。根Node/pnpm基座存在，但没有TS包、agentd、server、Publisher或Provider。
 
 统一 Extension SDK Base 是基础产品的 Core 阻塞项：目前只有 `contract-only` 规范，没有正式 operation Schema、library、`composition`、public API 或 SDK 包；因此尚未达到 `schema/SDK`。`provider contract` 与 `real-platform` 是可选 Profile claim 的后续成熟度，`distribution_asserted` 则是与 maturity 正交的对外声明事实；当前两者都不存在。Computer Use 已从 Core 必做能力移为 Extension SDK Base 上的 optional Profile；当前同样仅为 `contract-only`，没有专用 Schema、crate、SDK composition、Provider 或真机测试，因而不阻塞 Core 完成。`desktop-client` 也不等同于 Computer Use。
 
@@ -23,6 +23,8 @@
 - [x] 接受工作区、Schema 生成和 KCP 本地传输 ADR。
 - [x] 添加 Apache-2.0 根许可证。
 - [x] 落地零依赖 Node/pnpm 根工作区基座：`packageManager pnpm@11.3.0`、`engines` exact `node 24.18.0` / `pnpm 11.3.0`、`pnpm-workspace.yaml` 声明 `ts/*`（不创建占位包）、`.npmrc engine-strict=true`、`.node-version 24.18.0`、零依赖 `pnpm-lock.yaml`，以及 `pnpm run check:toolchain`（`scripts/check-node-toolchain.mjs`）。smoke 硬校验当前 Node 进程和 PATH 中实际 `pnpm --version`；pnpm 11 的 engine warning 不冒充硬门。实际 Node 入口为 `~/.local/share/pnpm/node`；Corepack 不可用。
+
+- [x] 接受ADR-0008并闭合Active Event v2 docs-only权威合同：下一批恰好八Schema的exact身份/direct whole-schema refs、`CausationRefV2` oneOf whole-ref骨架、三enum闭集、`ApprovalStateChangedPayloadV1.change_kind`四类真值表与repository equality边界、reserved identity+结构候选claimant、named `EventTypeBinding`与active/legacy bindings→types单源const投影、typed version gate、producer causation边界，以及SQLite migration 0003 exact version/name/single asset/transform descriptor、单表mixed API精确字段/CHECK/savepoint/rollback/backup和retained `event.poll` v1不得返回v2的边界。该条只表示规范完成，不表示Schema、generator、migration、API或producer实现。
 
 ### Schema 与 Rust 契约
 
@@ -113,7 +115,7 @@
 - [x] `kernel-contracts`、`schema-tool`、`kernel-kcp`均有对应自动化回归；测试数量随新增场景演进，不在进度文档中维护易漂移总数。
 - [x] 当前 retained v1 Value preflight/registration/dispatcher 与三个 handler 已实现；未新增 bytes/UTF-8/JSON parse/frame/transport/server/agentd、五方法 handler或 `process_value`。active method-aware payload version preflight与runtime cutover仍未完成。
 
-## ADR-0006首批实现与仍为contract-only的ADR-0007
+## ADR-0006首批实现与contract-only的ADR-0007/0008
 
 - [x] 接受ADR-0006：active KCP TaskCreate v2 root-only；v1 legacy冻结；Child Task唯一通过父Task的`kernel.task/task.child.create` S1 Action创建；child事实直接Action causation，Action自身状态事件使用transition anchor；显式Scope/Delegation delta；原子materialization与legacy provenance。
 - [x] 接受ADR-0007：Approval v2 request/resolution/invalidation判别联合、subject exactly-one、不可变current-head CAS、material/observation fingerprint分离、真实身份/remote challenge证据与plan re-evaluation。
@@ -128,8 +130,14 @@
 
 ## 未完成
 
+- [ ] 实现ADR-0008八Schema source/manifest/generated types与exact Event claimant：`ApprovalStateChangedPayloadV1`含显式`change_kind`四值enum/完整真值表，claimant使用reserved identity+结构候选fail-closed谓词；届时manifest从53变61，production bindings仍须为空。
+- [ ] 实现generated `EventTypeBinding`、`EVENT_ACTIVE_BINDINGS`/`EVENT_LEGACY_V1_BINDINGS`及从bindings单源const投影的`EVENT_ACTIVE_TYPES`/`EVENT_LEGACY_V1_TYPES`，并实现v1/v2 typed EventEnvelope；删除当前模糊`EVENT_V1_TYPES`，不保留alias或平行mapping表。
+- [ ] 实现SQLite migration 0003统一Outbox：exact version=3/name=`versioned_event_outbox`/single asset=`rust/crates/kernel-sqlite/migrations/0003_versioned_event_outbox.sql`，先同事务升级ledger descriptor列，再以format-v1 JCS descriptor单hash覆盖该asset与exact Rust transform三元组；单表mixed read/write、canonical `causation_json`、post-0003 CHECK、corruption/backup/rollback测试；当前仍是v1列与API。
+- [ ] 实现固定mixed API：`StoredEventEnvelope::{LegacyV1,ActiveV2}`、`OutboxRecord`、逐字段legacy pending、`EventAggregateId`与无caller type/aggregate的`PendingActiveEventV2`、`append_legacy_event_v1/append_active_event_v2`；旧`PendingEvent/append_event`无alias。随后实现五类producer；当前没有Action/Approval producer、Publisher或consumer runtime。retained `event.poll` response v1仍只能返回v1，mixed KCP response须后续独立升级。
+- [ ] 后续独立Action-transition Schema/authority批次实现`ActionTransitionIntentV1`（task component exact ID/source见IC §6.14）及Action持久对象/repository/migration；本八Schema批次只交付ref/wire，producer不得临时造类型。
+
 - [ ] active Action合同需升级：`approval_chain_id`、execution generation、materialized child result与Approval v2消费；现有`approval_record_ref`/deferred文案是legacy实现，不得声称满足v2。
-- [ ] 后续其它v2 Schema仍包括四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule、signature/credential/challenge/evidence等。
+- [ ] 后续其它v2 Schema仍包括四投影/SubjectProjection/CreationProvenance、ContentOrigin/Audit、ActionTransitionIntent与Action持久对象、ApprovalRecord/PermissionDecision/PolicyRule、signature/credential/challenge/evidence等。CausationRef/EventEnvelope与Action/Approval event payload已属于前述Event八Schema，不在此重复列项。
 - [ ] 将Value preflight改为method-aware payload version；active `task.create`只接受2，v1仅migration validator；替换registered v1 handler。
 - [ ] 实现root v2 repository/handler与child Action materializer；同Action最多一child、bundle全有或全无、canonical readback与reconciliation。
 - [ ] 实现Action/PermissionDecision/Approval v2 repositories、current-head CAS、fingerprint失效/复用、身份challenge验证与plan Action重评。
@@ -160,12 +168,14 @@
 
 ## 下一步
 
-1. 做method-aware preflight、root v2 repository/handler 与 child Action原子materializer，以及最终 V2ProductionWriteCutover。
-2. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
-3. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
-4. 完成Task creation provenance migration和reconciliation，不伪造历史Action/Approval/Verification。
-5. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
-6. 随后实现Publisher、Extension SDK Base与TypeScript/client。
+1. 先实现ADR-0008的八Schema、`CausationRefV2` oneOf whole-ref骨架、reserved identity+结构候选exact claimant、`change_kind` Approval真值表、`EventTypeBinding` active/legacy bindings单源投影/typed decode；保持production MethodVersionBindings为空。
+2. 再实现SQLite migration 0003 exact descriptor identity（version/name/single asset/transform三元组）与单表mixed v1/v2 Outbox，以及固定命名/精确字段的active v2/legacy v1 API，不接业务producer；retained KCP poll仍不得返回v2。
+3. 独立实现`ActionTransitionIntentV1` Schema + Action持久对象/transition repository/migration，禁止producer临时类型；再做method-aware preflight、root v2 repository/handler 与 child Action原子materializer，以及最终 V2ProductionWriteCutover。
+4. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
+5. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。
+6. 完成Task creation provenance migration和reconciliation，不伪造历史Action/Approval/Verification。
+7. 再实现剩余五个Catalog handler与可连接server；禁止先接v1 server。
+8. 随后实现Publisher、Extension SDK Base与TypeScript/client。
 
 ## 最近验证
 

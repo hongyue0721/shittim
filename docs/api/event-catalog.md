@@ -1,28 +1,82 @@
 # Event Catalog
 
-> 状态：legacy EventEnvelope v1/SQLite Outbox已实现；active EventEnvelope/CausationRef v2以及`action.state_changed`、`approval.state_changed`仍为contract-only。字段与producer唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) 和 §6.14–6.16；本页只导航。
+> 状态：**active Event v2权威合同已闭合，但仍为contract-only**。当前仓库只实现legacy EventEnvelope v1、三类payload和SQLite v1 Outbox；尚无下述八个Schema、generated active catalog/typed decode、migration 0003、active producer或Publisher。唯一事实源是[`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog)、§6.14–6.15、§13.6.2与[ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)。
+
+## 下一Schema闭包
+
+下一实现切片必须一次加入八项：
+
+- common：`ActionTransitionRefV1`、`ConfirmationModeV1`、`CausationRefV2`；
+- policy：`ApprovalRecordKindV2`、`ApprovalSubjectKindV2`；
+- event：`ActionStateChangedPayloadV1`、`ApprovalStateChangedPayloadV1`、`EventEnvelopeV2`。
+
+`ConfirmationModeV1`归common，因为它被Policy、PermissionDecision、Approval和公共事件共同复用；record/subject kind仍归policy。event未来直接引用common与policy，形成`event→policy→common`的无环DAG，不复制平行枚举。精确ID/source/kind/version/compatibility见IC §13.6.2。
 
 ## CausationRef v2
 
-- `command_request{id}`：command直接产生事实。
-- `event{id}`：已提交event触发事实。
-- `action{id}`：Action产生其它aggregate事实，例如child `task.created`。
-- `ActionTransitionRefV1 {kind:"action_transition",action_id,transition_id}`：仅Action自身状态event；CausationRef branch直接`$ref`该正式wire对象。其权威定义（连同Intent、CAS、replay与reconciliation）在IC §6.14，不在Audit合同重复定义。
+source最小语义骨架固定为closed `oneOf` whole-ref联合：union层required `kind` enum=`command_request|event|action|action_transition`；前三个branch各为`additionalProperties:false`的`{kind:<const>,id:UUID}`对象；第四branch整支使用`$ref:"https://schemas.shittim.local/common/action_transition_ref/v1"`，union以`unevaluatedProperties:false`闭合。不得inline复制action transition字段或使用fragment ref。
+
+- `command_request{kind,id:UUID}`：command直接产生事实。
+- `event{kind,id:UUID}`：既有已提交event触发事实。
+- `action{kind,id:UUID}`：Action产生其它aggregate事实，例如child `task.created`。
+- `ActionTransitionRefV1 {kind:"action_transition",action_id:UUID,transition_id:UUID}`：仅Action自身状态event；CausationRef branch整支直接引用该正式wire对象。
+
+Ref不复制revision/generation；repository通过transition ID读取不可变intent并验证。event self-ID、future cause、Action self-causation、同chain Approval event因果与不可解析/cyclic relation均失败。
 
 ## 首批active Catalog
 
-| type | aggregate | 摘要 |
-|---|---|---|
-| `task.created` | task / Task ID | root由command，child由Action产生 |
-| `task.state_changed` | task / Task ID | 合法Task transition |
-| `action.state_changed` | action / Action ID | 使用ActionTransitionRefV1；payload绑定PD/Approval/Verification/result |
-| `approval.state_changed` | approval_chain / chain ID | 每次current-head成功变化恰好一条；atomic replacement无中间head event |
-| `stop_fence.activated` | stop_fence / `global` | generation激活事实 |
+| type | aggregate | payload | 直接因果边界 |
+|---|---|---|---|
+| `task.created` | task / Task ID | retained `TaskCreatedPayload v1` | root=command；child=Action |
+| `task.state_changed` | task / Task ID | retained `TaskStateChangedPayload v1` | 真实command/event/action |
+| `action.state_changed` | action / Action ID | `ActionStateChangedPayload v1` | 必须是ActionTransitionRefV1 |
+| `approval.state_changed` | approval_chain / chain ID | `ApprovalStateChangedPayload v1` | 真实外部command/event/action |
+| `stop_fence.activated` | stop_fence / `global` | retained `StopFenceActivatedPayload v1` | 激活调用真实来源 |
 
-### Approval可观察性
+Envelope版本与payload版本正交；EventEnvelope v2正式承载payload v1。
 
-初始request、resolution、invalidation、invalidation+replacement均由Approval repository固定生产，并各自消费正式`ApprovalEventAllocationV1`。事件payload携带from/to head与record kind、subject kind、canonical confirmation mode、request/resolution/invalidation/replacement refs、PD/Action、reason/time。CAS loser或replay不新增event；Challenge expired只写identity/security Audit，绝不作为Approval head事件。
+### Action payload
+
+全部字段required；PD/Approval/child refs为required-nullable，verification refs为required数组。Schema表达completed/failed verification、child result只属于completed、Approval ref要求PD ref等单记录条件；合法状态边、revision恰增1、Lease generation、PD/Approval current关系与commit后Action一致由repository验证。
+
+### Approval payload
+
+全部字段required；不适用ref与`from_record_kind`使用显式null。新增required `change_kind`，闭集精确为`initial_request|resolution|invalidation_without_replacement|replacement_request`，因此initial与replacement即使都`to_record_kind=request`也不会歧义。四类的完整from/to kind及`from_head_ref/to_head_ref/request_ref/resolution_ref/invalidation_ref/replacement_request_ref` null/non-null真值表以IC §5.6为权威，Schema必须逐branch表达；repository再验证字符串ID exact equality、canonical subject、confirmation mode及PD/Action绑定。replacement直接表达`old head→replacement request`，同时携带invalidation ref，不发布中间稳定head。
+
+## Catalog权威与typed envelope
+
+active集合只能由manifest中的reserved identity/structure候选闭包选出：exact ID/title/source任一占用者，或`component=event,kind=envelope`且具有schema_version=2、root type closed enum与conditional aggregate+whole-schema payload mapping形状者，都会成为claimant候选。候选必须恰好一个且metadata exact；普通Schema不得误抓。root enum与五branch必须双射，whole-schema `$ref`不得换成inline/fragment，missing/duplicate/mixed mapping全部fail closed。禁止按suffix或文件名发现。
+
+未来generated Rust API固定：
+
+```rust
+pub struct EventTypeBinding {
+    pub event_type: &'static str,
+    pub aggregate_type: &'static str,
+    pub payload_schema_id: &'static str,
+    pub payload_schema_version: u64,
+}
+
+pub const EVENT_ACTIVE_BINDINGS: &[EventTypeBinding] = &EVENT_ACTIVE_BINDING_ARRAY;
+pub const EVENT_LEGACY_V1_BINDINGS: &[EventTypeBinding] = &EVENT_LEGACY_V1_BINDING_ARRAY;
+pub const EVENT_ACTIVE_TYPES: &[&str] = &EVENT_ACTIVE_TYPE_ARRAY;
+pub const EVENT_LEGACY_V1_TYPES: &[&str] = &EVENT_LEGACY_V1_TYPE_ARRAY;
+```
+
+private fixed-size binding arrays分别按v2/v1 Envelope root type enum声明顺序；TYPE arrays必须由对应bindings通过通用`const fn project_event_types<const N: usize>`投影，再暴露上述slices，event type字符串不得再维护第二份。该API必须有真实Rust编译测试。不得保留模糊`EVENT_V1_TYPES` alias。typed decode必须显式区分Envelope v1/v2，并按type选择exact payload Schema；未知type/version或payload mismatch不推进cursor。
+
+## 统一版本化Outbox
+
+migration 0003合同固定为一张`outbox`表：v1/v2共享全局`outbox_position`与aggregate sequence。causation使用RFC 8785 canonical `causation_json`，payload使用canonical `payload_json`；不扩张nullable branch列、不保存`envelope_json`双源。现有ledger只有`version/name/checksum/applied_at`且checksum为SQL bytes；0003在同一事务先ALTER增加nullable历史/新行必填的`descriptor_hash`与`descriptor_format_version`，再执行transform。
+
+format-v1模板中的`algorithm_id`语义是“具体stable transform algorithm id”，不得硬编码migration-transform族名。0003 descriptor精确固定`migration_version=3`、`name=versioned_event_outbox`、唯一asset `rust/crates/kernel-sqlite/migrations/0003_versioned_event_outbox.sql`；该asset包含ledger ALTER、replacement Outbox DDL、indexes与constraints。Rust transform在同一transaction执行，三元组精确为`shittim.kernel-sqlite.outbox-v1-to-versioned-v1`/`1`/`kernel_sqlite::migration::outbox_v1_to_versioned_v1`。single descriptor hash及legacy 0001/0002兼容规则以ADR-0008 §7为权威；同version任一asset/name/transform漂移必须`migration_drift`。
+
+公开API固定为`StoredEventEnvelope::{LegacyV1(TypedEventEnvelope),ActiveV2(TypedEventEnvelopeV2)}`与`OutboxRecord { envelope, delivered_at }`；类型owner固定`kernel-sqlite/src/outbox.rs`并由crate root re-export。写入固定为`WriteTransaction::append_legacy_event_v1(PendingLegacyEventV1)`和`append_active_event_v2(PendingActiveEventV2)`，共用私有`append_versioned_event`。legacy pending逐字段维持现有PendingEvent caller事实并做v1 mapping验证；active pending精确使用`event_id:Uuid`、`EventAggregateId::{Task,Action,ApprovalChain,StopFenceGlobal}`、`occurred_at`、generated `CausationRefV2`、nonempty correlation/dedup及generated closed `EventEnvelopeV2Payload`，不接受caller event_type/aggregate_type/schema_version/sequence/position。store从payload variant+generated binding派生type/aggregate并核对typed aggregate ID与payload ID。旧`PendingEvent/append_event`不保留alias。读取按row Envelope version选择exact Schema/typed decoder；unknown/corrupt version/type/JCS/mapping返回`stored_data_invalid`且不推进cursor。`mark_delivered`写前必须验证目标row仍可完整读取，不能用delivery mark隐藏corruption。
+
+## KCP `event.poll`版本边界
+
+retained `EventPollResponse v1`的`events.items` exact引用EventEnvelope v1，所以它绝不返回v2。统一Outbox的mixed read是存储/Publisher能力，不等于KCP poll已升级；v1 poll遇到下一条v2不得跳过、降解或推进cursor，且在未来新增/升级versioned response Schema、MethodVersionBinding、typed handler与Conformance之前不得作为可连接handler启用。
 
 ## Consumer gate
 
-消费者必须按type/version选择payload Schema，校验aggregate、sequence、causation、canonical payload与repository事实；未知type/version或payload mismatch fail closed且不推进cursor。`outbox_position`只表示全局投递顺序，`delivered_at`只表示Publisher已发布。
+消费者按`outbox_position`严格递增读取，先选择Envelope版本，再验证type→aggregate→payload、causation、canonical JSON及repository事实。未知version/type、payload mismatch或corrupt relation均fail closed且不推进cursor。`delivered_at`只表示Publisher已发布，不表示任一订阅者已经处理。
