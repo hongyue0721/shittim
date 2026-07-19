@@ -17,17 +17,21 @@
  */
 import { execFileSync } from "node:child_process";
 import {
-  mkdtempSync,
+  chmodSync,
+  closeSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MANIFEST_REL = "FILE_MANIFEST.md";
+const SELF_TEST_ROOT = "/mnt/data/shittim-file-manifest-tests";
+const SELF_TEST_LOCK = join(SELF_TEST_ROOT, ".self-test.lock");
 const HEADER_LINES = [
   "# FILE_MANIFEST",
   "",
@@ -279,6 +283,33 @@ function assertThrows(fn, messageSubstring) {
   }
 }
 
+function createSelfTestWorkspace(prefix) {
+  mkdirSync(SELF_TEST_ROOT, { recursive: true, mode: 0o700 });
+  chmodSync(SELF_TEST_ROOT, 0o700);
+  const root = mkdtempSync(join(SELF_TEST_ROOT, prefix));
+  chmodSync(root, 0o700);
+  return root;
+}
+
+function acquireSelfTestLock() {
+  mkdirSync(SELF_TEST_ROOT, { recursive: true, mode: 0o700 });
+  chmodSync(SELF_TEST_ROOT, 0o700);
+  let fd;
+  try {
+    fd = openSync(SELF_TEST_LOCK, "wx", 0o600);
+    writeFileSync(fd, `${process.pid}\n`, "utf8");
+  } catch (error) {
+    if (fd !== undefined) closeSync(fd);
+    throw new Error(`cannot acquire self-test lock ${SELF_TEST_LOCK}: ${error.message}`);
+  }
+  return {
+    release() {
+      closeSync(fd);
+      rmSync(SELF_TEST_LOCK, { force: true });
+    },
+  };
+}
+
 function selfTestUtf8Helper() {
   // Valid UTF-8 path bytes roundtrip.
   const valid = Buffer.from("docs/中文.md", "utf8");
@@ -309,7 +340,7 @@ function selfTestUtf8Helper() {
  * If the OS/filesystem refuses the name, unit helper coverage still holds.
  */
 function selfTestInvalidUtf8GitPathIfPossible() {
-  const root = mkdtempSync(join(tmpdir(), "file-manifest-badutf8-"));
+  const root = createSelfTestWorkspace("badutf8-");
   try {
     runGit(root, ["init"]);
     runGit(root, ["config", "user.email", "test@example.com"]);
@@ -403,98 +434,103 @@ function selfTestInvalidUtf8GitPathIfPossible() {
 }
 
 function selfTest() {
-  selfTestUtf8Helper();
-
-  // Git-level invalid path: best-effort on Unix; helper unit is authoritative.
-  const gitUtf8 = selfTestInvalidUtf8GitPathIfPossible();
-  assert(gitUtf8.attempted, "invalid UTF-8 git probe must run");
-
-  const root = mkdtempSync(join(tmpdir(), "file-manifest-selftest-"));
+  const lock = acquireSelfTestLock();
   try {
-    runGit(root, ["init"]);
-    runGit(root, ["config", "user.email", "test@example.com"]);
-    runGit(root, ["config", "user.name", "test"]);
-    writeFileSync(
-      join(root, ".gitignore"),
-      "target/\nnode_modules/\n",
-      "utf8",
-    );
-    writeFileSync(join(root, "README.md"), "# hi\n\nbody\n", "utf8");
-    writeFileSync(join(root, "AGENT.md"), "agent\n", "utf8");
-    mkdirSync(join(root, "docs"), { recursive: true });
-    writeFileSync(join(root, "docs", "a.md"), "one\n", "utf8");
-    mkdirSync(join(root, "target", "doc"), { recursive: true });
-    writeFileSync(
-      join(root, "target", "doc", "junk.md"),
-      "ignored build product\n",
-      "utf8",
-    );
-    runGit(root, ["add", ".gitignore", "README.md", "AGENT.md", "docs/a.md"]);
-    runGit(root, ["commit", "-m", "init"]);
+    selfTestUtf8Helper();
 
-    // Untracked non-ignored source md must enter.
-    writeFileSync(join(root, "docs", "new.md"), "new\nfile\n", "utf8");
+    // Git-level invalid path: best-effort on Unix; helper unit is authoritative.
+    const gitUtf8 = selfTestInvalidUtf8GitPathIfPossible();
+    assert(gitUtf8.attempted, "invalid UTF-8 git probe must run");
 
-    const listed = listSourceMarkdown(root);
-    assert(
-      !listed.some((p) => p.includes("target")),
-      "ignored target md must not enter source set",
-    );
-    assert(
-      listed.includes("docs/new.md"),
-      "untracked non-ignored md must enter",
-    );
-    assert(listed.includes("README.md"), "tracked md must enter");
-    assert(!listed.includes(MANIFEST_REL), "manifest excluded before reinsert");
+    const root = createSelfTestWorkspace("fixture-");
+    try {
+      runGit(root, ["init"]);
+      runGit(root, ["config", "user.email", "test@example.com"]);
+      runGit(root, ["config", "user.name", "test"]);
+      writeFileSync(
+        join(root, ".gitignore"),
+        "target/\nnode_modules/\n",
+        "utf8",
+      );
+      writeFileSync(join(root, "README.md"), "# hi\n\nbody\n", "utf8");
+      writeFileSync(join(root, "AGENT.md"), "agent\n", "utf8");
+      mkdirSync(join(root, "docs"), { recursive: true });
+      writeFileSync(join(root, "docs", "a.md"), "one\n", "utf8");
+      mkdirSync(join(root, "target", "doc"), { recursive: true });
+      writeFileSync(
+        join(root, "target", "doc", "junk.md"),
+        "ignored build product\n",
+        "utf8",
+      );
+      runGit(root, ["add", ".gitignore", "README.md", "AGENT.md", "docs/a.md"]);
+      runGit(root, ["commit", "-m", "init"]);
 
-    const text = buildManifestText(root);
-    assert(
-      !/^- `[^`]*target\//m.test(text),
-      "generated manifest must not list target paths",
-    );
-    assert(text.includes("- `docs/new.md`"), "manifest must list untracked md");
-    assert(
-      text.includes(`- \`${MANIFEST_REL}\``),
-      "manifest must list itself",
-    );
+      // Untracked non-ignored source md must enter.
+      writeFileSync(join(root, "docs", "new.md"), "new\nfile\n", "utf8");
 
-    const expectedSelf = countNewlines(text);
-    const selfMatch = text.match(
-      new RegExp(`^- \\\`${MANIFEST_REL}\\\` — (\\d+) lines$`, "m"),
-    );
-    assert(selfMatch, "self entry missing");
-    assert(
-      Number(selfMatch[1]) === expectedSelf,
-      `self lines ${selfMatch[1]} !== ${expectedSelf}`,
-    );
+      const listed = listSourceMarkdown(root);
+      assert(
+        !listed.some((p) => p.includes("target")),
+        "ignored target md must not enter source set",
+      );
+      assert(
+        listed.includes("docs/new.md"),
+        "untracked non-ignored md must enter",
+      );
+      assert(listed.includes("README.md"), "tracked md must enter");
+      assert(!listed.includes(MANIFEST_REL), "manifest excluded before reinsert");
 
-    writeFileSync(join(root, MANIFEST_REL), text, "utf8");
-    assert(
-      buildManifestText(root) === text,
-      "regenerate must be stable after write",
-    );
+      const text = buildManifestText(root);
+      assert(
+        !/^- `[^`]*target\//m.test(text),
+        "generated manifest must not list target paths",
+      );
+      assert(text.includes("- `docs/new.md`"), "manifest must list untracked md");
+      assert(
+        text.includes(`- \`${MANIFEST_REL}\``),
+        "manifest must list itself",
+      );
 
-    writeFileSync(
-      join(root, MANIFEST_REL),
-      text.replace("README.md", "README.MD"),
-      "utf8",
-    );
-    assert(
-      readFileSync(join(root, MANIFEST_REL), "utf8") !==
-        buildManifestText(root),
-      "check must detect drift",
-    );
+      const expectedSelf = countNewlines(text);
+      const selfMatch = text.match(
+        new RegExp(`^- \\\`${MANIFEST_REL}\\\` — (\\d+) lines$`, "m"),
+      );
+      assert(selfMatch, "self entry missing");
+      assert(
+        Number(selfMatch[1]) === expectedSelf,
+        `self lines ${selfMatch[1]} !== ${expectedSelf}`,
+      );
 
-    writeFileSync(join(root, MANIFEST_REL), buildManifestText(root), "utf8");
-    assert(
-      readFileSync(join(root, MANIFEST_REL), "utf8") ===
-        buildManifestText(root),
-      "check should pass after rewrite",
-    );
+      writeFileSync(join(root, MANIFEST_REL), text, "utf8");
+      assert(
+        buildManifestText(root) === text,
+        "regenerate must be stable after write",
+      );
 
-    console.log("update-file-manifest: self-test ok");
+      writeFileSync(
+        join(root, MANIFEST_REL),
+        text.replace("README.md", "README.MD"),
+        "utf8",
+      );
+      assert(
+        readFileSync(join(root, MANIFEST_REL), "utf8") !==
+          buildManifestText(root),
+        "check must detect drift",
+      );
+
+      writeFileSync(join(root, MANIFEST_REL), buildManifestText(root), "utf8");
+      assert(
+        readFileSync(join(root, MANIFEST_REL), "utf8") ===
+          buildManifestText(root),
+        "check should pass after rewrite",
+      );
+
+      console.log("update-file-manifest: self-test ok");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    lock.release();
   }
 }
 
