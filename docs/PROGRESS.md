@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-19（首批12个 business-v2 Schema source/manifest entries 与 generated Rust types已落地；`expires_at` pattern+format硬门、kernel-contracts canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper已实现；production MethodVersionBindings仍为空；official fixtures、schema-tool CLI pointer、repository/handler/cutover未实现。）
+> 状态日期：2026-07-19（首批12个 business-v2 Schema source/manifest entries 与 generated Rust types已落地；`expires_at` pattern+format硬门、kernel-contracts canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper与schema-tool中立pointer/mutation/selected validate/canonicalize CLI已实现；production MethodVersionBindings仍为空；official fixtures、repository/handler/cutover未实现。）
 
 ## 当前阶段
 
@@ -119,14 +119,14 @@
 - [x] 接受ADR-0006/0007并补齐完整contract；本轮进一步闭合首批正好12个Schema的component-native exact validator目标、五值compatibility一般规则、`NormalizedRootTaskCreatePayloadV2#/$defs`中立宿主、逐source `$ref`依赖、allocation/projection schema_version、Envelope V2 registry发现、active Catalog命名与MethodVersionBinding production-stage gate。
 - [x] **首批12 business-v2 Schema source/manifest/generated types（本切片）**：12 component-native entries；shared `$defs` host + absolute fragment refs；V2 Envelope family authority生效后 `KCP_ENVELOPE_AUTHORITY_METHODS`=8，legacy仍8，`METHOD_VERSION_BINDINGS=[]`；该authority不代表bound active version或executable registration。
 - [x] **schema-tool library implemented（本切片）**：正式五值`compatibility`；component-native exact ID/source/title/version硬门；完整非空`MethodVersionBinding` validator；registry exact V2 Envelope authority发现；显式`ProductionRegistry`/`SyntheticRegistry` profile proof成为TargetPlan、target graph与artifact planning的唯一入口，裸`SchemaRegistry`仅inspection/instance validation；`validate_production_manifest_stage`挂到production CLI check/generate；catalog生成`KCP_ENVELOPE_AUTHORITY_METHODS`/`KCP_LEGACY_V1_*`/`METHOD_VERSION_BINDINGS`；production bindings仍为空；neutral Alias resolution/root transparent alias、root API re-export、shared format assertion/unknown fail-closed、通用validated decode taxonomy、open-object统一member collision audit与`1..=u32::MAX -> u32`准确生成均已完成。
-- [x] **task creation fixture前置合同闭合（文档切片）**：固定root/child/allocation三路径、wrapper字段与strict RFC6901 tamper结构；JCS只存`jcs_utf8_hex`/`sha256`，allocation不存JCS/hash；拍板`expires_at` Draft 2020-12 `pattern + format`双门、三类URI normalization统一`invalid_scope_pattern` details、post-normalize internal failure、`kernel-task-creation`冻结职责与URI唯一owner、allocation typed external-ref snapshots/opaque validation。后续pure library已实现；该项仍不表示official fixture/CLI/repository已完成。
-- [x] **task creation纯library实现**：`InputTaskScopeV1.expires_at` source已加pattern+format双门并重新生成；`kernel-contracts::canonicalize_rfc3339_seconds`严格不trim、拒绝非零亚秒、offset转UTC秒；新增纯crate `kernel-task-creation`，root/child共用同一JSON字段normalize算法，生产root receipt/idempotency与child proposal/receipt JCS/SHA-256，并以闭合typed external UUID snapshot验证root/child allocation。未接DB/KCP，不分配ID；official fixtures与CLI pointer仍未落地。
+- [x] **task creation fixture前置合同闭合（文档切片）**：固定root/child/allocation三路径、wrapper字段与strict RFC6901 tamper结构；JCS只存`jcs_utf8_hex`/`sha256`，allocation不存JCS/hash；拍板`expires_at` Draft 2020-12 `pattern + format`双门、三类URI normalization统一`invalid_scope_pattern` details、post-normalize internal failure、`kernel-task-creation`冻结职责与URI唯一owner、allocation typed external-ref snapshots/opaque validation。后续pure library与通用pointer CLI已实现；该项仍不表示official fixture或repository已完成。
+- [x] **task creation纯library实现**：`InputTaskScopeV1.expires_at` source已加pattern+format双门并重新生成；`kernel-contracts::canonicalize_rfc3339_seconds`严格不trim、拒绝非零亚秒、offset转UTC秒；新增纯crate `kernel-task-creation`，root/child共用同一JSON字段normalize算法，生产root receipt/idempotency与child proposal/receipt JCS/SHA-256，并以闭合typed external UUID snapshot验证root/child allocation。未接DB/KCP，不分配ID；official fixtures仍未落地。
+- [x] `schema-tool`中立JSON Pointer与selected validate/canonicalize：公开strict RFC6901 `JsonPointer` selection，syntax/evaluation错误分层，Serde反序列化强制经过strict parser，array index拒绝leading zero与`-`，literal `%`不做URI解码；所有生产JSON lookup统一使用`JsonPointer + select_json_value`，动态property name从decoded segments编码；selection/mutation共用单一decoded traversal规则，mutation错误携带精确`token_index`且失败保持atomic。`resolve.rs`在SchemaNode authority命中后若raw lookup失败，返回保留pointer source的结构化internal invariant错误。library-first `ValidateSelectedRequest`与`CanonicalizeRequest`/`CanonicalOutputMode::{Bytes,Hex,Hash}`已实现；CLI `validate/canonicalize --pointer`、`canonicalize --hex|--hash`互斥、所有canonical输出无newline，nested validate成功信息含pointer且root旧格式保持。工具不做Task normalize。
 - [x] production retained lifecycle改标：TaskCreateRequest/KcpCommandEnvelope/KcpQueryEnvelope v1=`legacy-validation-only`，TaskCreateResponse v1=`legacy-read-only`，其余37=`v1-stable`；不改retained ledger/source bytes。
 
 ## 未完成
 
-- [ ] 创建三份official fixture：`schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、`schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、`schemas/fixtures/task/task_creation_allocations.v1.json`；当前仅前置合同完成。
-- [ ] 实现`schema-tool`中立`validate/canonicalize --pointer`、`canonicalize --hex`及`--hex/--hash`互斥；工具不得实现Task normalize。
+- [ ] 创建三份official fixture：`schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、`schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、`schemas/fixtures/task/task_creation_allocations.v1.json`；当前仅前置合同与通用pointer/CLI能力完成，Task-specific harness未实现。
 - [ ] 后续其它v2 Schema仍包括四投影/SubjectProjection/CreationProvenance、CausationRef/EventEnvelope/ContentOrigin/Audit、ActionTransitionRef/Intent、Action/Approval state payload、ApprovalRecord/PermissionDecision/PolicyRule、signature/credential/challenge/evidence等。
 - [ ] 将Value preflight改为method-aware payload version；active `task.create`只接受2，v1仅migration validator；替换registered v1 handler。
 - [ ] 实现root v2 repository/handler与child Action materializer；同Action最多一child、bundle全有或全无、canonical readback与reconciliation。
@@ -158,7 +158,7 @@
 
 ## 下一步
 
-1. 按已闭合wrapper合同创建三份official fixture，同时实现schema-tool中立pointer/hex接口；复用已实现的`kernel-task-creation`生成/校验fixture，production bindings仍empty，不触碰repository/handler/cutover，也不把authorization projections塞入本crate。
+1. 按已闭合wrapper合同创建三份official fixture与Task-specific harness；复用已实现的`kernel-task-creation`及schema-tool中立pointer/mutation/hex接口，production bindings仍empty，不触碰repository/handler/cutover，也不把authorization projections塞入本crate。
 2. 再做method-aware preflight、root v2 repository/handler 与 child materializer，以及最终 V2ProductionWriteCutover。
 3. 再补ADR-0006/0007其余v2 Schema与generated artifacts，满足cutover前closure。
 4. 实现Approval/PermissionDecision/Action repositories及current-head CAS，因为child materialization依赖它们。

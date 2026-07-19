@@ -1,6 +1,6 @@
 # Task创建、Child materialization与repository硬合同
 
-> 状态：首批12项相关Schema source、manifest entries与generated Rust root types已落地；`InputTaskScopeV1.expires_at` pattern+format硬门、canonical timestamp API与纯crate `kernel-task-creation`已实现。production MethodVersionBindings仍为空；active v2 repository/handler/materializer、三份official fixture、schema-tool CLI pointer与cutover仍未实现。现有Rust/SQLite只实现legacy TaskCreate v1 create/get，不得进入未来production server。
+> 状态：首批12项相关Schema source、manifest entries与generated Rust root types已落地；`InputTaskScopeV1.expires_at` pattern+format硬门、canonical timestamp API、纯crate `kernel-task-creation`与schema-tool strict RFC6901 pointer/mutation/selected CLI底座已实现。production MethodVersionBindings仍为空；active v2 repository/handler/materializer、三份official fixture与cutover仍未实现。现有Rust/SQLite只实现legacy TaskCreate v1 create/get，不得进入未来production server。
 
 ## Lifecycle矩阵
 

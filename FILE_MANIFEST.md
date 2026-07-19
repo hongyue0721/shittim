@@ -27,7 +27,7 @@
 - `docs/api/kernel-control-protocol.md` — 90 lines
 - `docs/api/kernel-kcp.md` — 63 lines
 - `docs/api/kernel-sqlite.md` — 144 lines
-- `docs/api/schema-generation.md` — 172 lines
+- `docs/api/schema-generation.md` — 173 lines
 - `docs/api/task-repository-contract.md` — 59 lines
 - `docs/sdk/README.md` — 37 lines
 - `docs/sdk/extension-sdk.md` — 39 lines

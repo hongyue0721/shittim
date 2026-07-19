@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：pure-library implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper已实现；本 ADR仍未实现TaskCreate v2 repository/handler/materializer，production MethodVersionBindings、official fixtures、schema-tool CLI pointer与cutover仍未完成
+- 实现状态：pure-library implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper，以及schema-tool strict RFC6901 pointer selection/mutation与selected validate/canonicalize CLI均已实现；本 ADR仍未实现TaskCreate v2 repository/handler/materializer，production MethodVersionBindings、official fixtures与cutover
 
 ## 背景
 
@@ -121,4 +121,4 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 ## 实现状态（非规范）
 
 - 首批12 Schema source/manifest/generated types 已落地（含 ChildTaskProposal/NormalizedChild/Allocation 与 TaskCreate v2 相关对象）。
-- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API与`kernel-task-creation` pure helper已完成；repository/handler/materializer/cutover、schema-tool CLI pointer与三份official fixture仍未完成。
+- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API、`kernel-task-creation` pure helper与schema-tool strict pointer CLI底座已完成；repository/handler/materializer/cutover与三份official fixture仍未完成。
