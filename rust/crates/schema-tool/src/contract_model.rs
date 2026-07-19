@@ -14,7 +14,7 @@
 //! is a renderer projection concern (`ContractTypeId` ≠ `RustDeclarationId`).
 
 use crate::error::SchemaToolError;
-use crate::json_pointer::JsonPointer;
+use crate::json_pointer::{select_json_value, JsonPointer};
 use crate::manifest::{GenerationTarget, LoadedSchema, SchemaRegistry};
 use crate::production_stage::RegistryProfile;
 use crate::resolve::resolve_ref;
@@ -560,14 +560,20 @@ fn retained_envelope_discriminators_in_set(
     }) else {
         return Ok(Vec::new());
     };
+    let pointer = JsonPointer::from_decoded_segments(["properties", property]);
     string_enum_values(
-        loaded
-            .document()
-            .pointer(&format!("/properties/{property}"))
-            .ok_or_else(|| {
-                SchemaToolError::msg(format!("{} missing {property}", loaded.entry().id))
-            })?,
+        select_json_value(loaded.document(), &pointer).map_err(|error| {
+            SchemaToolError::msg(format!("{} missing {property}: {error}", loaded.entry().id))
+        })?,
     )
+}
+
+fn select_constant_pointer<'a>(
+    document: &'a Value,
+    decoded_segments: &[&str],
+) -> Result<&'a Value, SchemaToolError> {
+    let pointer = JsonPointer::from_decoded_segments(decoded_segments.iter().copied());
+    select_json_value(document, &pointer)
 }
 
 // ---------------------------------------------------------------------------
@@ -937,8 +943,18 @@ fn lower_tagged_union(
                 "branch discriminator must be required",
             ));
         }
-        let tag = object_schema
-            .pointer(&format!("/properties/{discriminator}/const"))
+        let discriminator_pointer =
+            JsonPointer::from_decoded_segments(["properties", discriminator.as_str()]);
+        let discriminator_schema = select_json_value(object_schema, &discriminator_pointer)
+            .map_err(|_| {
+                unsupported(
+                    "oneOf",
+                    &branch_id.display(),
+                    "branch discriminator property is missing",
+                )
+            })?;
+        let tag = discriminator_schema
+            .get("const")
             .and_then(Value::as_str)
             .ok_or_else(|| {
                 unsupported(
@@ -948,9 +964,6 @@ fn lower_tagged_union(
                 )
             })?
             .to_owned();
-        let discriminator_schema = object_schema
-            .pointer(&format!("/properties/{discriminator}"))
-            .expect("const was found beneath property");
         if discriminator_schema.get("type").and_then(Value::as_str) != Some("string") {
             return Err(unsupported(
                 "oneOf",
@@ -1552,9 +1565,10 @@ fn parse_envelope_binding(
     // >=1 => every branch must be a complete bijective mapping or fail closed.
     let mut payload_ref_count = 0usize;
     for (index, branch) in branches.iter().enumerate() {
-        if let Some(payload_ref) = branch
-            .pointer("/then/properties/payload/$ref")
-            .and_then(Value::as_str)
+        if let Some(payload_ref) =
+            select_constant_pointer(branch, &["then", "properties", "payload", "$ref"])
+                .ok()
+                .and_then(Value::as_str)
         {
             let resolved =
                 resolve_ref(registry, &loaded.entry.id, payload_ref).map_err(|error| {
@@ -1580,8 +1594,8 @@ fn parse_envelope_binding(
     }
 
     // >=1 whole-schema payload refs: require a complete bijective discriminator mapping.
-    let first_if_properties = branches[0]
-        .pointer("/if/properties")
+    let first_if_properties = select_constant_pointer(&branches[0], &["if", "properties"])
+        .ok()
         .and_then(Value::as_object)
         .ok_or_else(|| mapping_error(&loaded.entry.id, "allOf branch missing if.properties"))?;
     let discriminator = first_if_properties
@@ -1589,15 +1603,20 @@ fn parse_envelope_binding(
         .find_map(|(name, schema)| {
             let is_string_const = schema.get("const").and_then(Value::as_str).is_some();
             let is_closed_enum = properties.get(name).is_some_and(is_string_enum);
+            let discriminator_const_pointer =
+                JsonPointer::from_decoded_segments(["if", "properties", name.as_str(), "const"]);
             let all_branches_map_payload = branches.iter().all(|branch| {
-                branch
-                    .pointer(&format!("/if/properties/{name}/const"))
+                select_json_value(branch, &discriminator_const_pointer)
+                    .ok()
                     .and_then(Value::as_str)
                     .is_some()
-                    && branch
-                        .pointer("/then/properties/payload/$ref")
-                        .and_then(Value::as_str)
-                        .is_some()
+                    && select_constant_pointer(
+                        branch,
+                        &["then", "properties", "payload", "$ref"],
+                    )
+                    .ok()
+                    .and_then(Value::as_str)
+                    .is_some()
             });
             (is_string_const && is_closed_enum && all_branches_map_payload).then(|| name.clone())
         })
@@ -1629,8 +1648,8 @@ fn parse_envelope_binding(
     let mut by_value = BTreeMap::new();
     for (index, branch) in branches.iter().enumerate() {
         let branch_location = format!("{}/allOf/{index}", loaded.entry.id);
-        let if_properties = branch
-            .pointer("/if/properties")
+        let if_properties = select_constant_pointer(branch, &["if", "properties"])
+            .ok()
             .and_then(Value::as_object)
             .ok_or_else(|| mapping_error(&branch_location, "missing if.properties"))?;
         let discriminator_schema = if_properties.get(&discriminator).ok_or_else(|| {
@@ -1644,8 +1663,8 @@ fn parse_envelope_binding(
             .and_then(Value::as_str)
             .ok_or_else(|| mapping_error(&branch_location, "discriminator const must be a string"))?
             .to_string();
-        let required = branch
-            .pointer("/if/required")
+        let required = select_constant_pointer(branch, &["if", "required"])
+            .ok()
             .and_then(Value::as_array)
             .is_some_and(|items| {
                 items
@@ -1658,12 +1677,13 @@ fn parse_envelope_binding(
                 "if.required must contain the discriminator",
             ));
         }
-        let payload_ref = branch
-            .pointer("/then/properties/payload/$ref")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                mapping_error(&branch_location, "missing then.properties.payload.$ref")
-            })?;
+        let payload_ref =
+            select_constant_pointer(branch, &["then", "properties", "payload", "$ref"])
+                .ok()
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    mapping_error(&branch_location, "missing then.properties.payload.$ref")
+                })?;
         let resolved = resolve_ref(registry, &loaded.entry.id, payload_ref)?;
         if !resolved.type_id.is_root() {
             return Err(mapping_error(
@@ -2520,6 +2540,47 @@ mod tests {
                 },
             },
         }
+    }
+
+    #[test]
+    fn contract_type_id_deserialization_cannot_bypass_pointer_validation() {
+        for invalid in ["a", "/a~", "/a~2"] {
+            let encoded = serde_json::json!({
+                "schema_id": "https://example.test/schema",
+                "pointer": invalid
+            });
+            assert!(serde_json::from_value::<ContractTypeId>(encoded).is_err());
+        }
+
+        let type_id = ContractTypeId::new(
+            "https://example.test/schema",
+            JsonPointer::from_decoded_segments(["properties", "a/b"]),
+        );
+        let encoded = serde_json::to_value(&type_id).unwrap();
+        assert_eq!(encoded["pointer"], "/properties/a~1b");
+        assert_eq!(
+            serde_json::from_value::<ContractTypeId>(encoded).unwrap(),
+            type_id
+        );
+    }
+
+    #[test]
+    fn decoded_property_lookup_escapes_slash_and_tilde_names() {
+        let document = json!({
+            "properties": {
+                "kind/value~tag": {"type": "string", "enum": ["alpha"]}
+            }
+        });
+        let pointer = JsonPointer::from_decoded_segments(["properties", "kind/value~tag"]);
+        assert_eq!(pointer.as_str(), "/properties/kind~1value~0tag");
+        assert_eq!(
+            select_json_value(&document, &pointer)
+                .unwrap()
+                .get("enum")
+                .and_then(Value::as_array)
+                .and_then(|values| values.first()),
+            Some(&json!("alpha"))
+        );
     }
 
     #[test]

@@ -2998,6 +2998,32 @@ mod tests {
     }
 
     #[test]
+    fn production_schema_tool_sources_do_not_use_serde_json_pointer() {
+        let crate_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut violations = Vec::new();
+        for entry in walkdir::WalkDir::new(&crate_root) {
+            let entry = entry.expect("walk schema-tool source");
+            if !entry.file_type().is_file()
+                || entry.path().extension().and_then(std::ffi::OsStr::to_str) != Some("rs")
+            {
+                continue;
+            }
+            let source = std::fs::read_to_string(entry.path()).expect("read Rust source");
+            let production = source
+                .split("#[cfg(test)]")
+                .next()
+                .expect("production source before tests");
+            if production.contains(concat!(".", "pointer(")) {
+                violations.push(entry.path().strip_prefix(&crate_root).unwrap().to_owned());
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "production schema-tool sources must use JsonPointer + select_json_value: {violations:?}"
+        );
+    }
+
+    #[test]
     fn renderer_source_does_not_walk_schema_shape() {
         let src = include_str!("rust_codegen.rs");
         let production = src

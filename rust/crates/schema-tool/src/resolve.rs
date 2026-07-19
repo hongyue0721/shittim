@@ -10,7 +10,7 @@
 
 use crate::contract_model::ContractTypeId;
 use crate::error::SchemaToolError;
-use crate::json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
+use crate::json_pointer::{pointer_from_decoded_fragment, select_json_value, JsonPointer};
 use crate::manifest::SchemaRegistry;
 use crate::schema_walk::walk_schema_nodes;
 use anyhow::Result;
@@ -77,12 +77,7 @@ pub fn resolve_ref<'a>(
         ))
         .into());
     }
-    let node = raw_json_at_pointer(&loaded.document, &pointer).ok_or_else(|| {
-        SchemaToolError::msg(format!(
-            "unresolved $ref {reference} from {base_id} -> {schema_id}#{}",
-            pointer.as_str()
-        ))
-    })?;
+    let node = authoritative_schema_node(&schema_id, &loaded.document, &pointer)?;
     Ok(ResolvedSchemaRef {
         type_id: ContractTypeId { schema_id, pointer },
         node,
@@ -99,13 +94,8 @@ pub fn schema_at<'a>(registry: &'a SchemaRegistry, type_id: &ContractTypeId) -> 
         ))
         .into());
     }
-    raw_json_at_pointer(&loaded.document, &type_id.pointer).ok_or_else(|| {
-        SchemaToolError::msg(format!(
-            "schema node not found for identity {}",
-            type_id.display()
-        ))
-        .into()
-    })
+    authoritative_schema_node(&type_id.schema_id, &loaded.document, &type_id.pointer)
+        .map_err(anyhow::Error::new)
 }
 
 /// Crate-private raw JSON lookup. This does not establish Schema identity; callers requiring a
@@ -113,23 +103,20 @@ pub fn schema_at<'a>(registry: &'a SchemaRegistry, type_id: &ContractTypeId) -> 
 pub(crate) fn raw_json_at_pointer<'a>(
     document: &'a Value,
     pointer: &JsonPointer,
-) -> Option<&'a Value> {
-    if pointer.is_root() {
-        return Some(document);
-    }
-    let segments = pointer.decoded_segments().ok()?;
-    let mut current = document;
-    for token in segments {
-        current = match current {
-            Value::Object(map) => map.get(&token)?,
-            Value::Array(items) => {
-                let index = parse_array_index_token(&token).ok()?;
-                items.get(index)?
-            }
-            _ => return None,
-        };
-    }
-    Some(current)
+) -> Result<&'a Value, SchemaToolError> {
+    select_json_value(document, pointer)
+}
+
+fn authoritative_schema_node<'a>(
+    schema_id: &str,
+    document: &'a Value,
+    pointer: &JsonPointer,
+) -> Result<&'a Value, SchemaToolError> {
+    raw_json_at_pointer(document, pointer).map_err(|source| SchemaToolError::InternalInvariant {
+        schema_id: schema_id.to_owned(),
+        pointer: pointer.as_str().to_owned(),
+        source: Box::new(source),
+    })
 }
 
 /// Validate every `$ref` in the registry before it is exposed to public callers.
@@ -422,18 +409,45 @@ mod tests {
         });
         let p = JsonPointer::root().child("properties").child("a/b");
         assert_eq!(
-            raw_json_at_pointer(&doc, &p).and_then(|v| v.get("type")),
+            raw_json_at_pointer(&doc, &p)
+                .ok()
+                .and_then(|value| value.get("type")),
             Some(&json!("string"))
         );
         let p2 = JsonPointer::root().child("properties").child("c~d");
         assert_eq!(
-            raw_json_at_pointer(&doc, &p2).and_then(|v| v.get("type")),
+            raw_json_at_pointer(&doc, &p2)
+                .ok()
+                .and_then(|value| value.get("type")),
             Some(&json!("integer"))
         );
         let bad = JsonPointer::parse("/oneOf/01").unwrap();
-        assert!(raw_json_at_pointer(&doc, &bad).is_none());
+        assert!(raw_json_at_pointer(&doc, &bad).is_err());
         let dash = JsonPointer::parse("/oneOf/-").unwrap();
-        assert!(raw_json_at_pointer(&doc, &dash).is_none());
+        assert!(raw_json_at_pointer(&doc, &dash).is_err());
+    }
+
+    #[test]
+    fn authoritative_selection_failure_preserves_pointer_source() {
+        let document = json!({"properties": {}});
+        let pointer = JsonPointer::from_decoded_segments(["properties", "missing"]);
+        let error = authoritative_schema_node("https://example.test/schema", &document, &pointer)
+            .unwrap_err();
+        match error {
+            SchemaToolError::InternalInvariant {
+                schema_id,
+                pointer,
+                source,
+            } => {
+                assert_eq!(schema_id, "https://example.test/schema");
+                assert_eq!(pointer, "/properties/missing");
+                assert!(matches!(
+                    *source,
+                    SchemaToolError::PointerEvaluation { token_index: 2, .. }
+                ));
+            }
+            other => panic!("expected invariant error, got {other:?}"),
+        }
     }
 
     #[test]

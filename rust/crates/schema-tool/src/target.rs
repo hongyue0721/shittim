@@ -4,6 +4,7 @@
 //! `TargetPlan`/`TargetSchemaSet` -> target-scoped IR.
 
 use crate::error::SchemaToolError;
+use crate::json_pointer::{select_json_value, JsonPointer};
 use crate::manifest::{GenerationTarget, SchemaRegistry};
 use crate::method_bindings::{ActiveEnvelopeAuthority, MethodVersionBindingFact};
 use crate::production_stage::{RegistryProfile, ValidatedRegistry};
@@ -275,9 +276,11 @@ fn envelope_payload_ids(
     let Some(branches) = document.get("allOf").and_then(Value::as_array) else {
         return Ok(ids);
     };
+    let payload_ref_pointer =
+        JsonPointer::from_decoded_segments(["then", "properties", "payload", "$ref"]);
     for branch in branches {
-        if let Some(payload_ref) = branch
-            .pointer("/then/properties/payload/$ref")
+        if let Some(payload_ref) = select_json_value(branch, &payload_ref_pointer)
+            .ok()
             .and_then(Value::as_str)
         {
             if payload_ref.contains('#') {

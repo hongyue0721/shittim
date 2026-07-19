@@ -1,8 +1,9 @@
 //! Library surface for `schema-tool`.
 //!
-//! The CLI binary is the primary interface. This library exposes the target-scoped
-//! pipeline so integration tests can assert graph identity and Rust projection
-//! without scraping generated source strings as the only oracle.
+//! Validation, JSON Pointer selection/mutation, canonicalization, and generation
+//! are library-first APIs. The CLI is a thin adapter over these reusable entry
+//! points; integration tests may also inspect target graph and Rust projection
+//! facts without scraping generated source strings as their only oracle.
 
 pub mod artifact_transaction;
 pub mod canonicalize;
@@ -25,6 +26,10 @@ pub mod schema_walk;
 pub mod target;
 pub mod validate;
 
+pub use canonicalize::{
+    canonicalize_selected_json, canonicalize_value, CanonicalOutputMode, CanonicalizeRequest,
+    CanonicalizeResult,
+};
 pub use compatibility::SchemaCompatibility;
 pub use contract_model::{
     lower_target_contract_graph, AliasResolution, CatalogFacts, ConstJson, ContractTypeId,
@@ -32,7 +37,10 @@ pub use contract_model::{
     ObjectField, Presence, ScalarKind, SourceSchemaMetadata, SourceUseSite, TaggedUnionBranch,
     TargetContractGraph, TypeExpr, TypeShape, TypeUse, UnknownFieldPolicy,
 };
-pub use json_pointer::{parse_array_index_token, pointer_from_decoded_fragment, JsonPointer};
+pub use json_pointer::{
+    apply_json_mutation, parse_array_index_token, pointer_from_decoded_fragment, select_json_value,
+    select_json_value_at_pointer, JsonMutationOperation, JsonPointer,
+};
 pub use manifest::{
     GenerationTarget, Manifest, ManifestComponent, ManifestEntry, ManifestMethodVersionBinding,
     MethodFamily, SchemaRegistry, SchemaSourcePath,
@@ -55,6 +63,10 @@ pub use rust_codegen::{
     render_types_module_from_projection, RustProjection, GENERATED_MOD_RS, RUST_GENERATED_DIR,
 };
 pub use target::{build_target_plan, TargetPlan, TargetSchemaSet};
+pub use validate::{
+    render_success as render_validation_success, validate_selected_request,
+    ValidateSelectedRequest, ValidateSelectedResult,
+};
 
 use anyhow::Result;
 use std::path::Path;

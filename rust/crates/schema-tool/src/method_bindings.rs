@@ -10,6 +10,7 @@
 
 use crate::compatibility::SchemaCompatibility;
 use crate::error::SchemaToolError;
+use crate::json_pointer::{select_json_value, JsonPointer};
 use crate::manifest::{
     GenerationTarget, LoadedSchema, ManifestMethodVersionBinding, MethodFamily, SchemaRegistry,
 };
@@ -179,10 +180,11 @@ fn is_envelope_claimant(loaded: &LoadedSchema, identity: &EnvelopeIdentity) -> b
         || (entry.component == "kcp"
             && entry.kind == "envelope"
             && entry.version == 2
-            && loaded
-                .document()
-                .pointer(&format!("/properties/{}", identity.discriminator))
-                .is_some())
+            && select_json_value(
+                loaded.document(),
+                &JsonPointer::from_decoded_segments(["properties", identity.discriminator]),
+            )
+            .is_ok())
 }
 
 fn validate_exact_envelope_claimant(
@@ -209,15 +211,13 @@ fn validate_exact_envelope_claimant(
 }
 
 fn root_discriminator_enum(loaded: &LoadedSchema, property: &str) -> Result<Vec<String>> {
-    let property_schema = loaded
-        .document()
-        .pointer(&format!("/properties/{property}"))
-        .ok_or_else(|| {
-            SchemaToolError::msg(format!(
-                "active envelope {} missing root discriminator property {property}",
-                loaded.id()
-            ))
-        })?;
+    let pointer = JsonPointer::from_decoded_segments(["properties", property]);
+    let property_schema = select_json_value(loaded.document(), &pointer).map_err(|error| {
+        SchemaToolError::msg(format!(
+            "active envelope {} missing root discriminator property {property}: {error}",
+            loaded.id()
+        ))
+    })?;
     let values = string_enum_values(property_schema)?;
     if values.is_empty() {
         bail!(
