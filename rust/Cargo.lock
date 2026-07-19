@@ -801,10 +801,13 @@ name = "kernel-task-creation"
 version = "0.1.0"
 dependencies = [
  "domain-policy",
+ "hex",
  "kernel-contracts",
  "proptest",
+ "schema-tool",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "uuid",
 ]

@@ -18,6 +18,8 @@ pub mod manifest;
 pub mod manifest_identity;
 pub mod method_bindings;
 pub mod names;
+/// Non-stable test-artifact contract shared by official fixture harnesses.
+pub mod official_fixture;
 pub mod paths;
 pub mod production_stage;
 pub mod resolve;

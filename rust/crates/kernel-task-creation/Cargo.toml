@@ -15,4 +15,7 @@ thiserror.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+hex.workspace = true
 proptest.workspace = true
+schema-tool = { path = "../schema-tool" }
+sha2.workspace = true

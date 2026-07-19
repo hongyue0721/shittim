@@ -1,0 +1,576 @@
+{
+  "fixture_version": 1,
+  "normalized_proposal": {
+    "capability_hints": [
+      "filesystem.read",
+      "filesystem.read",
+      "index.write"
+    ],
+    "constraints": [
+      " preserve originals ",
+      " preserve originals ",
+      "offline only"
+    ],
+    "delegation_ref": "44444444-4444-4444-8444-444444444444",
+    "goal": "  Index selected documents  ",
+    "origin": {
+      "kind": "companion_generated",
+      "parent_origin_refs": [
+        "55555555-5555-4555-8555-555555555555",
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666"
+      ],
+      "producer_ref": {
+        "id": "companion-1",
+        "kind": "actor"
+      },
+      "schema_version": 1,
+      "source_uri": "https://example.com/plans/child?part=%2F#Section",
+      "upstream_stable_id": null
+    },
+    "proposer": "companion",
+    "risk_hint": null,
+    "schema_version": 1,
+    "success_criteria": [
+      "index stored",
+      "index stored",
+      "search succeeds"
+    ],
+    "task_scope": {
+      "allowed_capability_hints": [
+        "filesystem.read",
+        "filesystem.read",
+        "index.write"
+      ],
+      "exclusions": [
+        "https://example.com/docs/private/**",
+        "https://example.com/docs/private/**",
+        "https://example.com/shared/secrets/*"
+      ],
+      "expires_at": "2031-02-03T04:05:06Z",
+      "resource_patterns": [
+        "https://example.com/docs/**",
+        "https://example.com/docs/**",
+        "https://example.com/shared/*"
+      ],
+      "schema_version": 1
+    }
+  },
+  "proposal_preimage": {
+    "jcs_utf8_hex": "7b226361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c22696e6465782e7772697465225d2c22636f6e73747261696e7473223a5b22207072657365727665206f726967696e616c7320222c22207072657365727665206f726967696e616c7320222c226f66666c696e65206f6e6c79225d2c2264656c65676174696f6e5f726566223a2234343434343434342d343434342d343434342d383434342d343434343434343434343434222c22676f616c223a222020496e6465782073656c656374656420646f63756d656e74732020222c226f726967696e223a7b226b696e64223a22636f6d70616e696f6e5f67656e657261746564222c22706172656e745f6f726967696e5f72656673223a5b2235353535353535352d353535352d343535352d383535352d353535353535353535353535222c2235353535353535352d353535352d343535352d383535352d353535353535353535353535222c2236363636363636362d363636362d343636362d383636362d363636363636363636363636225d2c2270726f64756365725f726566223a7b226964223a22636f6d70616e696f6e2d31222c226b696e64223a226163746f72227d2c22736368656d615f76657273696f6e223a312c22736f757263655f757269223a2268747470733a2f2f6578616d706c652e636f6d2f706c616e732f6368696c643f706172743d2532462353656374696f6e222c22757073747265616d5f737461626c655f6964223a6e756c6c7d2c2270726f706f736572223a22636f6d70616e696f6e222c227269736b5f68696e74223a6e756c6c2c22736368656d615f76657273696f6e223a312c22737563636573735f6372697465726961223a5b22696e6465782073746f726564222c22696e6465782073746f726564222c22736561726368207375636365656473225d2c227461736b5f73636f7065223a7b22616c6c6f7765645f6361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c22696e6465782e7772697465225d2c226578636c7573696f6e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f646f63732f707269766174652f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f63732f707269766174652f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f7368617265642f736563726574732f2a225d2c22657870697265735f6174223a22323033312d30322d30335430343a30353a30365a222c227265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f646f63732f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f63732f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f7368617265642f2a225d2c22736368656d615f76657273696f6e223a317d7d",
+    "sha256": "406eba6ed225f278a00b203fa193372d2bde5da6565ca221465113291efe287c"
+  },
+  "raw_proposal": {
+    "capability_hints": [
+      "filesystem.read",
+      "filesystem.read",
+      "index.write"
+    ],
+    "constraints": [
+      " preserve originals ",
+      " preserve originals ",
+      "offline only"
+    ],
+    "delegation_ref": "44444444-4444-4444-8444-444444444444",
+    "goal": "  Index selected documents  ",
+    "origin": {
+      "kind": "companion_generated",
+      "parent_origin_refs": [
+        "55555555-5555-4555-8555-555555555555",
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666"
+      ],
+      "producer_ref": {
+        "id": "companion-1",
+        "kind": "actor"
+      },
+      "schema_version": 1,
+      "source_uri": "HTTPS://Example.COM:443/plans/./draft/../child?part=%2f#Section",
+      "upstream_stable_id": null
+    },
+    "proposer": "companion",
+    "risk_hint": null,
+    "schema_version": 1,
+    "success_criteria": [
+      "index stored",
+      "index stored",
+      "search succeeds"
+    ],
+    "task_scope": {
+      "allowed_capability_hints": [
+        "filesystem.read",
+        "filesystem.read",
+        "index.write"
+      ],
+      "exclusions": [
+        "HTTPS://Example.COM:443/docs/tmp/../private/**",
+        "https://example.com/docs/private/**",
+        "https://example.com/shared/secrets/*"
+      ],
+      "expires_at": "2031-02-03T04:05:06.000Z",
+      "resource_patterns": [
+        "HTTPS://Example.COM:443/docs/./**",
+        "https://example.com/docs/**",
+        "https://example.com/shared/*"
+      ],
+      "schema_version": 1
+    }
+  },
+  "tamper_cases": [
+    {
+      "case_id": "source_uri_lexical_equivalent",
+      "expected": {
+        "hash_relation": "same",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/origin/source_uri",
+      "value": "https://example.com/plans/child?part=%2F#Section"
+    },
+    {
+      "case_id": "resource_pattern_lexical_equivalent",
+      "expected": {
+        "hash_relation": "same",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/resource_patterns/0",
+      "value": "https://example.com/docs/**"
+    },
+    {
+      "case_id": "exclusion_lexical_equivalent",
+      "expected": {
+        "hash_relation": "same",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/exclusions/0",
+      "value": "https://example.com/docs/private/**"
+    },
+    {
+      "case_id": "expires_at_lexical_equivalent",
+      "expected": {
+        "hash_relation": "same",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/expires_at",
+      "value": "2031-02-03T04:05:06Z"
+    },
+    {
+      "case_id": "origin_uri_invalid",
+      "expected": {
+        "hash_relation": "not_computed",
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": null,
+            "input_kind": "origin_source_uri"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/origin/source_uri",
+      "value": "https://example.com/*"
+    },
+    {
+      "case_id": "resource_pattern_invalid",
+      "expected": {
+        "hash_relation": "not_computed",
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": 1,
+            "input_kind": "resource_pattern"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/resource_patterns/1",
+      "value": "https://example.com/a/**/bad*"
+    },
+    {
+      "case_id": "exclusion_invalid",
+      "expected": {
+        "hash_relation": "not_computed",
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": 2,
+            "input_kind": "exclusion"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/exclusions/2",
+      "value": "https://example.com/a/bad*"
+    },
+    {
+      "case_id": "expires_at_nonzero_fraction",
+      "expected": {
+        "hash_relation": "not_computed",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "result": "raw_schema_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/expires_at",
+      "value": "2031-02-03T04:05:06.001Z"
+    },
+    {
+      "case_id": "constraints_reordered",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/constraints",
+      "value": [
+        "offline only",
+        " preserve originals ",
+        " preserve originals "
+      ]
+    },
+    {
+      "case_id": "parent_origin_duplicate_removed",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/origin/parent_origin_refs",
+      "value": [
+        "55555555-5555-4555-8555-555555555555",
+        "66666666-6666-4666-8666-666666666666"
+      ]
+    },
+    {
+      "case_id": "payload_proposer",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/proposer",
+      "value": "system"
+    },
+    {
+      "case_id": "payload_goal",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/goal",
+      "value": "  Index approved documents  "
+    },
+    {
+      "case_id": "payload_constraints",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/constraints/2",
+      "value": "network allowed"
+    },
+    {
+      "case_id": "payload_success_criteria",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/success_criteria/2",
+      "value": "search indexed"
+    },
+    {
+      "case_id": "payload_risk_hint",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/risk_hint",
+      "value": "medium"
+    },
+    {
+      "case_id": "payload_capability_hints",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/capability_hints/2",
+      "value": "index.replace"
+    },
+    {
+      "case_id": "payload_task_scope",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/task_scope/allowed_capability_hints/2",
+      "value": "index.replace"
+    },
+    {
+      "case_id": "payload_delegation_ref",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/delegation_ref",
+      "value": null
+    },
+    {
+      "case_id": "payload_origin",
+      "expected": {
+        "hash_relation": "different",
+        "public_error": null,
+        "result": "hash_computed"
+      },
+      "operation": "replace",
+      "pointer": "/origin/upstream_stable_id",
+      "value": "child-upstream"
+    },
+    {
+      "case_id": "boundary_goal_single_space",
+      "operation": "replace",
+      "pointer": "/goal",
+      "value": " ",
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_constraints_empty",
+      "operation": "replace",
+      "pointer": "/constraints",
+      "value": [],
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_success_criteria_empty",
+      "operation": "replace",
+      "pointer": "/success_criteria",
+      "value": [],
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_capability_hints_empty",
+      "operation": "replace",
+      "pointer": "/capability_hints",
+      "value": [],
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_scope_arrays_empty",
+      "operation": "replace",
+      "pointer": "/task_scope",
+      "value": {
+        "schema_version": 1,
+        "resource_patterns": [],
+        "exclusions": [],
+        "allowed_capability_hints": [],
+        "expires_at": null
+      },
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_origin_nullable_and_array_empty",
+      "operation": "replace",
+      "pointer": "/origin",
+      "value": {
+        "schema_version": 1,
+        "kind": "companion_generated",
+        "source_uri": null,
+        "upstream_stable_id": null,
+        "producer_ref": {
+          "kind": "actor",
+          "id": "companion-1"
+        },
+        "parent_origin_refs": []
+      },
+      "expected": {
+        "result": "hash_computed",
+        "public_error": null,
+        "hash_relation": "different"
+      }
+    },
+    {
+      "case_id": "boundary_goal_empty_rejected",
+      "operation": "replace",
+      "pointer": "/goal",
+      "value": "",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_constraints_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/constraints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_success_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/success_criteria",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_risk_hint_empty_rejected",
+      "operation": "replace",
+      "pointer": "/risk_hint",
+      "value": "",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_capability_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/capability_hints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_scope_allowed_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/task_scope/allowed_capability_hints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_delegation_bad_uuid_rejected",
+      "operation": "replace",
+      "pointer": "/delegation_ref",
+      "value": "not-a-uuid",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_origin_parent_bad_uuid_rejected",
+      "operation": "replace",
+      "pointer": "/origin/parent_origin_refs",
+      "value": [
+        "not-a-uuid"
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    },
+    {
+      "case_id": "boundary_proposer_unknown_rejected",
+      "operation": "replace",
+      "pointer": "/proposer",
+      "value": "unknown",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relation": "not_computed"
+      }
+    }
+  ]
+}

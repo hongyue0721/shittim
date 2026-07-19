@@ -1,0 +1,931 @@
+{
+  "fixture_version": 1,
+  "idempotency_preimage": {
+    "jcs_utf8_hex": "7b226163746f72223a7b2261757468656e7469636174696f6e5f6c6576656c223a22706c6174666f726d5f7665726966696564222c22636f6e666964656e6365223a302e3132352c226964223a226163746f722d6c6f63616c2d757365722d31222c226b696e64223a226b6e6f776e5f75736572222c227265766973696f6e223a372c22736368656d615f76657273696f6e223a312c22736f75726365223a226163746f722d736f757263653a2f2f6c6f63616c2f6465736b746f70227d2c22636f6d6d616e645f74797065223a227461736b2e637265617465222c22636f6e74657874223a7b22636f6e766572736174696f6e5f726566223a22636f6e766572736174696f6e3a2f2f6c6f63616c2f3432222c226f70656e223a7b226172726179223a5b226b656570222c226b656570225d2c226e756c6c223a6e756c6c2c226e756d626572223a312e32357d2c227475726e223a337d2c22656e7472795f706f696e74223a226c6f63616c5f6465736b746f70222c2265787065637465645f7265766973696f6e223a6e756c6c2c227061796c6f6164223a7b226361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c2266696c6573797374656d2e7772697465225d2c22636f6e73747261696e7473223a5b22206b656570206e616d657320222c22206b656570206e616d657320222c227072657365727665206461746573225d2c2264656c65676174696f6e5f726566223a6e756c6c2c22676f616c223a2220204f7267616e697a6520446f776e6c6f6164732020222c226f726967696e223a7b226b696e64223a22757365725f696e707574222c22706172656e745f6f726967696e5f72656673223a5b2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c2233333333333333332d333333332d343333332d383333332d333333333333333333333333225d2c2270726f64756365725f726566223a7b226964223a226163746f722d6c6f63616c2d757365722d31222c226b696e64223a226163746f72227d2c22736368656d615f76657273696f6e223a312c22736f757263655f757269223a2268747470733a2f2f6578616d706c652e636f6d2f696e626f782f726571756573743f783d2532462350617274222c22757073747265616d5f737461626c655f6964223a2220757073747265616d2d343220227d2c2270726f706f736572223a2275736572222c227269736b5f68696e74223a2220206c6f772020222c22736368656d615f76657273696f6e223a322c22737563636573735f6372697465726961223a5b226d616e6966657374207772697474656e222c226d616e6966657374207772697474656e222c2266696c65732067726f75706564225d2c227461736b5f73636f7065223a7b22616c6c6f7765645f6361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c2266696c6573797374656d2e7772697465225d2c226578636c7573696f6e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f622f63616368652f2a222c2268747470733a2f2f6578616d706c652e636f6d2f612f622f63616368652f2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f776e6c6f6164732f707269766174652f2a2a225d2c22657870697265735f6174223a22323033302d30312d30315430303a30303a30305a222c227265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f622f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f612f622f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f776e6c6f6164732f2a225d2c22736368656d615f76657273696f6e223a317d7d2c22736368656d615f76657273696f6e223a312c227461736b5f6964223a6e756c6c7d",
+    "sha256": "5cd8b157cd888b0a7a1704c95be65e2d57523eeee8002fac5a9294e71743a8a4"
+  },
+  "idempotency_projection": {
+    "actor": {
+      "authentication_level": "platform_verified",
+      "confidence": 0.125,
+      "id": "actor-local-user-1",
+      "kind": "known_user",
+      "revision": 7,
+      "schema_version": 1,
+      "source": "actor-source://local/desktop"
+    },
+    "command_type": "task.create",
+    "context": {
+      "conversation_ref": "conversation://local/42",
+      "open": {
+        "array": [
+          "keep",
+          "keep"
+        ],
+        "null": null,
+        "number": 1.25
+      },
+      "turn": 3
+    },
+    "entry_point": "local_desktop",
+    "expected_revision": null,
+    "payload": {
+      "capability_hints": [
+        "filesystem.read",
+        "filesystem.read",
+        "filesystem.write"
+      ],
+      "constraints": [
+        " keep names ",
+        " keep names ",
+        "preserve dates"
+      ],
+      "delegation_ref": null,
+      "goal": "  Organize Downloads  ",
+      "origin": {
+        "kind": "user_input",
+        "parent_origin_refs": [
+          "22222222-2222-4222-8222-222222222222",
+          "22222222-2222-4222-8222-222222222222",
+          "33333333-3333-4333-8333-333333333333"
+        ],
+        "producer_ref": {
+          "id": "actor-local-user-1",
+          "kind": "actor"
+        },
+        "schema_version": 1,
+        "source_uri": "https://example.com/inbox/request?x=%2F#Part",
+        "upstream_stable_id": " upstream-42 "
+      },
+      "proposer": "user",
+      "risk_hint": "  low  ",
+      "schema_version": 2,
+      "success_criteria": [
+        "manifest written",
+        "manifest written",
+        "files grouped"
+      ],
+      "task_scope": {
+        "allowed_capability_hints": [
+          "filesystem.read",
+          "filesystem.read",
+          "filesystem.write"
+        ],
+        "exclusions": [
+          "https://example.com/a/b/cache/*",
+          "https://example.com/a/b/cache/*",
+          "https://example.com/downloads/private/**"
+        ],
+        "expires_at": "2030-01-01T00:00:00Z",
+        "resource_patterns": [
+          "https://example.com/a/b/**",
+          "https://example.com/a/b/**",
+          "https://example.com/downloads/*"
+        ],
+        "schema_version": 1
+      }
+    },
+    "schema_version": 1,
+    "task_id": null
+  },
+  "normalized_payload": {
+    "capability_hints": [
+      "filesystem.read",
+      "filesystem.read",
+      "filesystem.write"
+    ],
+    "constraints": [
+      " keep names ",
+      " keep names ",
+      "preserve dates"
+    ],
+    "delegation_ref": null,
+    "goal": "  Organize Downloads  ",
+    "origin": {
+      "kind": "user_input",
+      "parent_origin_refs": [
+        "22222222-2222-4222-8222-222222222222",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333"
+      ],
+      "producer_ref": {
+        "id": "actor-local-user-1",
+        "kind": "actor"
+      },
+      "schema_version": 1,
+      "source_uri": "https://example.com/inbox/request?x=%2F#Part",
+      "upstream_stable_id": " upstream-42 "
+    },
+    "proposer": "user",
+    "risk_hint": "  low  ",
+    "schema_version": 2,
+    "success_criteria": [
+      "manifest written",
+      "manifest written",
+      "files grouped"
+    ],
+    "task_scope": {
+      "allowed_capability_hints": [
+        "filesystem.read",
+        "filesystem.read",
+        "filesystem.write"
+      ],
+      "exclusions": [
+        "https://example.com/a/b/cache/*",
+        "https://example.com/a/b/cache/*",
+        "https://example.com/downloads/private/**"
+      ],
+      "expires_at": "2030-01-01T00:00:00Z",
+      "resource_patterns": [
+        "https://example.com/a/b/**",
+        "https://example.com/a/b/**",
+        "https://example.com/downloads/*"
+      ],
+      "schema_version": 1
+    }
+  },
+  "raw_envelope": {
+    "actor": {
+      "authentication_level": "platform_verified",
+      "confidence": 0.125,
+      "id": "actor-local-user-1",
+      "kind": "known_user",
+      "revision": 7,
+      "schema_version": 1,
+      "source": "actor-source://local/desktop"
+    },
+    "auth": null,
+    "command_type": "task.create",
+    "context": {
+      "conversation_ref": "conversation://local/42",
+      "open": {
+        "array": [
+          "keep",
+          "keep"
+        ],
+        "null": null,
+        "number": 1.25
+      },
+      "turn": 3
+    },
+    "deadline": "2030-01-01T00:05:00Z",
+    "entry_point": "local_desktop",
+    "expected_revision": null,
+    "idempotency_key": "create-downloads-42",
+    "message_kind": "command",
+    "payload": {
+      "capability_hints": [
+        "filesystem.read",
+        "filesystem.read",
+        "filesystem.write"
+      ],
+      "constraints": [
+        " keep names ",
+        " keep names ",
+        "preserve dates"
+      ],
+      "delegation_ref": null,
+      "goal": "  Organize Downloads  ",
+      "origin": {
+        "kind": "user_input",
+        "parent_origin_refs": [
+          "22222222-2222-4222-8222-222222222222",
+          "22222222-2222-4222-8222-222222222222",
+          "33333333-3333-4333-8333-333333333333"
+        ],
+        "producer_ref": {
+          "id": "actor-local-user-1",
+          "kind": "actor"
+        },
+        "schema_version": 1,
+        "source_uri": "HTTPS://Example.COM:443/inbox/./message/../request?x=%2f#Part",
+        "upstream_stable_id": " upstream-42 "
+      },
+      "proposer": "user",
+      "risk_hint": "  low  ",
+      "schema_version": 2,
+      "success_criteria": [
+        "manifest written",
+        "manifest written",
+        "files grouped"
+      ],
+      "task_scope": {
+        "allowed_capability_hints": [
+          "filesystem.read",
+          "filesystem.read",
+          "filesystem.write"
+        ],
+        "exclusions": [
+          "HTTPS://Example.COM:443/a/b/tmp/../cache/*",
+          "https://example.com/a/b/cache/*",
+          "https://example.com/downloads/private/**"
+        ],
+        "expires_at": "2030-01-01T08:00:00.000+08:00",
+        "resource_patterns": [
+          "HTTPS://Example.COM:443/a/./b/**",
+          "https://example.com/a/b/**",
+          "https://example.com/downloads/*"
+        ],
+        "schema_version": 1
+      }
+    },
+    "protocol_version": "1.0",
+    "request_id": "11111111-1111-4111-8111-111111111111",
+    "task_id": null
+  },
+  "receipt_preimage": {
+    "jcs_utf8_hex": "7b226361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c2266696c6573797374656d2e7772697465225d2c22636f6e73747261696e7473223a5b22206b656570206e616d657320222c22206b656570206e616d657320222c227072657365727665206461746573225d2c2264656c65676174696f6e5f726566223a6e756c6c2c22676f616c223a2220204f7267616e697a6520446f776e6c6f6164732020222c226f726967696e223a7b226b696e64223a22757365725f696e707574222c22706172656e745f6f726967696e5f72656673223a5b2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c2233333333333333332d333333332d343333332d383333332d333333333333333333333333225d2c2270726f64756365725f726566223a7b226964223a226163746f722d6c6f63616c2d757365722d31222c226b696e64223a226163746f72227d2c22736368656d615f76657273696f6e223a312c22736f757263655f757269223a2268747470733a2f2f6578616d706c652e636f6d2f696e626f782f726571756573743f783d2532462350617274222c22757073747265616d5f737461626c655f6964223a2220757073747265616d2d343220227d2c2270726f706f736572223a2275736572222c227269736b5f68696e74223a2220206c6f772020222c22736368656d615f76657273696f6e223a322c22737563636573735f6372697465726961223a5b226d616e6966657374207772697474656e222c226d616e6966657374207772697474656e222c2266696c65732067726f75706564225d2c227461736b5f73636f7065223a7b22616c6c6f7765645f6361706162696c6974795f68696e7473223a5b2266696c6573797374656d2e72656164222c2266696c6573797374656d2e72656164222c2266696c6573797374656d2e7772697465225d2c226578636c7573696f6e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f622f63616368652f2a222c2268747470733a2f2f6578616d706c652e636f6d2f612f622f63616368652f2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f776e6c6f6164732f707269766174652f2a2a225d2c22657870697265735f6174223a22323033302d30312d30315430303a30303a30305a222c227265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f622f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f612f622f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f646f776e6c6f6164732f2a225d2c22736368656d615f76657273696f6e223a317d7d",
+    "sha256": "18995b4db9e006f4c31d75f73eaee72fcb747a708e3cb96983ea1d656713833d"
+  },
+  "tamper_cases": [
+    {
+      "case_id": "auth_nonnull",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "result": "raw_schema_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/auth",
+      "value": {
+        "schema_version": 1
+      }
+    },
+    {
+      "case_id": "deadline_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/deadline",
+      "value": "2030-01-01T00:06:00Z"
+    },
+    {
+      "case_id": "request_id_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/request_id",
+      "value": "77777777-7777-4777-8777-777777777777"
+    },
+    {
+      "case_id": "idempotency_key_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/idempotency_key",
+      "value": "create-downloads-43"
+    },
+    {
+      "case_id": "context_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/context/open/number",
+      "value": 2.5
+    },
+    {
+      "case_id": "actor_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/actor/revision",
+      "value": 8
+    },
+    {
+      "case_id": "entry_point_changed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/entry_point",
+      "value": "local_ipc_client"
+    },
+    {
+      "case_id": "parent_task_id_forbidden",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "result": "raw_schema_rejected"
+      },
+      "operation": "add",
+      "pointer": "/payload/parent_task_id",
+      "value": null
+    },
+    {
+      "case_id": "source_uri_lexical_equivalent",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/origin/source_uri",
+      "value": "https://example.com/inbox/request?x=%2F#Part"
+    },
+    {
+      "case_id": "resource_pattern_lexical_equivalent",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/resource_patterns/0",
+      "value": "https://example.com/a/b/**"
+    },
+    {
+      "case_id": "exclusion_lexical_equivalent",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/exclusions/0",
+      "value": "https://example.com/a/b/cache/*"
+    },
+    {
+      "case_id": "expires_at_lexical_equivalent",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "same",
+          "receipt": "same"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/expires_at",
+      "value": "2030-01-01T00:00:00Z"
+    },
+    {
+      "case_id": "origin_uri_invalid",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": null,
+            "input_kind": "origin_source_uri"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/payload/origin/source_uri",
+      "value": "https://example.com/*"
+    },
+    {
+      "case_id": "resource_pattern_invalid",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": 1,
+            "input_kind": "resource_pattern"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/resource_patterns/1",
+      "value": "https://example.com/a/**/bad*"
+    },
+    {
+      "case_id": "exclusion_invalid",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_scope_pattern",
+          "details": {
+            "index": 2,
+            "input_kind": "exclusion"
+          }
+        },
+        "result": "normalization_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/exclusions/2",
+      "value": "https://example.com/a/bad*"
+    },
+    {
+      "case_id": "expires_at_nonzero_fraction",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "not_computed",
+          "receipt": "not_computed"
+        },
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "result": "raw_schema_rejected"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/expires_at",
+      "value": "2030-01-01T00:00:00.001Z"
+    },
+    {
+      "case_id": "constraints_reordered",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/constraints",
+      "value": [
+        "preserve dates",
+        " keep names ",
+        " keep names "
+      ]
+    },
+    {
+      "case_id": "capability_duplicate_removed",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/capability_hints",
+      "value": [
+        "filesystem.read",
+        "filesystem.write"
+      ]
+    },
+    {
+      "case_id": "payload_proposer",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/proposer",
+      "value": "companion"
+    },
+    {
+      "case_id": "payload_goal",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/goal",
+      "value": "  Organize Documents  "
+    },
+    {
+      "case_id": "payload_constraints",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/constraints/2",
+      "value": "preserve owners"
+    },
+    {
+      "case_id": "payload_success_criteria",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/success_criteria/2",
+      "value": "files indexed"
+    },
+    {
+      "case_id": "payload_risk_hint",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/risk_hint",
+      "value": "high"
+    },
+    {
+      "case_id": "payload_capability_hints",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/capability_hints/2",
+      "value": "filesystem.move"
+    },
+    {
+      "case_id": "payload_task_scope",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/task_scope/allowed_capability_hints/2",
+      "value": "filesystem.move"
+    },
+    {
+      "case_id": "payload_delegation_ref",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/delegation_ref",
+      "value": "88888888-8888-4888-8888-888888888888"
+    },
+    {
+      "case_id": "payload_origin",
+      "expected": {
+        "hash_relations": {
+          "idempotency": "different",
+          "receipt": "different"
+        },
+        "public_error": null,
+        "result": "hashes_computed"
+      },
+      "operation": "replace",
+      "pointer": "/payload/origin/upstream_stable_id",
+      "value": "upstream-43"
+    },
+    {
+      "case_id": "boundary_goal_single_space",
+      "operation": "replace",
+      "pointer": "/payload/goal",
+      "value": " ",
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_constraints_empty",
+      "operation": "replace",
+      "pointer": "/payload/constraints",
+      "value": [],
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_success_criteria_empty",
+      "operation": "replace",
+      "pointer": "/payload/success_criteria",
+      "value": [],
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_risk_hint_null",
+      "operation": "replace",
+      "pointer": "/payload/risk_hint",
+      "value": null,
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_capability_hints_empty",
+      "operation": "replace",
+      "pointer": "/payload/capability_hints",
+      "value": [],
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_scope_arrays_empty",
+      "operation": "replace",
+      "pointer": "/payload/task_scope",
+      "value": {
+        "schema_version": 1,
+        "resource_patterns": [],
+        "exclusions": [],
+        "allowed_capability_hints": [],
+        "expires_at": null
+      },
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_origin_nullable_and_array_empty",
+      "operation": "replace",
+      "pointer": "/payload/origin",
+      "value": {
+        "schema_version": 1,
+        "kind": "user_input",
+        "source_uri": null,
+        "upstream_stable_id": null,
+        "producer_ref": {
+          "kind": "actor",
+          "id": "actor-local-user-1"
+        },
+        "parent_origin_refs": []
+      },
+      "expected": {
+        "result": "hashes_computed",
+        "public_error": null,
+        "hash_relations": {
+          "receipt": "different",
+          "idempotency": "different"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_goal_empty_rejected",
+      "operation": "replace",
+      "pointer": "/payload/goal",
+      "value": "",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_constraints_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/payload/constraints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_success_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/payload/success_criteria",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_risk_hint_empty_rejected",
+      "operation": "replace",
+      "pointer": "/payload/risk_hint",
+      "value": "",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_capability_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/payload/capability_hints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_scope_allowed_empty_element_rejected",
+      "operation": "replace",
+      "pointer": "/payload/task_scope/allowed_capability_hints",
+      "value": [
+        ""
+      ],
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_delegation_bad_uuid_rejected",
+      "operation": "replace",
+      "pointer": "/payload/delegation_ref",
+      "value": "not-a-uuid",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_origin_upstream_empty_rejected",
+      "operation": "replace",
+      "pointer": "/payload/origin/upstream_stable_id",
+      "value": "",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    },
+    {
+      "case_id": "boundary_proposer_unknown_rejected",
+      "operation": "replace",
+      "pointer": "/payload/proposer",
+      "value": "unknown",
+      "expected": {
+        "result": "raw_schema_rejected",
+        "public_error": {
+          "code": "invalid_request",
+          "details": null
+        },
+        "hash_relations": {
+          "receipt": "not_computed",
+          "idempotency": "not_computed"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "child": {
+    "external_uuid_refs": {
+      "action_id": "bbbbbbbb-bbbb-4bbb-8bbb-000000000002",
+      "approval_resolution_ref": "bbbbbbbb-bbbb-4bbb-8bbb-000000000004",
+      "challenge_refs": [
+        "bbbbbbbb-bbbb-4bbb-8bbb-000000000007"
+      ],
+      "credential_refs": [
+        "bbbbbbbb-bbbb-4bbb-8bbb-000000000005",
+        "bbbbbbbb-bbbb-4bbb-8bbb-000000000006"
+      ],
+      "delegation_ref": "bbbbbbbb-bbbb-4bbb-8bbb-000000000008",
+      "parent_origin_refs": [
+        "bbbbbbbb-bbbb-4bbb-8bbb-000000000009",
+        "bbbbbbbb-bbbb-4bbb-8bbb-000000000009"
+      ],
+      "parent_task_id": "bbbbbbbb-bbbb-4bbb-8bbb-000000000001",
+      "permission_decision_id": "bbbbbbbb-bbbb-4bbb-8bbb-000000000003"
+    },
+    "schema_id": "https://schemas.shittim.local/task/child_task_materialization_allocation/v1",
+    "tamper_cases": [
+      {
+        "case_id": "child_distinct_replacement",
+        "expected": {
+          "domain_result": "accepted",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/child_task_id",
+        "value": "22222222-2222-4222-8222-00000000000b"
+      },
+      {
+        "case_id": "child_duplicate_internal",
+        "expected": {
+          "domain_result": "duplicate_internal_uuid",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/task_scope_id",
+        "value": "22222222-2222-4222-8222-000000000001"
+      },
+      {
+        "case_id": "child_external_collision",
+        "expected": {
+          "domain_result": "external_uuid_collision",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/child_task_id",
+        "value": "bbbbbbbb-bbbb-4bbb-8bbb-000000000002"
+      },
+      {
+        "case_id": "child_duplicate_opaque",
+        "expected": {
+          "domain_result": "duplicate_opaque",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/action_state_changed_dedup_key",
+        "value": "child-task-created-dedup-1"
+      },
+      {
+        "case_id": "child_empty_opaque",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "replace",
+        "pointer": "/task_created_dedup_key",
+        "value": ""
+      },
+      {
+        "case_id": "child_unknown_field",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "add",
+        "pointer": "/unexpected",
+        "value": true
+      },
+      {
+        "case_id": "child_bad_uuid",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "replace",
+        "pointer": "/action_transition_id",
+        "value": "22222222-2222-4222-8222-00000000000z"
+      }
+    ],
+    "valid_allocation": {
+      "action_state_changed_dedup_key": "child-action-state-dedup-1",
+      "action_state_changed_event_id": "22222222-2222-4222-8222-000000000009",
+      "action_transition_id": "22222222-2222-4222-8222-00000000000a",
+      "audit_record_id": "22222222-2222-4222-8222-000000000007",
+      "child_task_id": "22222222-2222-4222-8222-000000000001",
+      "content_origin_id": "22222222-2222-4222-8222-000000000003",
+      "correlation_id": "child-correlation-1",
+      "creation_provenance_id": "22222222-2222-4222-8222-000000000005",
+      "kernel_receipt_id": "22222222-2222-4222-8222-000000000004",
+      "schema_version": 1,
+      "task_created_dedup_key": "child-task-created-dedup-1",
+      "task_created_event_id": "22222222-2222-4222-8222-000000000008",
+      "task_scope_id": "22222222-2222-4222-8222-000000000002",
+      "verification_result_id": "22222222-2222-4222-8222-000000000006"
+    }
+  },
+  "fixture_version": 1,
+  "root": {
+    "external_uuid_refs": {
+      "command_request_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+      "delegation_ref": "aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+      "parent_origin_refs": [
+        "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "aaaaaaaa-aaaa-4aaa-8aaa-000000000003"
+      ]
+    },
+    "schema_id": "https://schemas.shittim.local/task/root_task_create_allocation/v2",
+    "tamper_cases": [
+      {
+        "case_id": "root_distinct_replacement",
+        "expected": {
+          "domain_result": "accepted",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/task_id",
+        "value": "11111111-1111-4111-8111-00000000000b"
+      },
+      {
+        "case_id": "root_duplicate_internal",
+        "expected": {
+          "domain_result": "duplicate_internal_uuid",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/task_scope_id",
+        "value": "11111111-1111-4111-8111-000000000001"
+      },
+      {
+        "case_id": "root_external_collision",
+        "expected": {
+          "domain_result": "external_uuid_collision",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/task_id",
+        "value": "aaaaaaaa-aaaa-4aaa-8aaa-000000000001"
+      },
+      {
+        "case_id": "root_duplicate_opaque",
+        "expected": {
+          "domain_result": "duplicate_opaque",
+          "schema_valid": true
+        },
+        "operation": "replace",
+        "pointer": "/task_created_dedup_key",
+        "value": "root-correlation-1"
+      },
+      {
+        "case_id": "root_empty_opaque",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "replace",
+        "pointer": "/correlation_id",
+        "value": ""
+      },
+      {
+        "case_id": "root_unknown_field",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "add",
+        "pointer": "/unexpected",
+        "value": true
+      },
+      {
+        "case_id": "root_bad_uuid",
+        "expected": {
+          "domain_result": "not_evaluated",
+          "schema_valid": false
+        },
+        "operation": "replace",
+        "pointer": "/audit_record_id",
+        "value": "not-a-uuid"
+      }
+    ],
+    "valid_allocation": {
+      "audit_record_id": "11111111-1111-4111-8111-000000000006",
+      "content_origin_id": "11111111-1111-4111-8111-000000000003",
+      "correlation_id": "root-correlation-1",
+      "creation_provenance_id": "11111111-1111-4111-8111-000000000005",
+      "kernel_receipt_id": "11111111-1111-4111-8111-000000000004",
+      "schema_version": 2,
+      "task_created_dedup_key": "root-task-created-dedup-1",
+      "task_created_event_id": "11111111-1111-4111-8111-000000000007",
+      "task_id": "11111111-1111-4111-8111-000000000001",
+      "task_scope_id": "11111111-1111-4111-8111-000000000002"
+    }
+  }
+}
