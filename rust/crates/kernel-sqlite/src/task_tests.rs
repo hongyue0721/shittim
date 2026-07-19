@@ -153,7 +153,7 @@ fn task_create_fixture_normalizes_and_hashes_exactly() {
     let request: TaskCreateRequest =
         serde_json::from_value(envelope["payload"].clone()).expect("request");
     let command = command_from_fixture(envelope, request, 1);
-    let prepared = super::task::prepare_create(&command).expect("prepare");
+    let prepared = super::task::prepare_legacy_v1_create(&command).expect("prepare");
     assert_eq!(
         prepared.normalized_value_for_test(),
         fixture["normalized_payload"]

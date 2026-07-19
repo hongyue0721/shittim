@@ -19,7 +19,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-const CREATE_TASK_SAVEPOINT: &str = "kernel_sqlite_create_task";
+const LEGACY_V1_CREATE_TASK_SAVEPOINT: &str = "kernel_sqlite_create_task";
 const TASK_CREATE_SCHEMA: &str = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
 const ACTOR_SCHEMA: &str = "https://schemas.shittim.local/v1/common/actor.json";
 const CONTENT_ORIGIN_SCHEMA: &str = "https://schemas.shittim.local/v1/common/content_origin.json";
@@ -95,7 +95,7 @@ pub enum CreateTaskResult {
 }
 
 #[derive(Debug)]
-pub(crate) struct PreparedCreate {
+pub(crate) struct PreparedLegacyV1Create {
     normalized_request: TaskCreateRequest,
     #[cfg(test)]
     normalized_value: Value,
@@ -106,7 +106,7 @@ pub(crate) struct PreparedCreate {
 }
 
 #[cfg(test)]
-impl PreparedCreate {
+impl PreparedLegacyV1Create {
     pub(crate) fn normalized_value_for_test(&self) -> Value {
         self.normalized_value.clone()
     }
@@ -121,17 +121,21 @@ impl PreparedCreate {
 }
 
 impl WriteTransaction<'_> {
-    /// Creates ContentOrigin, TaskScope, Task, idempotency, Audit, and Event atomically.
+    /// Retained TaskCreate v1 compatibility write path.
+    ///
+    /// This remains a production-supported legacy-read/compatibility path until the explicit v2
+    /// cutover. New v2 callers must use `kernel-task-creation` for pure normalization/projection
+    /// semantics and must not route through this method or its legacy helpers.
     ///
     /// This method owns an internal SAVEPOINT, so an ignored error cannot leave partial facts in
     /// the caller's surrounding write transaction.
     pub fn create_task(&self, command: TaskCreateCommand) -> Result<CreateTaskResult, StoreError> {
-        let prepared = prepare_create(&command)?;
+        let prepared = prepare_legacy_v1_create(&command)?;
         self.connection()
-            .execute_batch(&format!("SAVEPOINT {CREATE_TASK_SAVEPOINT}"))
+            .execute_batch(&format!("SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"))
             .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-        let result = create_inside_savepoint(self, &command, &prepared);
-        finish_savepoint(self.connection(), result)
+        let result = create_legacy_v1_inside_savepoint(self, &command, &prepared);
+        finish_legacy_v1_savepoint(self.connection(), result)
     }
 }
 
@@ -197,8 +201,15 @@ pub(crate) fn get_content_origin(
     Ok(Some(origin))
 }
 
-pub(crate) fn prepare_create(command: &TaskCreateCommand) -> Result<PreparedCreate, StoreError> {
-    validate_command_facts(command)?;
+/// Prepares the retained TaskCreate v1 repository projection.
+///
+/// This shape includes legacy envelope `task_id`/`expected_revision` and the v1
+/// payload (including direct-child `parent_task_id`). It is intentionally not the
+/// active v2 normalization owner and must not be reused by new v2 callers.
+pub(crate) fn prepare_legacy_v1_create(
+    command: &TaskCreateCommand,
+) -> Result<PreparedLegacyV1Create, StoreError> {
+    validate_legacy_v1_command_facts(command)?;
     let original = serde_json::to_value(&command.request).map_err(|_| serialization_error())?;
     validate_json(TASK_CREATE_SCHEMA, &original).map_err(|_| contract_error())?;
 
@@ -212,9 +223,9 @@ pub(crate) fn prepare_create(command: &TaskCreateCommand) -> Result<PreparedCrea
         })?);
     }
     normalized_request.task_scope.resource_patterns =
-        normalize_patterns(&normalized_request.task_scope.resource_patterns)?;
+        normalize_legacy_v1_patterns(&normalized_request.task_scope.resource_patterns)?;
     normalized_request.task_scope.exclusions =
-        normalize_patterns(&normalized_request.task_scope.exclusions)?;
+        normalize_legacy_v1_patterns(&normalized_request.task_scope.exclusions)?;
 
     let normalized_value =
         serde_json::to_value(&normalized_request).map_err(|_| serialization_error())?;
@@ -233,7 +244,7 @@ pub(crate) fn prepare_create(command: &TaskCreateCommand) -> Result<PreparedCrea
     let projection_json = canonical_json_string(&projection).map_err(|_| serialization_error())?;
     let projection_hash = sha256_canonical(&projection).map_err(|_| serialization_error())?;
     let accepted_at = command.allocation.accepted_at.to_rfc3339();
-    Ok(PreparedCreate {
+    Ok(PreparedLegacyV1Create {
         normalized_request,
         #[cfg(test)]
         normalized_value,
@@ -244,7 +255,7 @@ pub(crate) fn prepare_create(command: &TaskCreateCommand) -> Result<PreparedCrea
     })
 }
 
-fn validate_command_facts(command: &TaskCreateCommand) -> Result<(), StoreError> {
+fn validate_legacy_v1_command_facts(command: &TaskCreateCommand) -> Result<(), StoreError> {
     let actor = serde_json::to_value(&command.envelope.actor).map_err(|_| serialization_error())?;
     validate_json(ACTOR_SCHEMA, &actor).map_err(|_| contract_error())?;
     for value in [
@@ -279,7 +290,7 @@ fn validate_command_facts(command: &TaskCreateCommand) -> Result<(), StoreError>
     Ok(())
 }
 
-fn normalize_patterns(patterns: &[String]) -> Result<Vec<String>, StoreError> {
+fn normalize_legacy_v1_patterns(patterns: &[String]) -> Result<Vec<String>, StoreError> {
     patterns
         .iter()
         .map(|pattern| {
@@ -293,13 +304,13 @@ fn normalize_patterns(patterns: &[String]) -> Result<Vec<String>, StoreError> {
         .collect()
 }
 
-fn create_inside_savepoint(
+fn create_legacy_v1_inside_savepoint(
     transaction: &WriteTransaction<'_>,
     command: &TaskCreateCommand,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<CreateTaskResult, StoreError> {
     let connection = transaction.connection();
-    if let Some(result) = replay_if_present(connection, command, prepared)? {
+    if let Some(result) = replay_legacy_v1_if_present(connection, command, prepared)? {
         return Ok(result);
     }
     if prepared.normalized_request.delegation_ref.is_some() {
@@ -308,11 +319,11 @@ fn create_inside_savepoint(
             "delegation was not found",
         ));
     }
-    validate_parent_refs(connection, &prepared.normalized_request)?;
+    validate_legacy_v1_parent_refs(connection, &prepared.normalized_request)?;
 
-    let origin = build_origin(command, prepared)?;
-    let scope = build_scope(command, prepared)?;
-    let task = build_task(command, prepared)?;
+    let origin = build_legacy_v1_origin(command, prepared)?;
+    let scope = build_legacy_v1_scope(command, prepared)?;
+    let task = build_legacy_v1_task(command, prepared)?;
     let origin_json = encode_contract_document(CONTENT_ORIGIN_SCHEMA, &origin)?;
     let scope_json = encode_contract_document(TASK_SCOPE_SCHEMA, &scope)?;
     let task_json = encode_contract_document(TASK_SCHEMA, &task)?;
@@ -365,20 +376,20 @@ fn create_inside_savepoint(
         )
         .map_err(write_error)?;
 
-    let audit = build_audit(command, &task, &origin, prepared)?;
-    verify_creation_audit(&audit, command, &task, &origin, prepared)?;
+    let audit = build_legacy_v1_audit(command, &task, &origin, prepared)?;
+    verify_legacy_v1_creation_audit(&audit, command, &task, &origin, prepared)?;
     crate::audit::insert_audit(connection, &audit)?;
-    let pending = build_event(command, &task)?;
+    let pending = build_legacy_v1_event(command, &task)?;
     let appended = crate::outbox::append_event(transaction, pending.clone())?;
-    verify_created_event(&appended, &pending, &task, prepared)?;
-    validate_created_relations(connection, &task, &scope, &origin)?;
+    verify_legacy_v1_created_event(&appended, &pending, &task, prepared)?;
+    validate_legacy_v1_created_relations(connection, &task, &scope, &origin)?;
     Ok(CreateTaskResult::Created { task })
 }
 
-fn replay_if_present(
+fn replay_legacy_v1_if_present(
     connection: &Connection,
     command: &TaskCreateCommand,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<Option<CreateTaskResult>, StoreError> {
     let row: Option<(String, String, String, String, String, String, String)> = connection
         .query_row(
@@ -432,7 +443,7 @@ fn replay_if_present(
     Ok(Some(CreateTaskResult::Replayed { task }))
 }
 
-fn validate_parent_refs(
+fn validate_legacy_v1_parent_refs(
     connection: &Connection,
     request: &TaskCreateRequest,
 ) -> Result<(), StoreError> {
@@ -455,9 +466,9 @@ fn validate_parent_refs(
     Ok(())
 }
 
-fn build_origin(
+fn build_legacy_v1_origin(
     command: &TaskCreateCommand,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<ContentOrigin, StoreError> {
     Ok(ContentOrigin {
         carrier_ref: ContentOriginCarrierRef {
@@ -492,9 +503,9 @@ fn build_origin(
     })
 }
 
-fn build_scope(
+fn build_legacy_v1_scope(
     command: &TaskCreateCommand,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<TaskScope, StoreError> {
     Ok(TaskScope {
         allowed_capability_hints: prepared
@@ -523,9 +534,9 @@ fn build_scope(
     })
 }
 
-fn build_task(
+fn build_legacy_v1_task(
     command: &TaskCreateCommand,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<TaskSpec, StoreError> {
     Ok(TaskSpec {
         actor: command.envelope.actor.clone(),
@@ -550,11 +561,11 @@ fn build_task(
     })
 }
 
-fn build_audit(
+fn build_legacy_v1_audit(
     command: &TaskCreateCommand,
     task: &TaskSpec,
     origin: &ContentOrigin,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<AuditRecord, StoreError> {
     Ok(AuditRecord {
         action_id: None,
@@ -600,7 +611,10 @@ fn build_audit(
     })
 }
 
-fn build_event(command: &TaskCreateCommand, task: &TaskSpec) -> Result<PendingEvent, StoreError> {
+fn build_legacy_v1_event(
+    command: &TaskCreateCommand,
+    task: &TaskSpec,
+) -> Result<PendingEvent, StoreError> {
     let payload = TaskCreatedPayload {
         created_at: task.created_at.clone(),
         goal: task.goal.clone(),
@@ -626,12 +640,12 @@ fn build_event(command: &TaskCreateCommand, task: &TaskSpec) -> Result<PendingEv
     })
 }
 
-fn verify_creation_audit(
+fn verify_legacy_v1_creation_audit(
     audit: &AuditRecord,
     command: &TaskCreateCommand,
     task: &TaskSpec,
     origin: &ContentOrigin,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<(), StoreError> {
     let context = audit
         .task_creation_context
@@ -682,11 +696,11 @@ fn verify_creation_audit(
     Ok(())
 }
 
-fn verify_created_event(
+fn verify_legacy_v1_created_event(
     record: &crate::OutboxRecord,
     pending: &PendingEvent,
     task: &TaskSpec,
-    prepared: &PreparedCreate,
+    prepared: &PreparedLegacyV1Create,
 ) -> Result<(), StoreError> {
     let envelope = &record.envelope;
     let EventPayload::TaskCreated(payload) = &envelope.payload else {
@@ -713,7 +727,7 @@ fn verify_created_event(
     Ok(())
 }
 
-fn validate_created_relations(
+fn validate_legacy_v1_created_relations(
     connection: &Connection,
     task: &TaskSpec,
     scope: &TaskScope,
@@ -736,36 +750,38 @@ fn validate_created_relations(
     Ok(())
 }
 
-fn finish_savepoint<T>(
+fn finish_legacy_v1_savepoint<T>(
     connection: &Connection,
     result: Result<T, StoreError>,
 ) -> Result<T, StoreError> {
     match result {
         Ok(value) => {
-            match connection.execute_batch(&format!("RELEASE SAVEPOINT {CREATE_TASK_SAVEPOINT}")) {
+            match connection.execute_batch(&format!(
+                "RELEASE SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"
+            )) {
                 Ok(()) => Ok(value),
                 Err(error) => {
                     let original = StoreError::sqlite(error, StoreErrorCode::InternalStoreError);
-                    rollback_savepoint(connection, Some(&original))?;
+                    rollback_legacy_v1_savepoint(connection, Some(&original))?;
                     Err(original)
                 }
             }
         }
         Err(error) => {
-            rollback_savepoint(connection, Some(&error))?;
+            rollback_legacy_v1_savepoint(connection, Some(&error))?;
             Err(error)
         }
     }
 }
 
-fn rollback_savepoint(
+fn rollback_legacy_v1_savepoint(
     connection: &Connection,
     original: Option<&StoreError>,
 ) -> Result<(), StoreError> {
     connection
         .execute_batch(&format!(
-            "ROLLBACK TO SAVEPOINT {CREATE_TASK_SAVEPOINT}; \
-             RELEASE SAVEPOINT {CREATE_TASK_SAVEPOINT}"
+            "ROLLBACK TO SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}; \
+             RELEASE SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"
         ))
         .map_err(|_| {
             StoreError::new(
