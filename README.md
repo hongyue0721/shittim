@@ -26,6 +26,7 @@
 ## 文档与决策入口
 
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
+- [`docs/REPOSITORY_MAINTENANCE.md`](docs/REPOSITORY_MAINTENANCE.md)：主仓与纯文档镜像的持续更新、发布顺序、失败门禁，以及已实现的 `scripts/sync-docs-repository.mjs`（`pnpm run check:docs-repository` / `sync:docs-repository` / `test:docs-repository`）。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
 - [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现legacy TaskCreate v1 create/get与不可连接dispatcher，以及ADR-0006首批Schema、Task creation纯library和official fixtures/harness；active TaskCreate v2 repository/handler、child Action materializer、Approval v2、`agentd`与可连接server尚未实现。
 - [`docs/sdk/README.md`](docs/sdk/README.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
@@ -37,4 +38,4 @@
 
 项目代码采用 [Apache License 2.0](LICENSE)。
 
-编码前必须读 `AGENT.md` 和受影响 spec；改动领域定义时只改其唯一事实源，并更新 `CONFORMANCE.md` 测试锚点。
+编码前必须读 `AGENT.md` 和受影响 spec；改动领域定义时只改其唯一事实源，并更新 `CONFORMANCE.md` 测试锚点。代码、Schema、状态或完成度变化时还必须同步相关进度/API/SDK/ADR 文档，并按 [`docs/REPOSITORY_MAINTENANCE.md`](docs/REPOSITORY_MAINTENANCE.md) 在主仓验收推送后更新纯文档镜像；两仓远端一致性未验证前不得报告完成。

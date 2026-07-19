@@ -14,6 +14,9 @@
 
 ### 规范与工程基线
 
+- [ ] 双仓维护流程与同步 library/CLI 已实现，**publication pending**：主仓仍需完成独立验收、提交并推送；随后才能从已推送 `master` SHA 运行真实 `--check` / `--sync`，复验纯文档镜像远端后再勾选“已发布”。
+- [x] 落地零依赖主仓→纯文档镜像同步工具：`scripts/sync-docs-repository.mjs`（`--check`/`--sync`/`--self-test`，真正只读 check 临时 bare 审计、source master first-parent 权威、严格 manifest、线性普通 push、push outcome 分类、本地 checkout plumbing）与 `scripts/sync-docs-repository.test.mjs`（`node:test` + 本地 bare remotes 覆盖当前列明门禁）；根 scripts：`check:docs-repository`、`sync:docs-repository`、`test:docs-repository`。工具不提交/推送主仓，不 force，不验证 private 可见性（人工事实）。
+
 - [x] 建立 Freedom-first、Kernel Owns Reality、Core 不可自改规范基线。
 - [x] 补齐 Task/Action/Recovery、Policy、Event/Outbox、KCP 首批可编码契约。
 - [x] 明确 `owner` 只是未认证预留标签；`stop.activate` 是首批 Emergency Stop 入口。
@@ -50,7 +53,7 @@
 - [x] Lease 过期与确定未派发取消返回绑定 action_id 的原子释放意图。
 - [x] 补偿身份只由 `ActionRequest.parent_action_id` 推导，不存在平行 ActionRole。
 - [x] `retry_original` 仅在副作用明确未发生且幂等保障成立时合法。
-- [x] 新增 NxN 矩阵、证据测试与 proptest；全部状态遍历由生成的 `TaskStatus::ALL` / `ActionStatus::ALL` 驱动，不维护平行状态闭集；`domain-task` 共 45 项测试。
+- [x] 新增 NxN 矩阵、证据测试与 proptest；全部状态遍历由生成的 `TaskStatus::ALL` / `ActionStatus::ALL` 驱动，不维护平行状态闭集；回归以状态边、证据规则与属性行为覆盖为合同，不维护固定测试总数。
 - [x] 新增 [`api/domain-task.md`](api/domain-task.md)；本批无外部 SDK API 变化。
 
 ### Freedom-first Policy matcher
@@ -78,7 +81,7 @@
 - [x] 写事务对 closure panic 安全：panic 前写入回滚，释放连接 mutex guard 后恢复原 payload，后续同 store 可继续读写且锁不 poison。
 - [x] 实现只能从 `WriteTransaction` 获取的生产 `RateLimitPort`；preview 不消费，winner-only 在同一 `BEGIN IMMEDIATE` 中重新计数并插入。
 - [x] 新增 migration 0002 与 Task create/get repository：canonical Task/TaskScope/ContentOrigin 单源、generated-column FK/index、关系 ordinal 镜像、幂等 replay/conflict、固定 Audit/Event 和严格 fail-closed 读取；不实现 list/update/KCP。
-- [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；并补齐 `mark_delivered` 事务边界/并发/fail-closed 真实文件测试；`kernel-sqlite` 共 44 项测试。
+- [x] 使用真实文件验证 generated UNIQUE parent key、deferred Task↔Scope FK、fixture hash、完整 Audit/Event 公开读取、outer panic 全事实回滚与无号重试、重复分配 ID 矩阵、非法 URI/pattern 稳定错误码、幂等 canonical/hash 与 parent relation corruption、v1→v2 保留升级、多 store replay/conflict 串行，以及 parent/delegation 失败；并补齐 `mark_delivered` 事务边界/并发/fail-closed 真实文件测试。回归以持久化不变量和故障行为覆盖为合同，不维护固定测试总数。
 - [x] 新增 [`api/kernel-sqlite.md`](api/kernel-sqlite.md)。
 
 ### KCP typed application handler 合同
@@ -119,7 +122,7 @@
 - [x] **schema-tool library implemented（本切片）**：正式五值`compatibility`；component-native exact ID/source/title/version硬门；完整非空`MethodVersionBinding` validator；registry exact V2 Envelope authority发现；显式`ProductionRegistry`/`SyntheticRegistry` profile proof成为TargetPlan、target graph与artifact planning的唯一入口，裸`SchemaRegistry`仅inspection/instance validation；`validate_production_manifest_stage`挂到production CLI check/generate；catalog生成`KCP_ENVELOPE_AUTHORITY_METHODS`/`KCP_LEGACY_V1_*`/`METHOD_VERSION_BINDINGS`；production bindings仍为空；neutral Alias resolution/root transparent alias、root API re-export、shared format assertion/unknown fail-closed、通用validated decode taxonomy、open-object统一member collision audit与`1..=u32::MAX -> u32`准确生成均已完成。
 - [x] **task creation fixture前置合同闭合（文档切片）**：固定root/child/allocation三路径、wrapper字段与strict RFC6901 tamper结构；JCS只存`jcs_utf8_hex`/`sha256`，allocation不存JCS/hash；拍板`expires_at` Draft 2020-12 `pattern + format`双门、三类URI normalization统一`invalid_scope_pattern` details、post-normalize internal failure、`kernel-task-creation`冻结职责与URI唯一owner、allocation typed external-ref snapshots/opaque validation。该合同切片完成当时尚不表示official fixture或repository已经完成；后续pure library、通用pointer CLI及official fixtures/harness均已按下列独立条目实现。
 - [x] **task creation纯library实现**：`InputTaskScopeV1.expires_at` source已加pattern+format双门并重新生成；`kernel-contracts::canonicalize_rfc3339_seconds`严格不trim、拒绝非零亚秒、offset转UTC秒；新增纯crate `kernel-task-creation`，root/child共用同一JSON字段normalize算法，生产root receipt/idempotency与child proposal/receipt JCS/SHA-256，并以闭合typed external UUID snapshot验证root/child allocation。未接DB/KCP，不分配ID。
-- [x] **task creation official fixtures与harness**：三份固定路径wrapper已固化且不进manifest；`kernel-task-creation/tests/official_task_creation_fixtures.rs`按Envelope→payload→production owner与allocation Schema-first顺序执行完整tamper矩阵，load后统一校验wrapper交叉不变量，pointer字段为strict `JsonPointer`；独立`schema-tool` CLI进程oracle覆盖baseline validate/canonicalize与allocation全部tamper的真实`validate --pointer`。分工不是三套独立JCS算法：production owner负责业务hash关系，独立CLI进程/Schema路径负责中立选择验证与JCS模式输出，stored bytes/hash自一致性共享唯一JCS authority。root/child分别43/34个tamper，allocation root/child各7个tamper。
+- [x] **task creation official fixtures与harness**：三份固定路径wrapper已固化且不进manifest；`kernel-task-creation/tests/official_task_creation_fixtures.rs`按Envelope→payload→production owner与allocation Schema-first顺序执行完整tamper矩阵，load后统一校验wrapper交叉不变量，pointer字段为strict `JsonPointer`；独立`schema-tool` CLI进程oracle覆盖baseline validate/canonicalize与allocation全部tamper的真实`validate --pointer`。分工不是三套独立JCS算法：production owner负责业务hash关系，独立CLI进程/Schema路径负责中立选择验证与JCS模式输出，stored bytes/hash自一致性共享唯一JCS authority。其中 root/child 的 43/34 与 allocation root/child 各 7 是**官方 fixture 合同闭集计数**（由 fixture 文件 + harness 常量 + parser 共同锁定；变更必须版本化更新 fixture 与常量），不是 crate/workspace 测试总数政策，也不随普通回归用例增减漂移。
 - [x] `schema-tool`中立JSON Pointer与selected validate/canonicalize：公开strict RFC6901 `JsonPointer` selection，syntax/evaluation错误分层，Serde反序列化强制经过strict parser，array index拒绝leading zero与`-`，literal `%`不做URI解码；所有生产JSON lookup统一使用`JsonPointer + select_json_value`，动态property name从decoded segments编码；selection/mutation共用单一decoded traversal规则，mutation错误携带精确`token_index`且失败保持atomic。`resolve.rs`在SchemaNode authority命中后若raw lookup失败，返回保留pointer source的结构化internal invariant错误。library-first `ValidateSelectedRequest`与`CanonicalizeRequest`/`CanonicalOutputMode::{Bytes,Hex,Hash}`已实现；CLI `validate/canonicalize --pointer`、`canonicalize --hex|--hash`互斥、所有canonical输出无newline，nested validate成功信息含pointer且root旧格式保持。工具不做Task normalize。
 - [x] production retained lifecycle改标：TaskCreateRequest/KcpCommandEnvelope/KcpQueryEnvelope v1=`legacy-validation-only`，TaskCreateResponse v1=`legacy-read-only`，其余37=`v1-stable`；不改retained ledger/source bytes。
 
@@ -168,19 +171,28 @@
 
 ```text
 export PATH="$HOME/.local/share/pnpm:$PATH"
+export TMPDIR=/mnt/data/shittim-build-tmp
+export CARGO_TARGET_DIR=/mnt/data/shittim-cargo-target
+mkdir -p "$TMPDIR" "$CARGO_TARGET_DIR"
+# 文档 sync 测试另用专用根（仍在 /mnt/data；与全仓 TMPDIR 约定分层，不互相替代）
+export TMPDIR=/mnt/data/shittim-docs-sync-tests
 pnpm run check:toolchain
 pnpm run test:file-manifest
 pnpm run write:file-manifest
 pnpm run check:file-manifest
+pnpm run test:docs-repository
+node scripts/sync-docs-repository.mjs --self-test
+# 主仓 dirty/未推送时 --check 预期 source_dirty（或 source_not_pushed）失败；不得在本切片对真实远端 --sync
+# 统一门前恢复编译用 TMPDIR/CARGO_TARGET_DIR
+export TMPDIR=/mnt/data/shittim-build-tmp
+export CARGO_TARGET_DIR=/mnt/data/shittim-cargo-target
 pnpm install --frozen-lockfile
-pnpm install --no-frozen-lockfile
-# 二次 no-frozen 后 pnpm-lock.yaml 内容 hash 应稳定
 # 统一门（先 Node 硬门，再 Rust，再 FILE_MANIFEST）；无跨平台 npm check:all
 ./scripts/check-schema.sh
 git diff --check
 ```
 
-Node/pnpm 基座：`check:toolchain` 通过；frozen install 通过；二次 no-frozen lockfile hash 稳定。用默认 PATH 的 Node 26 直接 `node scripts/check-node-toolchain.mjs` 或 `./scripts/check-schema.sh` 应早期失败（Node 版本不符，长 Rust 前）。`FILE_MANIFEST.md` 由 `scripts/update-file-manifest.mjs` 从 Git source set 生成（tracked + untracked non-ignored `*.md`，路径严格 UTF-8、禁止手改、不扫 ignored build 产物）；`check-schema.sh` 最前跑 toolchain 硬门，最后跑 `--check`。仓库全量以 `export PATH=...` + `./scripts/check-schema.sh` 为准。
+Node/pnpm 基座：`check:toolchain` 通过。`FILE_MANIFEST.md` 由 `scripts/update-file-manifest.mjs` 从 Git source set 生成（tracked + untracked non-ignored `*.md`，路径严格 UTF-8、禁止手改、不扫 ignored build 产物）；`check-schema.sh` 最前跑 toolchain 硬门，最后跑 `--check`。`test:docs-repository` 在 `/mnt/data/shittim-docs-sync-tests` 用 bare remotes 覆盖文档列明的门禁与状态分支（含 `source_identity`/`docs_identity` name+email），不宣称穷尽所有 Git/网络故障组合。本阶段编译/测试运行命令必须显式 `TMPDIR`/`CARGO_TARGET_DIR` 到 `/mnt/data`；Rust 库自身不硬编码 host path。仓库全量以 `export PATH=...` + 显式 TMP/CARGO + `./scripts/check-schema.sh` 为准。主仓未 clean/未推送前不得宣称文档镜像已与当前工作区同步。
 
 ## 事实来源
 

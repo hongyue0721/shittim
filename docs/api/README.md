@@ -8,6 +8,8 @@
 
 ## 文档
 
+- [双仓库与持续文档维护](../REPOSITORY_MAINTENANCE.md)（主仓权威、文档主动更新、纯文档镜像同步与发布门禁）
+
 - [Schema 生成与契约类型](schema-generation.md)
 - [domain-task 内部 Rust API](domain-task.md)（非 KCP 外部 API）
 - [domain-policy 内部 Rust API](domain-policy.md)（非 KCP 外部 API）

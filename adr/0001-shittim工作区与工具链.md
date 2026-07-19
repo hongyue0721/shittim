@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-16
-- 修订：2026-07-17（落地零依赖 Node/pnpm 根工作区基座；记录实际入口与 Corepack 不可用）
+- 修订：2026-07-17（落地零依赖 Node/pnpm 根工作区基座；记录实际入口与 Corepack 不可用）；2026-07-19（落地主仓→纯文档镜像同步工具 `scripts/sync-docs-repository.mjs` 与 bare-remote 测试矩阵）
 
 ## 背景
 
@@ -25,7 +25,7 @@ Shittim 将包含 Rust Kernel、TypeScript/Pi runtime、Tauri 桌面端、Schema
 2. Rust 使用 stable channel；仓库 `rust-toolchain.toml` 锁定 **1.97.0**。不承诺尚未测试的最低支持 Rust 版本。
 3. Node 锁定 **24 LTS（exact 24.18.0）**。凡生成 lockfile、安装依赖或运行 Node 脚本，必须使用上述实际入口（`PATH` 优先 `~/.local/share/pnpm`）；不得用默认 Node 26.x 生成产物后宣称满足约束。
 4. JavaScript 包管理器选择 **pnpm 11.3.0**（exact）。根 `package.json` 写明 `packageManager: "pnpm@11.3.0"` 与 `engines.node` / `engines.pnpm`；`.npmrc` 启用 `engine-strict=true` 作为包管理器兼容提示，但 pnpm 11.3.0 在本环境对根 engine mismatch 仍可能只警告，因此不得把它当作硬门；`.node-version` 为 `24.18.0`，`check:toolchain` 必须实际执行 PATH 中的 `pnpm --version`。因 Corepack 不可用，不将 Corepack 作为运行前提。
-5. 根工作区基座为零依赖：`private` 根包、`pnpm-workspace.yaml` 声明 `packages: - "ts/*"`，**不**预先创建 `ts/` 占位目录或包；**不**添加 deps/devDeps；**不**添加空的 build/lint/test 脚本。根 `package.json` scripts 仅：`check:toolchain`、`check:file-manifest`、`write:file-manifest`、`test:file-manifest`（均为零依赖 Node 脚本）。**不**提供跨平台 `check:all` npm 脚本；仓库统一门是 bash：`export PATH="$HOME/.local/share/pnpm:$PATH"` 后执行 `./scripts/check-schema.sh`（先 Node/pnpm 硬门，再 Rust schema/cargo，最后 FILE_MANIFEST）。
+5. 根工作区基座为零依赖：`private` 根包、`pnpm-workspace.yaml` 声明 `packages: - "ts/*"`，**不**预先创建 `ts/` 占位目录或包；**不**添加 deps/devDeps；**不**添加空的 build/lint/test 脚本。根 `package.json` scripts：`check:toolchain`、`check:file-manifest`、`write:file-manifest`、`test:file-manifest`、`check:docs-repository`、`sync:docs-repository`、`test:docs-repository`（均为零依赖 Node 脚本）。**不**提供跨平台 `check:all` npm 脚本；仓库统一门是 bash：`export PATH="$HOME/.local/share/pnpm:$PATH"` 后执行 `./scripts/check-schema.sh`（先 Node/pnpm 硬门，再 Rust schema/cargo，最后 FILE_MANIFEST）。文档镜像同步工具不进入该统一门的默认步骤，而在主仓已推送验收后由维护者显式运行 `check:docs-repository` / `sync:docs-repository`（合同见 `docs/REPOSITORY_MAINTENANCE.md`）。
 6. Tauri、React、Ant Design 的具体依赖版本不在文档中猜测；由 Node 24.18.0 + pnpm 11.3.0 环境中的首次真实依赖解析和提交的 lockfile 固定，并经构建/测试验证。当前根 lockfile 仅记录根 workspace importer，不含业务依赖。
 7. Monorepo 目录以 `specs/IMPLEMENTATION_CONTRACTS.md` 为方向；Schema source/generator 与 Rust workspace 已创建；TypeScript 包 / SDK client / Pi `agent-runtime` 仍未创建。
 
@@ -40,5 +40,6 @@ Shittim 将包含 Rust Kernel、TypeScript/Pi runtime、Tauri 桌面端、Schema
 
 - Schema 源与 Rust codegen 本身不依赖 Node；但仓库统一门 `scripts/check-schema.sh` **依赖** PATH 上的 Node 24.18.0 / pnpm 11.3.0：先跑 `check-node-toolchain.mjs`，错误版本在长 Rust 步骤前 fail。
 - 根 Node/pnpm 基座已可验收：`export PATH="$HOME/.local/share/pnpm:$PATH"` 后 `pnpm run check:toolchain` 应通过；用默认 Node 26 直接执行同一脚本或 `./scripts/check-schema.sh` 应在早期硬失败。
+- 主仓→`shittim-docs` 纯文档镜像同步 library/CLI 已实现，publication pending：`scripts/sync-docs-repository.mjs`（`--check`/`--sync`/`--self-test`）+ `scripts/sync-docs-repository.test.mjs`（本地 bare remotes 的已列明覆盖）；npm scripts `check:docs-repository` / `sync:docs-repository` / `test:docs-repository`。`--check` 在 `/mnt/data` mode 0700 临时 bare 仓审计远端，不写 production docs checkout；source marker 以实时已推送 `master` first-parent 为权威；工具 fail-closed、普通 FF push、不 force、不提交主仓。仓库可见性 private 仍是人工事实；真实发布须待本切片提交并推送后执行。
 - 仍无 TypeScript 业务包、无 TS Schema 生成、无 SDK/client、无 Tauri/React/AntD。
-- Rust workspace 成员目前为 `kernel-contracts`、`schema-tool`、`domain-task`、`domain-policy`、`kernel-sqlite` 与 `kernel-kcp`；仍无 `agentd`。
+- Rust workspace 成员目前为 `kernel-contracts`、`schema-tool`、`domain-task`、`domain-policy`、`kernel-sqlite`、`kernel-kcp` 与 `kernel-task-creation`；仍无 `agentd`。

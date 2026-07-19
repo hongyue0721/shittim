@@ -2,11 +2,11 @@
 
 > 非规范元数据。列出 Git source set 中的 Markdown（tracked `git ls-files '*.md'` + 标准 ignore 下 untracked source）；不含 ignored build 产物（如 target/、node_modules/）。行数以 UTF-8 文本 `wc -l` 等价结果为准。由 `scripts/update-file-manifest.mjs` 生成，禁止手改。
 
-- `AGENT.md` — 49 lines
-- `FILE_MANIFEST.md` — 42 lines
+- `AGENT.md` — 53 lines
+- `FILE_MANIFEST.md` — 43 lines
 - `PROJECT_OVERVIEW.md` — 298 lines
-- `README.md` — 40 lines
-- `adr/0001-shittim工作区与工具链.md` — 44 lines
+- `README.md` — 41 lines
+- `adr/0001-shittim工作区与工具链.md` — 45 lines
 - `adr/0002-schema生成与兼容策略.md` — 99 lines
 - `adr/0003-kcp本地传输.md` — 32 lines
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
@@ -14,9 +14,10 @@
 - `adr/0006-child-task权威与taskcreate-v2迁移.md` — 124 lines
 - `adr/0007-approval-v2不可变联合身份与失效.md` — 146 lines
 - `adr/README.md` — 25 lines
-- `docs/IMPLEMENTATION_MATRIX.md` — 57 lines
-- `docs/PROGRESS.md` — 197 lines
-- `docs/api/README.md` — 39 lines
+- `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
+- `docs/PROGRESS.md` — 209 lines
+- `docs/REPOSITORY_MAINTENANCE.md` — 147 lines
+- `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 41 lines
 - `docs/api/audit-record.md` — 80 lines
 - `docs/api/domain-policy.md` — 161 lines
