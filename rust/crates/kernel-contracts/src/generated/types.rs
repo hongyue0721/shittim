@@ -676,39 +676,11 @@ pub struct ChildTaskProposalV1 {
     pub delegation_ref: Option<String>,
     pub goal: String,
     pub origin: InputContentOriginV1,
-    pub proposer: ChildTaskProposalV1Proposer,
+    pub proposer: NormalizedRootTaskCreatePayloadV2Proposer,
     pub risk_hint: Option<String>,
     pub schema_version: ChildTaskProposalV1SchemaVersion,
     pub success_criteria: Vec<String>,
     pub task_scope: InputTaskScopeV1,
-}
-
-/// Generated string enum from `https://schemas.shittim.local/task/child_task_proposal/v1`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ChildTaskProposalV1Proposer {
-    #[serde(rename = "user")]
-    User,
-    #[serde(rename = "companion")]
-    Companion,
-    #[serde(rename = "system")]
-    System,
-}
-
-impl ChildTaskProposalV1Proposer {
-    /// Schema enum declaration-order closed set (null filtered at use-site Option).
-    pub const ALL: &'static [Self] = &[
-        Self::User,
-        Self::Companion,
-        Self::System,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::User => "user",
-            Self::Companion => "companion",
-            Self::System => "system",
-        }
-    }
 }
 
 /// Generated integer const from `https://schemas.shittim.local/task/child_task_proposal/v1`
@@ -1585,39 +1557,11 @@ pub struct NormalizedChildTaskProposalV1 {
     pub delegation_ref: Option<String>,
     pub goal: String,
     pub origin: InputContentOriginV1,
-    pub proposer: NormalizedChildTaskProposalV1Proposer,
+    pub proposer: NormalizedRootTaskCreatePayloadV2Proposer,
     pub risk_hint: Option<String>,
     pub schema_version: NormalizedChildTaskProposalV1SchemaVersion,
     pub success_criteria: Vec<String>,
     pub task_scope: InputTaskScopeV1,
-}
-
-/// Generated string enum from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum NormalizedChildTaskProposalV1Proposer {
-    #[serde(rename = "user")]
-    User,
-    #[serde(rename = "companion")]
-    Companion,
-    #[serde(rename = "system")]
-    System,
-}
-
-impl NormalizedChildTaskProposalV1Proposer {
-    /// Schema enum declaration-order closed set (null filtered at use-site Option).
-    pub const ALL: &'static [Self] = &[
-        Self::User,
-        Self::Companion,
-        Self::System,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::User => "user",
-            Self::Companion => "companion",
-            Self::System => "system",
-        }
-    }
 }
 
 /// Generated integer const from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
@@ -2818,39 +2762,11 @@ pub struct TaskCreateRequestV2 {
     pub delegation_ref: Option<String>,
     pub goal: String,
     pub origin: InputContentOriginV1,
-    pub proposer: TaskCreateRequestV2Proposer,
+    pub proposer: NormalizedRootTaskCreatePayloadV2Proposer,
     pub risk_hint: Option<String>,
     pub schema_version: TaskCreateRequestV2SchemaVersion,
     pub success_criteria: Vec<String>,
     pub task_scope: InputTaskScopeV1,
-}
-
-/// Generated string enum from `https://schemas.shittim.local/kcp/task_create_request/v2`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TaskCreateRequestV2Proposer {
-    #[serde(rename = "user")]
-    User,
-    #[serde(rename = "companion")]
-    Companion,
-    #[serde(rename = "system")]
-    System,
-}
-
-impl TaskCreateRequestV2Proposer {
-    /// Schema enum declaration-order closed set (null filtered at use-site Option).
-    pub const ALL: &'static [Self] = &[
-        Self::User,
-        Self::Companion,
-        Self::System,
-    ];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::User => "user",
-            Self::Companion => "companion",
-            Self::System => "system",
-        }
-    }
 }
 
 /// Generated integer const from `https://schemas.shittim.local/kcp/task_create_request/v2`
@@ -3603,19 +3519,6 @@ mod string_enum_contracts {
     }
 
     #[test]
-    fn child_task_proposal_v1_proposer_string_enum_contract() {
-        assert_string_enum_contract(
-            ChildTaskProposalV1Proposer::ALL,
-            &[
-                "user",
-                "companion",
-                "system",
-            ],
-            ChildTaskProposalV1Proposer::as_str,
-        );
-    }
-
-    #[test]
     fn content_origin_carrier_ref_kind_string_enum_contract() {
         assert_string_enum_contract(
             ContentOriginCarrierRefKind::ALL,
@@ -3808,19 +3711,6 @@ mod string_enum_contracts {
                 "error",
             ],
             KcpResponseEnvelopeStatus::as_str,
-        );
-    }
-
-    #[test]
-    fn normalized_child_task_proposal_v1_proposer_string_enum_contract() {
-        assert_string_enum_contract(
-            NormalizedChildTaskProposalV1Proposer::ALL,
-            &[
-                "user",
-                "companion",
-                "system",
-            ],
-            NormalizedChildTaskProposalV1Proposer::as_str,
         );
     }
 
@@ -4110,19 +4000,6 @@ mod string_enum_contracts {
                 "system",
             ],
             TaskCreateRequestProposer::as_str,
-        );
-    }
-
-    #[test]
-    fn task_create_request_v2_proposer_string_enum_contract() {
-        assert_string_enum_contract(
-            TaskCreateRequestV2Proposer::ALL,
-            &[
-                "user",
-                "companion",
-                "system",
-            ],
-            TaskCreateRequestV2Proposer::as_str,
         );
     }
 

@@ -1090,6 +1090,283 @@ fn business_v2_nine_fields(schema_version: u32, goal: &str) -> serde_json::Value
 }
 
 #[test]
+fn canonical_task_create_proposer_fragment_has_one_shared_rust_declaration() {
+    let root = repo_root();
+    let (graph, types, _, _) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&root).expect("lower+render");
+    let projection = project_rust(&graph).expect("project");
+    let host = "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2";
+    let proposer = schema_tool::ContractTypeId::root(host)
+        .child("$defs")
+        .child("proposer");
+
+    assert_eq!(projection.decls_for_canonical(&proposer).len(), 1);
+    assert_eq!(projection.nominal_count_for(&proposer), 0);
+    for root_name in [
+        "NormalizedRootTaskCreatePayloadV2",
+        "NormalizedChildTaskProposalV1",
+        "TaskCreateRequestV2",
+        "ChildTaskProposalV1",
+    ] {
+        assert_eq!(
+            projection
+                .field_type_expr(root_name, "proposer")
+                .expect("proposer field"),
+            "NormalizedRootTaskCreatePayloadV2Proposer"
+        );
+    }
+    assert_eq!(
+        types
+            .matches("pub enum NormalizedRootTaskCreatePayloadV2Proposer")
+            .count(),
+        1
+    );
+    assert_eq!(
+        types
+            .matches("impl NormalizedRootTaskCreatePayloadV2Proposer")
+            .count(),
+        1
+    );
+    assert_eq!(
+        types
+            .matches("pub proposer: NormalizedRootTaskCreatePayloadV2Proposer")
+            .count(),
+        4
+    );
+}
+
+#[test]
+fn tagged_union_branch_fields_share_cross_root_canonical_fragment() {
+    let temp = temporary_repo("tagged-union-shared-fragment");
+    let host_id = "https://schemas.shittim.local/kcp/tagged_union_shared_host/v1";
+    let branch_id = "https://schemas.shittim.local/kcp/tagged_union_shared_branch/v1";
+    let first_id = "https://schemas.shittim.local/kcp/tagged_union_shared_first/v1";
+    let second_id = "https://schemas.shittim.local/kcp/tagged_union_shared_second/v1";
+    let host_source = "schemas/source/kcp/tagged_union_shared_host.v1.json";
+    let branch_source = "schemas/source/kcp/tagged_union_shared_branch.v1.json";
+    let first_source = "schemas/source/kcp/tagged_union_shared_first.v1.json";
+    let second_source = "schemas/source/kcp/tagged_union_shared_second.v1.json";
+
+    write_json(
+        &temp.join(host_source),
+        &json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": host_id,
+            "title": "TaggedUnionSharedHostV1",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version"],
+            "properties": {"schema_version": {"type": "integer", "const": 1}},
+            "$defs": {
+                "shared_payload": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["value"],
+                    "properties": {"value": {"type": "string"}}
+                }
+            }
+        }),
+    );
+    write_json(
+        &temp.join(branch_source),
+        &json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": branch_id,
+            "title": "TaggedUnionSharedBranchV1",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version", "kind", "payload"],
+            "properties": {
+                "schema_version": {"type": "integer", "const": 1},
+                "kind": {"type": "string", "const": "shared"},
+                "payload": {"$ref": format!("{host_id}#/$defs/shared_payload")}
+            }
+        }),
+    );
+    for (id, title, source) in [
+        (first_id, "TaggedUnionSharedFirstV1", first_source),
+        (second_id, "TaggedUnionSharedSecondV1", second_source),
+    ] {
+        write_json(
+            &temp.join(source),
+            &json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": id,
+                "title": title,
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["schema_version", "choice"],
+                "properties": {
+                    "schema_version": {"type": "integer", "const": 1},
+                    "choice": {
+                        "type": "object",
+                        "required": ["kind"],
+                        "properties": {"kind": {"type": "string", "enum": ["shared"]}},
+                        "oneOf": [{"$ref": branch_id}]
+                    }
+                }
+            }),
+        );
+    }
+
+    for (id, title, source) in [
+        (host_id, "TaggedUnionSharedHostV1", host_source),
+        (branch_id, "TaggedUnionSharedBranchV1", branch_source),
+        (first_id, "TaggedUnionSharedFirstV1", first_source),
+        (second_id, "TaggedUnionSharedSecondV1", second_source),
+    ] {
+        add_manifest_entry(
+            &temp,
+            json!({
+                "id": id,
+                "title": title,
+                "version": 1,
+                "source": source,
+                "component": "kcp",
+                "kind": "object",
+                "compatibility": "new-contract",
+                "generation_targets": ["rust"],
+                "schema_version_field": "schema_version"
+            }),
+        );
+    }
+
+    let (graph, types, _catalog, _typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp).expect("lower+render");
+    let projection = project_rust(&graph).expect("project");
+    let shared = schema_tool::ContractTypeId::root(host_id)
+        .child("$defs")
+        .child("shared_payload");
+
+    assert_eq!(projection.decls_for_canonical(&shared).len(), 1);
+    assert_eq!(projection.nominal_count_for(&shared), 0);
+    for union_name in [
+        "TaggedUnionSharedFirstV1Choice",
+        "TaggedUnionSharedSecondV1Choice",
+    ] {
+        assert_eq!(
+            projection
+                .tagged_union_field_type_expr(union_name, "shared", "payload")
+                .expect("branch payload field"),
+            "TaggedUnionSharedHostV1SharedPayload"
+        );
+    }
+    assert_eq!(
+        types
+            .matches("pub struct TaggedUnionSharedHostV1SharedPayload {")
+            .count(),
+        1
+    );
+    assert!(
+        types
+            .matches("payload: TaggedUnionSharedHostV1SharedPayload")
+            .count()
+            >= 2
+    );
+
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn cross_root_fragment_walk_is_cycle_safe_and_deduplicates_per_root() {
+    let temp = temporary_repo("cross-root-fragment-cycle");
+    let host_id = "https://schemas.shittim.local/kcp/cross_root_cycle_host/v1";
+    let first_id = "https://schemas.shittim.local/kcp/cross_root_cycle_first/v1";
+    let second_id = "https://schemas.shittim.local/kcp/cross_root_cycle_second/v1";
+    let host_source = "schemas/source/kcp/cross_root_cycle_host.v1.json";
+    let first_source = "schemas/source/kcp/cross_root_cycle_first.v1.json";
+    let second_source = "schemas/source/kcp/cross_root_cycle_second.v1.json";
+
+    write_json(
+        &temp.join(host_source),
+        &json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": host_id,
+            "title": "CrossRootCycleHostV1",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["schema_version"],
+            "properties": {"schema_version": {"type": "integer", "const": 1}},
+            "$defs": {
+                "node": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["label"],
+                    "properties": {
+                        "label": {"type": "string"},
+                        "next": {"$ref": "#/$defs/node"}
+                    }
+                }
+            }
+        }),
+    );
+    for (id, title, source) in [
+        (first_id, "CrossRootCycleFirstV1", first_source),
+        (second_id, "CrossRootCycleSecondV1", second_source),
+    ] {
+        write_json(
+            &temp.join(source),
+            &json!({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$id": id,
+                "title": title,
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["schema_version", "left", "right"],
+                "properties": {
+                    "schema_version": {"type": "integer", "const": 1},
+                    "left": {"$ref": format!("{host_id}#/$defs/node")},
+                    "right": {"$ref": format!("{host_id}#/$defs/node")}
+                }
+            }),
+        );
+    }
+    for (id, title, source) in [
+        (host_id, "CrossRootCycleHostV1", host_source),
+        (first_id, "CrossRootCycleFirstV1", first_source),
+        (second_id, "CrossRootCycleSecondV1", second_source),
+    ] {
+        add_manifest_entry(
+            &temp,
+            json!({
+                "id": id,
+                "title": title,
+                "version": 1,
+                "source": source,
+                "component": "kcp",
+                "kind": "object",
+                "compatibility": "new-contract",
+                "generation_targets": ["rust"],
+                "schema_version_field": "schema_version"
+            }),
+        );
+    }
+
+    let (graph, types, _catalog, _typed) =
+        lower_and_render_rust::<schema_tool::SyntheticNonProduction>(&temp).expect("lower+render");
+    let projection = project_rust(&graph).expect("project recursive shared fragment");
+    let node = schema_tool::ContractTypeId::root(host_id)
+        .child("$defs")
+        .child("node");
+    assert_eq!(projection.decls_for_canonical(&node).len(), 1);
+    assert_eq!(projection.nominal_count_for(&node), 0);
+    assert_eq!(
+        projection
+            .field_type_expr("CrossRootCycleHostV1Node", "next")
+            .expect("recursive next"),
+        "Option<Box<CrossRootCycleHostV1Node>>"
+    );
+    assert_eq!(
+        types
+            .matches("pub struct CrossRootCycleHostV1Node {")
+            .count(),
+        1
+    );
+
+    std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
 fn root_shared_refs_are_not_cloned_per_use_site() {
     let root = repo_root();
     let (_graph, types, _, _) =

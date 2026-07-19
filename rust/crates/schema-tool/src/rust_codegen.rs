@@ -10,12 +10,25 @@
 //! - [`RustDeclarationId`] is a projected declaration that may clone a single
 //!   graph node under a use-site lineage (HEAD preserves
 //!   `PolicyRuleCreatedBy` / `PolicyRuleUpdatedBy` as distinct declarations for
-//!   one `/$defs/actorEntryPoint` node).
+//!   one `/$defs/actorEntryPoint` node), or share one canonical fragment across
+//!   multiple schema roots.
 //!
-//! Whole-schema `$ref` roots are shared (`SharedRoot`). Fragment / inline named
-//! shapes used from a property path are projected as
-//! `NominalInstantiation { canonical, use_site_lineage }`. The Rust symbol name
-//! is stored independently on the projected declaration.
+//! Rust declaration identity follows one renderer-owned total precedence order:
+//!
+//! 1. `SharedRoot`: a whole-schema root is always one shared declaration.
+//! 2. `SharedCanonicalFragment`: when two or more source roots actually project a
+//!    named canonical fragment, every use-site of that canonical fragment uses one
+//!    host-derived declaration, including same-root siblings that would otherwise
+//!    be nominal clones.
+//! 3. `NominalInstantiation`: only a named fragment used by one source root is
+//!    cloned by use-site lineage.
+//!
+//! This is a Rust public-API policy, not neutral identity. Adding a second source
+//! root reference can therefore replace existing same-root nominal symbols and
+//! field types with one shared symbol. Generated drift must expose that breaking
+//! surface for review; it must never be treated as a no-op because the underlying
+//! [`ContractTypeId`] did not change. Rust symbol names remain independent from
+//! declaration and neutral identities.
 //!
 //! ## Recursive layout
 //!
@@ -64,10 +77,21 @@ pub const RUST_GENERATED_DIR: &str = "rust/crates/kernel-contracts/src/generated
 // ---------------------------------------------------------------------------
 
 /// Rust declaration identity. Distinct from [`ContractTypeId`].
+///
+/// Renderer precedence is total and intentional:
+/// `SharedRoot > SharedCanonicalFragment > NominalInstantiation`. In particular,
+/// once a named canonical fragment is used by two or more source roots, the shared
+/// fragment identity replaces nominal identities at *all* of its use-sites.
+/// Adding that second root reference may therefore change generated public Rust
+/// symbols and field types even though neutral graph identity is unchanged.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RustDeclarationId {
     /// One shared declaration for a whole-schema root ref.
     SharedRoot { schema_id: String },
+    /// One host-derived declaration for a canonical fragment actually projected
+    /// by multiple source roots. This takes precedence over nominal cloning at
+    /// every use-site of the canonical fragment.
+    SharedCanonicalFragment { canonical: ContractTypeId },
     /// Named projection of a graph node under a use-site lineage.
     ///
     /// `use_site_lineage` is the chain of schema use-sites from the owning root
@@ -83,6 +107,9 @@ impl RustDeclarationId {
     fn display(&self) -> String {
         match self {
             Self::SharedRoot { schema_id } => format!("shared:{schema_id}"),
+            Self::SharedCanonicalFragment { canonical } => {
+                format!("shared-fragment:{}", canonical.display())
+            }
             Self::NominalInstantiation {
                 canonical,
                 use_site_lineage,
@@ -181,6 +208,12 @@ struct ProjectedDecl {
 
 /// Single computed Rust projection for a [`TargetContractGraph`].
 ///
+/// Projection applies the renderer identity precedence
+/// `SharedRoot > SharedCanonicalFragment > NominalInstantiation`. Because the
+/// second tier is decided from the complete target graph, adding a source root
+/// reference can intentionally change existing generated public Rust types; the
+/// generated artifact diff is the required review surface.
+///
 /// `render_types_module_from_projection` and `render_typed_module_from_projection`
 /// must consume the **same** instance so declaration names and SCC layout stay
 /// bijective across artifacts. Catalog does not need projection and may render
@@ -219,6 +252,11 @@ impl RustProjection {
                 {
                     Some(&decl.id)
                 }
+                RustDeclarationId::SharedCanonicalFragment { canonical: node }
+                    if node == canonical =>
+                {
+                    Some(&decl.id)
+                }
                 RustDeclarationId::NominalInstantiation {
                     canonical: node, ..
                 } if node == canonical => Some(&decl.id),
@@ -245,25 +283,62 @@ impl RustProjection {
 
     /// Field type expression rendered for TypesModule context (inspection helper).
     pub fn field_type_expr(&self, decl_rust_name: &str, json_field: &str) -> Result<String> {
-        let decl = self
-            .decls
-            .iter()
-            .find(|d| d.rust_name == decl_rust_name)
-            .ok_or_else(|| {
-                SchemaToolError::msg(format!(
-                    "projection has no declaration named {decl_rust_name}"
-                ))
-            })?;
+        let decl = self.declaration_named(decl_rust_name)?;
         let ProjectedShape::Object { member_plan, .. } = &decl.shape else {
             return Err(SchemaToolError::msg(format!(
                 "declaration {decl_rust_name} is not an object"
             ))
             .into());
         };
-        let field = member_plan
-            .declared
+        self.render_projected_field_type(decl_rust_name, &member_plan.declared, json_field)
+    }
+
+    /// Tagged-union variant field type rendered for TypesModule context.
+    pub fn tagged_union_field_type_expr(
+        &self,
+        decl_rust_name: &str,
+        variant_tag: &str,
+        json_field: &str,
+    ) -> Result<String> {
+        let decl = self.declaration_named(decl_rust_name)?;
+        let ProjectedShape::TaggedUnion { variants, .. } = &decl.shape else {
+            return Err(SchemaToolError::msg(format!(
+                "declaration {decl_rust_name} is not a tagged union"
+            ))
+            .into());
+        };
+        let variant = variants
             .iter()
-            .find(|f| f.json_name == json_field)
+            .find(|variant| variant.tag == variant_tag)
+            .ok_or_else(|| {
+                SchemaToolError::msg(format!(
+                    "tagged union {decl_rust_name} has no variant tag {variant_tag}"
+                ))
+            })?;
+        self.render_projected_field_type(decl_rust_name, &variant.fields, json_field)
+    }
+
+    fn declaration_named(&self, decl_rust_name: &str) -> Result<&ProjectedDecl> {
+        self.decls
+            .iter()
+            .find(|decl| decl.rust_name == decl_rust_name)
+            .ok_or_else(|| {
+                SchemaToolError::msg(format!(
+                    "projection has no declaration named {decl_rust_name}"
+                ))
+                .into()
+            })
+    }
+
+    fn render_projected_field_type(
+        &self,
+        decl_rust_name: &str,
+        fields: &[ProjectedField],
+        json_field: &str,
+    ) -> Result<String> {
+        let field = fields
+            .iter()
+            .find(|field| field.json_name == json_field)
             .ok_or_else(|| {
                 SchemaToolError::msg(format!(
                     "declaration {decl_rust_name} has no field {json_field}"
@@ -280,7 +355,7 @@ impl RustProjection {
 
 /// Project the graph exactly once into a reusable [`RustProjection`].
 pub fn project_rust(graph: &TargetContractGraph) -> Result<RustProjection> {
-    let decls = Projector::new(graph).project_all()?;
+    let decls = Projector::new(graph)?.project_all()?;
     let names: BTreeMap<RustDeclarationId, String> = decls
         .iter()
         .map(|d| (d.id.clone(), d.rust_name.clone()))
@@ -308,6 +383,9 @@ pub fn project_rust(graph: &TargetContractGraph) -> Result<RustProjection> {
 struct Projector<'a> {
     graph: &'a TargetContractGraph,
     decls: BTreeMap<RustDeclarationId, ProjectedDecl>,
+    /// Canonical named fragments actually projected from more than one source
+    /// root. Membership globally overrides nominal cloning for that canonical.
+    shared_canonical_fragments: BTreeSet<ContractTypeId>,
     /// Declarations currently being projected (cycle termination by decl id).
     projecting: BTreeSet<RustDeclarationId>,
     /// Canonical currently on the projection stack -> active decl (backedge reuse).
@@ -316,13 +394,14 @@ struct Projector<'a> {
 }
 
 impl<'a> Projector<'a> {
-    fn new(graph: &'a TargetContractGraph) -> Self {
-        Self {
+    fn new(graph: &'a TargetContractGraph) -> Result<Self> {
+        Ok(Self {
             graph,
             decls: BTreeMap::new(),
+            shared_canonical_fragments: collect_cross_root_named_fragments(graph)?,
             projecting: BTreeSet::new(),
             active_by_canonical: BTreeMap::new(),
-        }
+        })
     }
 
     fn project_all(mut self) -> Result<Vec<ProjectedDecl>> {
@@ -382,6 +461,49 @@ impl<'a> Projector<'a> {
             ProjectedDecl {
                 id: id.clone(),
                 doc_schema_id: root.schema_id.clone(),
+                rust_name,
+                shape,
+            },
+        );
+        Ok(id)
+    }
+
+    fn ensure_shared_canonical_fragment(
+        &mut self,
+        canonical: &ContractTypeId,
+    ) -> Result<RustDeclarationId> {
+        if let Some(active) = self.active_by_canonical.get(canonical) {
+            return Ok(active.clone());
+        }
+        let id = RustDeclarationId::SharedCanonicalFragment {
+            canonical: canonical.clone(),
+        };
+        if self.decls.contains_key(&id) || !self.projecting.insert(id.clone()) {
+            return Ok(id);
+        }
+        self.active_by_canonical
+            .insert(canonical.clone(), id.clone());
+        let node = self.graph.nodes.get(canonical).ok_or_else(|| {
+            SchemaToolError::msg(format!(
+                "internal renderer error: missing shared canonical fragment {}",
+                canonical.display()
+            ))
+        })?;
+        let rust_name = canonical_fragment_rust_name(self.graph, canonical)?;
+        let shape = self.project_shape(
+            &node.shape,
+            canonical,
+            &rust_name,
+            &[],
+            &canonical.schema_id,
+        )?;
+        self.projecting.remove(&id);
+        self.active_by_canonical.remove(canonical);
+        self.decls.insert(
+            id.clone(),
+            ProjectedDecl {
+                id: id.clone(),
+                doc_schema_id: canonical.schema_id.clone(),
                 rust_name,
                 shape,
             },
@@ -672,14 +794,24 @@ impl<'a> Projector<'a> {
             ))
         })?;
 
-        // Whole-schema roots are always shared (one declaration per schema_id).
+        // Total declaration precedence:
+        // SharedRoot > SharedCanonicalFragment > NominalInstantiation.
+        // Cross-root membership is computed before projection, so a shared
+        // canonical globally replaces same-root nominal clones as well.
         if id.is_root() {
             let decl = self.ensure_shared_root(id)?;
             return Ok(RustTypeExpr::Named(decl));
         }
 
-        // Named shapes under a fragment / inline pointer: clone per use-site lineage
-        // so shared $defs become PolicyRuleCreatedBy / PolicyRuleUpdatedBy.
+        // Tier 2: any named fragment used from multiple source roots has one
+        // declaration at every use-site, including siblings within one root.
+        if shape_is_named(&node.shape) && self.shared_canonical_fragments.contains(id) {
+            let decl = self.ensure_shared_canonical_fragment(id)?;
+            return Ok(RustTypeExpr::Named(decl));
+        }
+
+        // Tier 3: named shapes used from only one source root clone per use-site
+        // lineage so shared $defs become PolicyRuleCreatedBy / PolicyRuleUpdatedBy.
         if shape_is_named(&node.shape) {
             let decl = self.ensure_nominal(id, rust_name, use_site_lineage, doc_schema_id)?;
             return Ok(RustTypeExpr::Named(decl));
@@ -894,6 +1026,171 @@ fn deterministic_sccs(
         component_id += 1;
     }
     scc_of
+}
+
+fn collect_cross_root_named_fragments(
+    graph: &TargetContractGraph,
+) -> Result<BTreeSet<ContractTypeId>> {
+    let target_schema_ids: BTreeSet<&str> =
+        graph.source_schema_ids.iter().map(String::as_str).collect();
+    let mut source_roots_by_target: BTreeMap<ContractTypeId, BTreeSet<String>> = BTreeMap::new();
+
+    for source_root in &graph.source_schema_ids {
+        let root = ContractTypeId::root(source_root);
+        if !graph.nodes.contains_key(&root) {
+            continue;
+        }
+        let mut walker = TargetTypeUseWalker {
+            graph,
+            target_schema_ids: &target_schema_ids,
+            visited_nodes: BTreeSet::new(),
+        };
+        walker.visit_node(&root, &mut |type_use| {
+            if let TypeExpr::Reference { id } = &type_use.expr {
+                if !id.is_root()
+                    && graph
+                        .nodes
+                        .get(id)
+                        .is_some_and(|target| shape_is_named(&target.shape))
+                {
+                    source_roots_by_target
+                        .entry(id.clone())
+                        .or_default()
+                        .insert(source_root.clone());
+                }
+            }
+        })?;
+    }
+
+    Ok(source_roots_by_target
+        .into_iter()
+        .filter_map(|(canonical, roots)| (roots.len() > 1).then_some(canonical))
+        .collect())
+}
+
+/// Walks the type-use closure embedded by one root projection.
+///
+/// Ordinary whole-root references are declaration boundaries (`SharedRoot`), so
+/// their internals are projected by their own root walk. Tagged-union branch
+/// objects are different: the union declaration embeds their fields directly,
+/// therefore `object_type_id` is an explicit traversal edge even when it names a
+/// root object. `visited_nodes` makes fragment recursion and repeated branches
+/// cycle-safe without changing neutral graph identity.
+struct TargetTypeUseWalker<'a> {
+    graph: &'a TargetContractGraph,
+    target_schema_ids: &'a BTreeSet<&'a str>,
+    visited_nodes: BTreeSet<ContractTypeId>,
+}
+
+impl TargetTypeUseWalker<'_> {
+    fn visit_node(
+        &mut self,
+        id: &ContractTypeId,
+        visitor: &mut impl FnMut(&TypeUse),
+    ) -> Result<()> {
+        self.require_target_node(id)?;
+        if !self.visited_nodes.insert(id.clone()) {
+            return Ok(());
+        }
+        let shape = &self.graph.nodes[id].shape;
+        self.visit_shape(shape, visitor)
+    }
+
+    /// Exhaustive over `TypeShape`: adding a variant must update this match or the
+    /// crate will not compile. The traversal regression also verifies that every
+    /// current nested edge is followed, rather than merely named in the match.
+    fn visit_shape(&mut self, shape: &TypeShape, visitor: &mut impl FnMut(&TypeUse)) -> Result<()> {
+        match shape {
+            TypeShape::Object { fields, .. } => {
+                for field in fields {
+                    self.visit_type_use(&field.ty, visitor)?;
+                }
+            }
+            TypeShape::TaggedUnion { branches, .. } => {
+                for branch in branches {
+                    self.visit_node(&branch.object_type_id, visitor)?;
+                }
+            }
+            TypeShape::Alias { target } => self.visit_type_use(target, visitor)?,
+            TypeShape::Array { items } => self.visit_type_use(items, visitor)?,
+            TypeShape::Nullable { inner } => self.visit_type_use(inner, visitor)?,
+            TypeShape::StringEnum { .. }
+            | TypeShape::Const { .. }
+            | TypeShape::Scalar { .. }
+            | TypeShape::AnyJson => {}
+        }
+        Ok(())
+    }
+
+    /// Exhaustive over `TypeExpr`; new expression containers must declare their
+    /// traversal edge here and will otherwise fail compilation.
+    fn visit_type_use(
+        &mut self,
+        type_use: &TypeUse,
+        visitor: &mut impl FnMut(&TypeUse),
+    ) -> Result<()> {
+        visitor(type_use);
+        match &type_use.expr {
+            TypeExpr::Array { items } => self.visit_type_use(items, visitor)?,
+            TypeExpr::Nullable { inner } => self.visit_type_use(inner, visitor)?,
+            TypeExpr::Reference { id } => {
+                self.require_target_node(id)?;
+                if !id.is_root() {
+                    self.visit_node(id, visitor)?;
+                }
+            }
+            TypeExpr::Scalar { .. } | TypeExpr::AnyJson => {}
+        }
+        Ok(())
+    }
+
+    fn require_target_node(&self, id: &ContractTypeId) -> Result<()> {
+        if !self.target_schema_ids.contains(id.schema_id.as_str()) {
+            return Err(SchemaToolError::msg(format!(
+                "internal renderer error: type traversal left target closure at {}",
+                id.display()
+            ))
+            .into());
+        }
+        if !self.graph.nodes.contains_key(id) {
+            return Err(SchemaToolError::msg(format!(
+                "internal renderer error: type traversal references missing node {}",
+                id.display()
+            ))
+            .into());
+        }
+        Ok(())
+    }
+}
+
+fn canonical_fragment_rust_name(
+    graph: &TargetContractGraph,
+    canonical: &ContractTypeId,
+) -> Result<String> {
+    let host = graph
+        .nodes
+        .get(&ContractTypeId::root(&canonical.schema_id))
+        .ok_or_else(|| {
+            SchemaToolError::msg(format!(
+                "internal renderer error: missing host root for {}",
+                canonical.display()
+            ))
+        })?;
+    let fragment = canonical
+        .pointer
+        .decoded_segments()?
+        .into_iter()
+        .filter(|segment| !matches!(segment.as_str(), "$defs" | "properties" | "items"))
+        .map(|segment| to_pascal_case(&segment))
+        .collect::<String>();
+    if fragment.is_empty() {
+        return Err(SchemaToolError::msg(format!(
+            "cannot derive Rust name for canonical fragment {}",
+            canonical.display()
+        ))
+        .into());
+    }
+    Ok(format!("{}{}", root_rust_name(host), fragment))
 }
 
 fn shape_is_named(shape: &TypeShape) -> bool {
@@ -1972,6 +2269,7 @@ mod tests {
             },
         };
         let err = Projector::new(&graph)
+            .unwrap()
             .project_all()
             .unwrap_err()
             .to_string();
@@ -2167,6 +2465,7 @@ mod tests {
             },
         };
         let err = Projector::new(&graph)
+            .unwrap()
             .project_all()
             .unwrap_err()
             .to_string();
@@ -2181,7 +2480,7 @@ mod tests {
     }
 
     #[test]
-    fn shared_defs_projects_two_clones() {
+    fn nominal_instantiation_precedence_is_retained_without_second_source_root() {
         let root = ContractTypeId::root("https://example/policy.json");
         let defs = root.child("$defs").child("actorEntryPoint");
         let created = root.child("properties").child("created_by");
@@ -2271,7 +2570,7 @@ mod tests {
                 kcp_protocol_version: "1.0".into(),
             },
         };
-        let decls = Projector::new(&graph).project_all().unwrap();
+        let decls = Projector::new(&graph).unwrap().project_all().unwrap();
         let names: BTreeSet<_> = decls.iter().map(|d| d.rust_name.as_str()).collect();
         assert!(names.contains("PolicyRule"));
         assert!(names.contains("PolicyRuleCreatedBy"));
@@ -2287,6 +2586,289 @@ mod tests {
             })
             .collect();
         assert_eq!(clones.len(), 2);
+    }
+
+    #[test]
+    fn shared_canonical_fragment_precedence_globally_replaces_same_root_nominals() {
+        let root_a = ContractTypeId::root("https://example/root-a.json");
+        let root_b = ContractTypeId::root("https://example/root-b.json");
+        let canonical = root_a.child("$defs").child("sharedEntry");
+        let mut nodes = BTreeMap::new();
+
+        let object_field = |owner: &ContractTypeId, json_name: &str| {
+            let location = owner.child("properties").child(json_name);
+            crate::contract_model::ObjectField {
+                json_name: json_name.to_string(),
+                ty: TypeUse {
+                    expr: TypeExpr::Reference {
+                        id: canonical.clone(),
+                    },
+                    source: SourceUseSite::new(owner.schema_id.clone(), location.pointer.clone()),
+                },
+                presence: Presence::Required,
+                nullability: Nullability::NonNull,
+                schema_location: location,
+            }
+        };
+
+        nodes.insert(
+            root_a.clone(),
+            ContractTypeNode {
+                id: root_a.clone(),
+                schema_title: Some("RootA".into()),
+                source: SourceSchemaMetadata::from_type_id(&root_a),
+                shape: TypeShape::Object {
+                    fields: vec![
+                        object_field(&root_a, "first"),
+                        object_field(&root_a, "second"),
+                    ],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            },
+        );
+        nodes.insert(
+            root_b.clone(),
+            ContractTypeNode {
+                id: root_b.clone(),
+                schema_title: Some("RootB".into()),
+                source: SourceSchemaMetadata::from_type_id(&root_b),
+                shape: TypeShape::Object {
+                    fields: vec![object_field(&root_b, "third")],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            },
+        );
+        nodes.insert(
+            canonical.clone(),
+            ContractTypeNode {
+                id: canonical.clone(),
+                schema_title: None,
+                source: SourceSchemaMetadata::from_type_id(&canonical),
+                shape: TypeShape::Object {
+                    fields: Vec::new(),
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            },
+        );
+
+        let graph = TargetContractGraph {
+            target: crate::manifest::GenerationTarget::Rust,
+            source_schema_ids: vec![root_a.schema_id.clone(), root_b.schema_id.clone()],
+            nodes,
+            alias_resolutions: BTreeMap::new(),
+            envelopes: vec![],
+            catalog: empty_catalog_facts(),
+        };
+        let projection = project_rust(&graph).expect("project multi-root canonical fragment");
+
+        let declarations = projection.decls_for_canonical(&canonical);
+        assert_eq!(declarations.len(), 1);
+        assert!(matches!(
+            declarations[0],
+            RustDeclarationId::SharedCanonicalFragment { canonical: id } if id == &canonical
+        ));
+        assert_eq!(projection.nominal_count_for(&canonical), 0);
+
+        let first = projection.field_type_expr("RootA", "first").unwrap();
+        let second = projection.field_type_expr("RootA", "second").unwrap();
+        let third = projection.field_type_expr("RootB", "third").unwrap();
+        assert_eq!(first, "RootASharedEntry");
+        assert_eq!(first, second);
+        assert_eq!(second, third);
+    }
+
+    #[test]
+    fn target_type_use_walker_covers_every_current_nested_shape_edge() {
+        let root = ContractTypeId::root("https://example/walker.json");
+        let alias = root.child("$defs").child("alias");
+        let array = root.child("$defs").child("array");
+        let nullable = root.child("$defs").child("nullable");
+        let union = root.child("$defs").child("union");
+        let branch = root.child("$defs").child("branch");
+        let leaf = root.child("$defs").child("leaf");
+        let mut nodes = BTreeMap::new();
+
+        let reference_use = |owner: &ContractTypeId, id: &ContractTypeId| TypeUse {
+            expr: TypeExpr::Reference { id: id.clone() },
+            source: SourceUseSite::new(owner.schema_id.clone(), owner.pointer.clone()),
+        };
+        let node = |id: &ContractTypeId, shape| ContractTypeNode {
+            id: id.clone(),
+            schema_title: None,
+            source: SourceSchemaMetadata::from_type_id(id),
+            shape,
+        };
+
+        nodes.insert(
+            root.clone(),
+            node(
+                &root,
+                TypeShape::Object {
+                    fields: vec![crate::contract_model::ObjectField {
+                        json_name: "nested".into(),
+                        ty: TypeUse {
+                            expr: TypeExpr::Array {
+                                items: Box::new(TypeUse {
+                                    expr: TypeExpr::Nullable {
+                                        inner: Box::new(reference_use(&root, &alias)),
+                                    },
+                                    source: SourceUseSite::new(
+                                        root.schema_id.clone(),
+                                        root.pointer.clone(),
+                                    ),
+                                }),
+                            },
+                            source: SourceUseSite::new(
+                                root.schema_id.clone(),
+                                root.pointer.clone(),
+                            ),
+                        },
+                        presence: Presence::Required,
+                        nullability: Nullability::NonNull,
+                        schema_location: root.child("properties").child("nested"),
+                    }],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            ),
+        );
+        nodes.insert(
+            alias.clone(),
+            node(
+                &alias,
+                TypeShape::Alias {
+                    target: reference_use(&alias, &array),
+                },
+            ),
+        );
+        nodes.insert(
+            array.clone(),
+            node(
+                &array,
+                TypeShape::Array {
+                    items: reference_use(&array, &nullable),
+                },
+            ),
+        );
+        nodes.insert(
+            nullable.clone(),
+            node(
+                &nullable,
+                TypeShape::Nullable {
+                    inner: reference_use(&nullable, &union),
+                },
+            ),
+        );
+        nodes.insert(
+            union.clone(),
+            node(
+                &union,
+                TypeShape::TaggedUnion {
+                    discriminator: "kind".into(),
+                    branches: vec![crate::contract_model::TaggedUnionBranch {
+                        tag: "branch".into(),
+                        object_type_id: branch.clone(),
+                        source: SourceUseSite::new(union.schema_id.clone(), union.pointer.clone()),
+                    }],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            ),
+        );
+        nodes.insert(
+            branch.clone(),
+            node(
+                &branch,
+                TypeShape::Object {
+                    fields: vec![crate::contract_model::ObjectField {
+                        json_name: "leaf".into(),
+                        ty: reference_use(&branch, &leaf),
+                        presence: Presence::Required,
+                        nullability: Nullability::NonNull,
+                        schema_location: branch.child("properties").child("leaf"),
+                    }],
+                    unknown_field_policy: UnknownFieldPolicy::Forbid,
+                },
+            ),
+        );
+        nodes.insert(
+            leaf.clone(),
+            node(
+                &leaf,
+                TypeShape::Scalar {
+                    scalar: ScalarKind::String,
+                },
+            ),
+        );
+        let mut terminal_shape_ids = Vec::new();
+        for (suffix, shape) in [
+            ("any", TypeShape::AnyJson),
+            (
+                "enum",
+                TypeShape::StringEnum {
+                    values: vec!["value".into()],
+                },
+            ),
+            (
+                "const",
+                TypeShape::Const {
+                    value: ConstJson::String {
+                        value: "value".into(),
+                    },
+                },
+            ),
+        ] {
+            let id = root.child("$defs").child(suffix);
+            terminal_shape_ids.push(id.clone());
+            nodes.insert(id.clone(), node(&id, shape));
+        }
+
+        let graph = TargetContractGraph {
+            target: crate::manifest::GenerationTarget::Rust,
+            source_schema_ids: vec![root.schema_id.clone()],
+            nodes,
+            alias_resolutions: BTreeMap::new(),
+            envelopes: vec![],
+            catalog: empty_catalog_facts(),
+        };
+        let target_schema_ids = BTreeSet::from([root.schema_id.as_str()]);
+        let mut walker = TargetTypeUseWalker {
+            graph: &graph,
+            target_schema_ids: &target_schema_ids,
+            visited_nodes: BTreeSet::new(),
+        };
+        let mut references = BTreeSet::new();
+        walker
+            .visit_node(&root, &mut |type_use| {
+                if let TypeExpr::Reference { id } = &type_use.expr {
+                    references.insert(id.clone());
+                }
+            })
+            .expect("walk every nested edge");
+        for id in &terminal_shape_ids {
+            walker
+                .visit_node(id, &mut |_| {})
+                .expect("visit terminal shape exhaustively");
+        }
+
+        assert_eq!(
+            references,
+            BTreeSet::from([alias, array, nullable, union, leaf])
+        );
+        assert!(walker.visited_nodes.contains(&branch));
+    }
+
+    fn empty_catalog_facts() -> CatalogFacts {
+        CatalogFacts {
+            embedded_sources: vec![],
+            kcp_command_methods: vec![],
+            kcp_query_methods: vec![],
+            kcp_methods: vec![],
+            kcp_legacy_v1_command_methods: vec![],
+            kcp_legacy_v1_query_methods: vec![],
+            kcp_legacy_v1_methods: vec![],
+            event_v1_types: vec![],
+            method_version_bindings: vec![],
+            kcp_protocol_version: "1.0".into(),
+        }
     }
 
     #[test]
