@@ -7,6 +7,7 @@ rust-version.workspace = true
 description = "Generated Kernel contract types, JSON Schema validators, and RFC 8785 canonical hash APIs"
 
 [dependencies]
+chrono.workspace = true
 hex.workspace = true
 jsonschema.workspace = true
 serde.workspace = true

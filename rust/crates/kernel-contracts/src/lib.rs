@@ -10,6 +10,7 @@
 pub mod canonical;
 pub mod error;
 pub mod generated;
+pub mod timestamp;
 pub mod validator;
 
 pub use canonical::{canonical_json_bytes, canonical_json_string, sha256_canonical, sha256_hex};
@@ -18,4 +19,5 @@ pub use error::{
     DecodeStage,
 };
 pub use generated::*;
+pub use timestamp::{canonicalize_rfc3339_seconds, CanonicalTimestampError};
 pub use validator::{decode_validated, validate_json, SchemaCatalog};
