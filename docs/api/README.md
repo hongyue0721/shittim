@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有53个Schema（41 retained + 12 component-native）；这12项的source、manifest entries与generated Rust root types已落地，但production MethodVersionBindings仍为空。ADR-0006/0007已将active合同升级为root-only TaskCreate v2、Action-only Child Task、Causation/Envelope/Audit相关v2与Approval/PermissionDecision v2；repository、handler、method-aware preflight、cutover、server与SDK/client仍未完成。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
+已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有53个Schema（41 retained + 12 component-native）；ADR-0006相关首批12项的source、manifest entries、generated Rust root types、Task creation纯library和三份official fixtures/harness已落地，但production MethodVersionBindings仍为空。ADR-0006已将active合同升级为root-only TaskCreate v2与Action-only Child Task，后续repository、handler、child materializer、method-aware preflight和cutover仍未完成；ADR-0007的Approval/PermissionDecision v2仍为contract-only。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
 
 本目录是中文导航，不是新的事实源。字段、状态机、错误和兼容规则以 `specs/` 及 `schemas/source` 为准。Core API 不暴露预埋的 Computer Use 方法；未来 Profile 的方法必须在正式 Schema、Catalog 和 Extension SDK Base 组合契约确立后再出现。`desktop-client` 是桌面客户端，不是 Computer Use。
 
@@ -14,7 +14,7 @@
 - [kernel-sqlite 内部 Rust API](kernel-sqlite.md)（文件 migration、Audit、Outbox、rate limit、Task create/get；非 KCP 外部 API）
 - [KCP Value preflight 与注册式 dispatcher](kcp-preflight-dispatcher.md)（已实现、不可连接、非 SDK）
 - [kernel-kcp typed application handler](kernel-kcp.md)（`system.ping`、`task.create`、`task.get`；不可连接、非 SDK）
-- [Task创建、Child materialization与迁移合同](task-repository-contract.md)（active v2 contract-only；首批相关Schema source/generated types已落地；repository/handler/cutover未完成；legacy v1 create/get已实现）
+- [Task创建、Child materialization与迁移合同](task-repository-contract.md)（ADR-0006首批Schema、纯library与official fixtures/harness已落地；repository/handler/child materializer/cutover未完成；legacy v1 create/get已实现）
 - [Approval v2与PermissionDecision授权合同](approval-contract.md)（contract-only）
 - [AuditRecord版本合同](audit-record.md)（v1已实现；v2 producer contract-only）
 - [Kernel Control Protocol](kernel-control-protocol.md)（method-aware active生命周期合同；Schema/root types已落地，runtime实现仍为retained v1库级路径）

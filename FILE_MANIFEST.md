@@ -15,7 +15,7 @@
 - `adr/0007-approval-v2不可变联合身份与失效.md` — 146 lines
 - `adr/README.md` — 25 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 57 lines
-- `docs/PROGRESS.md` — 199 lines
+- `docs/PROGRESS.md` — 197 lines
 - `docs/api/README.md` — 39 lines
 - `docs/api/approval-contract.md` — 41 lines
 - `docs/api/audit-record.md` — 80 lines
@@ -27,7 +27,7 @@
 - `docs/api/kernel-control-protocol.md` — 90 lines
 - `docs/api/kernel-kcp.md` — 63 lines
 - `docs/api/kernel-sqlite.md` — 144 lines
-- `docs/api/schema-generation.md` — 173 lines
+- `docs/api/schema-generation.md` — 172 lines
 - `docs/api/task-repository-contract.md` — 59 lines
 - `docs/sdk/README.md` — 37 lines
 - `docs/sdk/extension-sdk.md` — 39 lines

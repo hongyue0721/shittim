@@ -218,7 +218,7 @@ InputTaskScopeV1 {
 }
 ```
 
-三个数组都可为空；元素出现时必须non-empty，保序保重复且不设`uniqueItems`。`expires_at`是required-nullable string，后续source Schema必须使用Draft 2020-12可编码的`pattern`与已启用assertion的`format: "date-time"`双门：
+三个数组都可为空；元素出现时必须non-empty，保序保重复且不设`uniqueItems`。`expires_at`是required-nullable string，现行source Schema使用Draft 2020-12可编码的`pattern`与已启用assertion的`format: "date-time"`双门，后续修改必须持续保持：
 
 ```json
 {
@@ -297,7 +297,7 @@ v1历史形状为：
 
 ### 5.3.1 可编码投影、JCS preimage 与规范化
 
-以下对象都是未来source Schema中的**封闭可编码对象**；`additionalProperties=false`，所有列出的字段required。`T | null`表示required-nullable，缺字段与`null`不同。本批新Schema中，凡items为JSON string的数组都可为空；元素出现时必须non-empty（UUID/URI等更强格式约束继续适用），保留输入顺序与重复，且不得设置`uniqueItems`。只有明确标为set projection的派生字段才允许按对象合同排序/去重；不能因JCS会排序object key就整理数组。
+以下对象都是现行source Schema中的**封闭可编码对象**；`additionalProperties=false`，所有列出的字段required。`T | null`表示required-nullable，缺字段与`null`不同。本批新Schema中，凡items为JSON string的数组都可为空；元素出现时必须non-empty（UUID/URI等更强格式约束继续适用），保留输入顺序与重复，且不得设置`uniqueItems`。只有明确标为set projection的派生字段才允许按对象合同排序/去重；不能因JCS会排序object key就整理数组。
 
 `TaskCreateRequestV2`、`ChildTaskProposalV1`、`NormalizedRootTaskCreatePayloadV2`与`NormalizedChildTaskProposalV1`除各自root `schema_version` const和独立Schema身份外，caller-owned字段集合及字段约束完全同构。共享约束的唯一source site固定为task component的`NormalizedRootTaskCreatePayloadV2`文档内`$defs`；它是**canonical task-create proposal field contract**的中立宿主，不表示root业务依赖child，也不把child语义提升为root语义。该既有root的`$defs`精确包含`proposer`、`goal`、`constraints`、`success_criteria`、`risk_hint`、`capability_hints`、`task_scope`、`delegation_ref`、`origin`九项；禁止新增可独立注册、生成或计数的第13个Schema，也禁止复制九套约束。
 
@@ -2229,7 +2229,7 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 - `method_version_bindings`为manifest v2 required typed字段，元素wire shape就是§13.5的完整`MethodVersionBinding`。通用`SchemaRegistry::load`允许并完整验证合法非空synthetic registry；production `schemas/manifest.json`在Schema/工具阶段仍显式为空，只由§13.5命名的`validate_production_manifest_stage`断言，直到`V2ProductionWriteCutover`才启用。不得把“production当前为空”实现成通用empty-only loader规则。
 - `compatibility`正式闭集固定且只允许`v1-stable | new-contract | breaking-replacement | legacy-validation-only | legacy-read-only`，所有production、synthetic、fixture与test manifest一律使用这五值，不得增加任何测试专用或预留的演化标签值，也不得设置测试旁路。一般判定规则为：`breaking-replacement`用于存在明确被替换旧wire contract的新独立版本；`new-contract`用于没有旧wire contract被替换的新对象，包括projection/allocation；`legacy-validation-only`只供显式历史输入validation/migration，不得用于production write或active response；`legacy-read-only`只供历史持久事实/response读取校验，不得作为request。`v1-stable`表示该retained合同仍按其引用方生命周期稳定使用。该字段与MethodVersionBinding lifecycle正交；尤其`new-contract`不表示public method可调用，也不等于internal visibility。正式闭集中没有`internal` compatibility：projection/allocation使用`new-contract`，依靠entry `kind`及“不得被MethodVersionBinding引用”的验证约束保持internal，不得增造第六种值或借compatibility表达可见性。
 - 非retained component-native entry的ID必须**精确**为`https://schemas.shittim.local/<component>/<snake_case_name>/v<version>`，source必须精确镜像为`schemas/source/<component>/<snake_case_name>.v<version>.json`。一般情况下，`snake_case_name`由entry `title`移除末尾精确版本后缀`V<version>`后按项目canonical snake_case规则得到。KCP envelope是规范化命名空间已编码的固定规则：hard gate必须按`component=kcp`、`kind=envelope`与title精确为`KcpCommandEnvelopeV2`/`KcpQueryEnvelopeV2`应用规范stem，显式去掉领域前缀`Kcp`，分别固定为`command_envelope`/`query_envelope`；因此Command Envelope的ID/source固定为`https://schemas.shittim.local/kcp/command_envelope/v2`与`schemas/source/kcp/command_envelope.v2.json`，Query Envelope的ID/source固定为`https://schemas.shittim.local/kcp/query_envelope/v2`与`schemas/source/kcp/query_envelope.v2.json`，不得生成`kcp_kcp...`。这不是任意例外，而是component已编码kcp命名空间的规范stem规则。`snake_case_name`结果为一个或多个小写ASCII字母/数字片段以下划线连接，不允许大写、连字符、空片段。
-本批后续Schema/工具提交必须新增**正好12个**entry，title都必须带`V1`/`V2`后缀以避免Rust平面命名冲突；本次文档提交不改manifest/source/generated：
+production manifest现行包含以下**正好12个**component-native entry，title都带`V1`/`V2`后缀以避免Rust平面命名冲突；该闭集及对应source/generated产物必须由manifest、生成漂移与Conformance持续验证：
 
 | title | component | kind | compatibility | component-native ID |
 |---|---|---|---|---|
@@ -2265,7 +2265,7 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 
 `{九字段}`是表述集合，不是合法literal ref path；source中必须逐项写出精确fragment。`TaskCreateRequestV2`/`TaskCreateResponseV2`属于`kcp→task/common` closure，两个Envelope属于`kcp→common`，`RootTaskCreateIdempotencyProjectionV1`明确属于`task→common`，两个allocation文档无refs。
 
-同一后续提交还必须把retained `TaskCreateRequestV1`、`KcpCommandEnvelopeV1`、`KcpQueryEnvelopeV1` entry的`compatibility`标为`legacy-validation-only`，retained `TaskCreateResponseV1` entry标为`legacy-read-only`；其余retained 37项保持`v1-stable`。compatibility改标只改变manifest演化标签，不得改41项retained ledger的ID/component/source/source SHA-256，也不得改对应source bytes。这些是后续manifest实际改动合同，本次docs提交不得提前修改或宣称已实现。
+production manifest现已将retained `TaskCreateRequestV1`、`KcpCommandEnvelopeV1`、`KcpQueryEnvelopeV1` entry的`compatibility`标为`legacy-validation-only`，并将retained `TaskCreateResponseV1`标为`legacy-read-only`；其余retained 37项保持`v1-stable`。该compatibility改标只改变manifest演化标签，不得改41项retained ledger的ID/component/source/source SHA-256，也不得改对应source bytes；后续变更必须持续通过ledger、source hash与lifecycle测试证明这些不变量。
 
 - registry在构造公开对象前调用单一权威`SchemaNode` walker。walker以pre-order提供canonical JSON Pointer、`is_root`与object/boolean node callback，并只遍历下列Draft 2020-12 Schema-bearing位置：map value `properties`、`patternProperties`、`dependentSchemas`、`$defs`、`definitions`；single Schema `additionalProperties`、`unevaluatedProperties`、`propertyNames`、`items`、`contains`、`unevaluatedItems`、`contentSchema`、`not`、`if`、`then`、`else`；Schema array `prefixItems`、`allOf`、`anyOf`、`oneOf`。存在但容器/node类型错误立即失败。loader对每个document用该walker建立私有不可变的authoritative SchemaNode pointer index；`resolve_ref`和public `schema_at`必须先验证目标pointer属于该index，raw JSON pointer lookup只能crate-private且命名明确。`$ref`指向`const/default/examples/enum`等实例位置时，即使目标JSON长得像Schema也fail closed；`$defs/properties/items`等合法Schema位置通过。restricted identity audit、registry `$ref` resolution/component gate、generation target dependency closure及restricted codegen support-profile audit均复用该walker callback，不得复制第二套通用位置闭集；target envelope提取只允许作为已命名的特定IR结构读取。`$ref`只在Schema node检查，禁止递归进入实例数据。map中的`$ref/$id/$schema/$dynamicRef`只是普通property/definition名称，其value仍作为Schema遍历。
 - restricted identity/ref profile：仅root允许`$id`与`$schema`；任何nested非root `$id`/`$schema`立即失败；当前不支持的`$anchor`、`$dynamicAnchor`、`$dynamicRef`、`$recursiveAnchor`、`$recursiveRef`、`$vocabulary`均立即失败。上述invariant由`SchemaRegistry::load`统一实施，因此validate/check/generate不能绕过或延后。

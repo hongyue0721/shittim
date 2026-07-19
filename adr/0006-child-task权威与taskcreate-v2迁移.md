@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：pure-library implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper，以及schema-tool strict RFC6901 pointer selection/mutation与selected validate/canonicalize CLI均已实现；本 ADR仍未实现TaskCreate v2 repository/handler/materializer，production MethodVersionBindings、official fixtures与cutover
+- 实现状态：pure-library + official-fixtures implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper、schema-tool strict RFC6901 pointer selection/mutation与selected validate/canonicalize CLI，以及三份official fixtures与harness均已实现（production owner + 独立CLI Schema路径 + stored preimage自一致性共享唯一JCS authority）；本 ADR仍未实现TaskCreate v2 repository/handler/materializer、production MethodVersionBindings与cutover
 
 ## 背景
 
@@ -16,7 +16,7 @@
 
 - active KCP `task.create` 切换到 `TaskCreateRequestV2`，只创建根 Task。
 - v2 payload 不包含 `parent_task_id`；Envelope `task_id` 与 `expected_revision` 必须为 `null`。
-- `TaskCreateRequestV1`永久冻结为legacy validation/read/migration合同；后续manifest compatibility为`legacy-validation-only`，不再进入active dispatcher，也不接受production write。
+- `TaskCreateRequestV1`永久冻结为legacy validation/read/migration合同；manifest compatibility现已标为`legacy-validation-only`，不再进入active dispatcher，也不接受production write。
 - `TaskSpec.parent_task_id` 继续存在，作为持久父子关系的唯一字段；根 Task 为 `null`，新 child Task 必须等于创建它的父 Action 的 `task_id`。
 
 ### 2. Child Task 的唯一新写入口
@@ -95,7 +95,7 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 - `task.create` version `1` 是 known legacy，但 active KCP 返回 `unsupported_schema_version`，不 narrow 到 registered handler；
 - 其他方法也必须读取各自 binding，不能继续全局硬编码“所有 payload 都只允许 1”。
 
-`TaskCreateRequestV2`的receipt hash与带`schema_version=1`的`RootTaskCreateIdempotencyProjectionV1`均以规范化后的v2 payload为输入；不得把v1 `parent_task_id`的null占位带入v2 hash，projection的schema_version参与JCS/hash。`InputTaskScopeV1.expires_at`后续Schema固定使用`format: date-time`与完整文本pattern双门：`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\.0+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$`；pattern固定大写T/Z、offset形状、秒范围及零fraction，format负责真实日期/时间/offset合法性，不用custom format。非零亚秒caller-invalid且禁止截断/四舍五入，合法值解析instant后输出UTC秒精度。`origin.source_uri`、resource pattern与exclusion normalization失败统一公开为`invalid_scope_pattern`并携带各自input_kind/index；post-normalize Schema/typed失败为internal contract failure。`TaskCreateRequestV2`、`TaskCreateResponseV2`与`KcpCommandEnvelopeV2`使用component-native ID；Response中的`task`明确引用当前active retained TaskSpec v1，不虚构TaskSpec v2。KcpCommandEnvelopeV2仍为protocol 1.0，结构验证与method payload业务验证分成Envelope后binding两阶段；retained v1 Envelope不修改。精确字段在 `IMPLEMENTATION_CONTRACTS.md` 定义。
+`TaskCreateRequestV2`的receipt hash与带`schema_version=1`的`RootTaskCreateIdempotencyProjectionV1`均以规范化后的v2 payload为输入；不得把v1 `parent_task_id`的null占位带入v2 hash，projection的schema_version参与JCS/hash。`InputTaskScopeV1.expires_at`现行source Schema固定使用`format: date-time`与完整文本pattern双门：`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\.0+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$`；pattern固定大写T/Z、offset形状、秒范围及零fraction，format负责真实日期/时间/offset合法性，不用custom format。非零亚秒caller-invalid且禁止截断/四舍五入，合法值解析instant后输出UTC秒精度。`origin.source_uri`、resource pattern与exclusion normalization失败统一公开为`invalid_scope_pattern`并携带各自input_kind/index；post-normalize Schema/typed失败为internal contract failure。`TaskCreateRequestV2`、`TaskCreateResponseV2`与`KcpCommandEnvelopeV2`使用component-native ID；Response中的`task`明确引用当前active retained TaskSpec v1，不虚构TaskSpec v2。KcpCommandEnvelopeV2仍为protocol 1.0，结构验证与method payload业务验证分成Envelope后binding两阶段；retained v1 Envelope不修改。精确字段在 `IMPLEMENTATION_CONTRACTS.md` 定义。
 
 ## 拒绝的替代方案
 
@@ -121,4 +121,4 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 ## 实现状态（非规范）
 
 - 首批12 Schema source/manifest/generated types 已落地（含 ChildTaskProposal/NormalizedChild/Allocation 与 TaskCreate v2 相关对象）。
-- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API、`kernel-task-creation` pure helper与schema-tool strict pointer CLI底座已完成；repository/handler/materializer/cutover与三份official fixture仍未完成。
+- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API、`kernel-task-creation` pure helper、schema-tool strict pointer CLI底座及三份official fixtures/harness已完成；repository/handler/materializer/cutover仍未完成。
