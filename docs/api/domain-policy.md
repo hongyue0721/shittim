@@ -58,7 +58,7 @@ fn normalize_inputs(value: &str, pattern: &str) -> Result<(String, String), Poli
 - `normalize_uri(&str)`：规范化一条普通 URI；任何 glob token 都返回 `PolicyErrorCode::InvalidUriPattern`。
 - `normalize_uri_pattern(&str)`：规范化一条 URI pattern；只允许 path 中完整 segment `*` / `**`，query/fragment 仍为精确字符串，scheme/authority 不允许 glob。
 - 两者都执行 scheme/host 小写、默认端口移除、dot segments 消解、百分号十六进制大写、RFC 8089 `file:` 校验与 Windows drive 大写；反斜杠和非法 authority 均 fail closed。
-- API 故意只处理单项，不提供数组 normalizer；调用方负责保持数组顺序与重复项，并决定错误如何归属。当前 `task.create` repository 已按契约逐项调用，完整 fixture 与 repository 测试覆盖顺序、重复和 hash。
+- API 故意只处理单项，不提供数组 normalizer；调用方负责保持数组顺序与重复项，并决定错误如何归属。当前仅 legacy v1 `task.create` repository 已按契约逐项调用；active v2 尚未接入该 repository。
 
 ## TaskScope resource containment
 

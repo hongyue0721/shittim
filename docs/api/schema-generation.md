@@ -1,6 +1,6 @@
 # Schema 生成与契约类型
 
-> 状态日期：2026-07-18。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式V2 Envelope authority、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；12业务Schema source/entries与generated root types已落地；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地。official JCS/hash fixtures、kernel-kcp runtime cutover、repository与可连接server仍未完成。
+> 状态日期：2026-07-19。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式V2 Envelope authority、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；12业务Schema source/entries与generated root types已落地；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地。official JCS/hash fixtures、kernel-kcp runtime cutover、repository与可连接server仍未完成。
 
 ## 权威边界
 
