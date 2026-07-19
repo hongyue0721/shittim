@@ -754,11 +754,13 @@ dependencies = [
  "chrono",
  "hex",
  "jsonschema",
+ "kernel-task-creation",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
  "sha2",
  "thiserror",
+ "uuid",
 ]
 
 [[package]]
@@ -790,6 +792,19 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "kernel-task-creation"
+version = "0.1.0"
+dependencies = [
+ "domain-policy",
+ "kernel-contracts",
+ "proptest",
+ "serde",
+ "serde_json",
  "thiserror",
  "uuid",
 ]

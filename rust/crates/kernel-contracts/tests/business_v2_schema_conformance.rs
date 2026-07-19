@@ -16,8 +16,12 @@ use kernel_contracts::{
     KCP_ENVELOPE_AUTHORITY_QUERY_METHODS, KCP_LEGACY_V1_METHODS, KCP_PROTOCOL_VERSION,
     METHOD_VERSION_BINDINGS,
 };
+use kernel_task_creation::{
+    validate_child_task_materialization_allocation, validate_root_task_create_allocation,
+    ChildTaskMaterializationExternalUuidRefsV1, RootTaskCreateExternalUuidRefsV1,
+};
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 const INPUT_CONTENT_ORIGIN: &str = "https://schemas.shittim.local/common/input_content_origin/v1";
 const INPUT_TASK_SCOPE: &str = "https://schemas.shittim.local/task/input_task_scope/v1";
@@ -68,38 +72,6 @@ const BUSINESS_V2_ROOTS: &[(&str, &str, u32)] = &[
     (CHILD_ALLOCATION, "ChildTaskMaterializationAllocationV1", 1),
     (COMMAND_ENVELOPE_V2, "KcpCommandEnvelopeV2", 2),
     (QUERY_ENVELOPE_V2, "KcpQueryEnvelopeV2", 2),
-];
-
-// Authoritative UUID field lists for producer/conformance uniqueness checks.
-// Schema only enforces format; pairwise uniqueness is not a Schema invariant.
-// Future repository helpers may reuse these lists; keep them local until a
-// shared production module is intentionally introduced.
-const ROOT_ALLOCATION_UUID_FIELDS: &[&str] = &[
-    "task_id",
-    "task_scope_id",
-    "content_origin_id",
-    "kernel_receipt_id",
-    "creation_provenance_id",
-    "audit_record_id",
-    "task_created_event_id",
-];
-const ROOT_ALLOCATION_OPAQUE_FIELDS: &[&str] = &["correlation_id", "task_created_dedup_key"];
-const CHILD_ALLOCATION_UUID_FIELDS: &[&str] = &[
-    "child_task_id",
-    "task_scope_id",
-    "content_origin_id",
-    "kernel_receipt_id",
-    "creation_provenance_id",
-    "verification_result_id",
-    "audit_record_id",
-    "task_created_event_id",
-    "action_state_changed_event_id",
-    "action_transition_id",
-];
-const CHILD_ALLOCATION_OPAQUE_FIELDS: &[&str] = &[
-    "correlation_id",
-    "task_created_dedup_key",
-    "action_state_changed_dedup_key",
 ];
 
 fn catalog() -> SchemaCatalog {
@@ -305,31 +277,6 @@ where
     });
     let encoded = serde_json::to_value(typed).expect("serialize validated type");
     assert_valid(schema_id, &encoded);
-}
-
-fn pairwise_uuid_duplicates(object: &Value, fields: &[&str]) -> Vec<(String, String, String)> {
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
-    let mut dups = Vec::new();
-    for field in fields {
-        let value = object
-            .get(*field)
-            .and_then(Value::as_str)
-            .unwrap_or_else(|| panic!("missing uuid field {field}"))
-            .to_owned();
-        if let Some(previous) = seen.insert(value.clone(), (*field).to_owned()) {
-            dups.push((previous, (*field).to_owned(), value));
-        }
-    }
-    dups
-}
-
-/// Domain helper: Schema may accept duplicate UUIDs; producers must reject them.
-fn assert_allocation_uuids_pairwise_distinct(object: &Value, fields: &[&str]) {
-    let dups = pairwise_uuid_duplicates(object, fields);
-    assert!(
-        dups.is_empty(),
-        "allocation UUID fields must be pairwise distinct for domain conformance: {dups:?}"
-    );
 }
 
 #[test]
@@ -914,55 +861,129 @@ fn task_create_response_v2_refs_retained_task_spec() {
 }
 
 #[test]
-fn root_and_child_allocation_shapes_and_domain_uniqueness_helper() {
-    assert_eq!(ROOT_ALLOCATION_UUID_FIELDS.len(), 7);
-    assert_eq!(ROOT_ALLOCATION_OPAQUE_FIELDS.len(), 2);
-    assert_eq!(CHILD_ALLOCATION_UUID_FIELDS.len(), 10);
-    assert_eq!(CHILD_ALLOCATION_OPAQUE_FIELDS.len(), 3);
+fn root_and_child_allocation_shapes_and_production_domain_validation() {
+    let root_json = sample_root_allocation_distinct();
+    let child_json = sample_child_allocation_distinct();
+    assert_valid(ROOT_ALLOCATION, &root_json);
+    assert_valid(CHILD_ALLOCATION, &child_json);
+    let root: RootTaskCreateAllocationV2 =
+        decode_validated(ROOT_ALLOCATION, &root_json).expect("typed root allocation");
+    let child: ChildTaskMaterializationAllocationV1 =
+        decode_validated(CHILD_ALLOCATION, &child_json).expect("typed child allocation");
 
-    let root = sample_root_allocation_distinct();
-    let child = sample_child_allocation_distinct();
-    assert_valid(ROOT_ALLOCATION, &root);
-    assert_valid(CHILD_ALLOCATION, &child);
-    assert_allocation_uuids_pairwise_distinct(&root, ROOT_ALLOCATION_UUID_FIELDS);
-    assert_allocation_uuids_pairwise_distinct(&child, CHILD_ALLOCATION_UUID_FIELDS);
+    let root_external = RootTaskCreateExternalUuidRefsV1 {
+        command_request_id: uuid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"),
+        delegation_ref: Some(uuid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2")),
+        parent_origin_refs: vec![uuid("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3")],
+    };
+    let child_external = ChildTaskMaterializationExternalUuidRefsV1 {
+        parent_task_id: uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"),
+        action_id: uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"),
+        permission_decision_id: uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3"),
+        approval_resolution_ref: Some(uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4")),
+        credential_refs: vec![uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5")],
+        challenge_refs: vec![uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb6")],
+        delegation_ref: Some(uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb7")),
+        parent_origin_refs: vec![uuid("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb8")],
+    };
+    validate_root_task_create_allocation(&root, &root_external).expect("valid root allocation");
+    validate_child_task_materialization_allocation(&child, &child_external)
+        .expect("valid child allocation");
 
-    // Schema does NOT reject duplicate UUIDs across fields.
+    // Schema does NOT reject cross-field domain conflicts; the production helper does.
     let mut root_dup = root.clone();
-    root_dup["task_scope_id"] = root_dup["task_id"].clone();
-    assert_valid(ROOT_ALLOCATION, &root_dup);
-    assert!(
-        !pairwise_uuid_duplicates(&root_dup, ROOT_ALLOCATION_UUID_FIELDS).is_empty(),
-        "helper must detect duplicate"
+    root_dup.task_scope_id = root_dup.task_id.clone();
+    assert_valid(
+        ROOT_ALLOCATION,
+        &serde_json::to_value(&root_dup).expect("root duplicate JSON"),
     );
+    assert!(validate_root_task_create_allocation(&root_dup, &root_external).is_err());
 
     let mut child_dup = child.clone();
-    child_dup["verification_result_id"] = child_dup["child_task_id"].clone();
-    assert_valid(CHILD_ALLOCATION, &child_dup);
-    assert!(!pairwise_uuid_duplicates(&child_dup, CHILD_ALLOCATION_UUID_FIELDS).is_empty());
+    child_dup.verification_result_id = child_dup.child_task_id.clone();
+    assert_valid(
+        CHILD_ALLOCATION,
+        &serde_json::to_value(&child_dup).expect("child duplicate JSON"),
+    );
+    assert!(validate_child_task_materialization_allocation(&child_dup, &child_external).is_err());
 
-    let mut empty_opaque = root;
+    let mut root_external_collision = root_external.clone();
+    root_external_collision.command_request_id = uuid(&root.task_id);
+    assert!(validate_root_task_create_allocation(&root, &root_external_collision).is_err());
+
+    let mut duplicate_opaque = child.clone();
+    duplicate_opaque.action_state_changed_dedup_key =
+        duplicate_opaque.task_created_dedup_key.clone();
+    assert_valid(
+        CHILD_ALLOCATION,
+        &serde_json::to_value(&duplicate_opaque).expect("duplicate opaque JSON"),
+    );
+    assert!(
+        validate_child_task_materialization_allocation(&duplicate_opaque, &child_external).is_err()
+    );
+
+    let mut empty_opaque = root_json;
     empty_opaque["correlation_id"] = json!("");
     assert_invalid(ROOT_ALLOCATION, &empty_opaque, "empty opaque");
 
     let root_doc = document(ROOT_ALLOCATION);
     let child_doc = document(CHILD_ALLOCATION);
-    for field in ROOT_ALLOCATION_UUID_FIELDS {
-        assert_eq!(
-            root_doc
-                .pointer(&format!("/properties/{field}/format"))
-                .and_then(Value::as_str),
-            Some("uuid")
-        );
+    assert_eq!(uuid_formatted_property_count(&root_doc), 7);
+    assert_eq!(uuid_formatted_property_count(&child_doc), 10);
+}
+
+fn uuid(value: &str) -> uuid::Uuid {
+    uuid::Uuid::parse_str(value).expect("canonical UUID fixture")
+}
+
+fn uuid_formatted_property_count(document: &Value) -> usize {
+    document["properties"]
+        .as_object()
+        .expect("properties")
+        .values()
+        .filter(|property| property.get("format") == Some(&json!("uuid")))
+        .count()
+}
+
+#[test]
+fn expires_at_pattern_and_format_are_both_hard_gates() {
+    for valid in [
+        "2030-01-01T00:00:00Z",
+        "2030-01-01T00:00:00.000Z",
+        "2030-01-01T08:00:00+08:00",
+        "2030-01-01T08:00:00.000+08:00",
+    ] {
+        let mut scope = sample_scope_minimal();
+        scope["expires_at"] = json!(valid);
+        assert_valid(INPUT_TASK_SCOPE, &scope);
     }
-    for field in CHILD_ALLOCATION_UUID_FIELDS {
-        assert_eq!(
-            child_doc
-                .pointer(&format!("/properties/{field}/format"))
-                .and_then(Value::as_str),
-            Some("uuid")
-        );
+
+    for invalid in [
+        "2030-01-01T00:00:00.001Z",
+        "2030-01-01t00:00:00Z",
+        "2030-01-01T00:00:00z",
+        "2030-01-01T00:00:60Z",
+        "2030-01-01T00:00:00+0800",
+        "2030-02-30T00:00:00Z",
+    ] {
+        let mut scope = sample_scope_minimal();
+        scope["expires_at"] = json!(invalid);
+        assert_invalid(INPUT_TASK_SCOPE, &scope, invalid);
     }
+
+    let document = document(INPUT_TASK_SCOPE);
+    assert_eq!(
+        document
+            .pointer("/properties/expires_at/format")
+            .and_then(Value::as_str),
+        Some("date-time")
+    );
+    assert_eq!(
+        document
+            .pointer("/properties/expires_at/pattern")
+            .and_then(Value::as_str),
+        Some("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-5][0-9](?:\\.0+)?(?:Z|[+-][0-9]{2}:[0-9]{2})$")
+    );
 }
 
 #[test]

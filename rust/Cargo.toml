@@ -6,6 +6,7 @@ members = [
     "crates/kernel-contracts",
     "crates/kernel-kcp",
     "crates/kernel-sqlite",
+    "crates/kernel-task-creation",
     "crates/schema-tool",
 ]
 
