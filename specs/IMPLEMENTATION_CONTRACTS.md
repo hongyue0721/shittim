@@ -18,7 +18,7 @@
     crates/
       domain-task/
       domain-policy/
-      kernel-task-creation/      # 未来正式纯业务编排 crate；当前尚未创建
+      kernel-task-creation/      # 已实现的纯task creation编排crate；尚未接repository/handler
       domain-memory/
       domain-initiative/
       extension-supervisor/
@@ -63,11 +63,11 @@
 
 ### kernel-task-creation
 
-正式生产 ownership 固定为未来新增的纯 crate `kernel-task-creation`。本阶段职责冻结为：root v2 / child proposal 共用字段规范化；root receipt projection、root idempotency projection及其JCS/SHA-256；child normalized proposal / receipt hash；root/child allocation领域验证。它依赖`kernel-contracts`并调用`domain-policy`提供的权威URI parser/normalizer；不依赖 SQLite/KCP，不分配 ID，不读取 Delegation、parent、Action、PermissionDecision、Approval、Credential、Challenge或任何repository事实，不开启事务也不写存储。全部业务事实必须由caller以typed input显式注入。
+正式生产 ownership 已落地为纯 crate `kernel-task-creation`。当前已实现职责为：root v2 / child proposal 共用字段规范化；root receipt projection、root idempotency projection及其JCS/SHA-256；child normalized proposal / receipt hash；root/child allocation领域验证。它依赖`kernel-contracts`并调用`domain-policy`提供的权威URI parser/normalizer；不依赖 SQLite/KCP，不分配 ID，不读取 Delegation、parent、Action、PermissionDecision、Approval、Credential、Challenge或任何repository事实，不开启事务也不写存储。全部业务事实必须由caller以typed input显式注入。
 
 `ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`不属于本crate本阶段职责，也不得为了task creation方便塞入其中；它们未来由专门的authorization projection owner或独立切片实现。依赖方向只固定为`kernel-contracts + domain-policy -> kernel-task-creation -> kernel-sqlite（未来调用方）`，不据此声称`kernel-contracts`与`domain-policy`彼此依赖。组合根或KCP handler可调用纯API，但不得复制同义normalization/hash/allocation validator。`domain-task`继续只拥有Task/Action状态机与不变量，不增加policy依赖。
 
-URI解析与规范化的当前唯一权威实现仍是`domain-policy`；`kernel-task-creation`只做编排和错误映射，不得复制、分叉或包装出第二套语义。长期如需消除领域命名耦合，可另立ADR把该实现抽到中立URI crate，但在该ADR与迁移完成前不得先制造并行实现。当前`kernel-task-creation`尚未创建，写明名称、边界与依赖方向只关闭后续实现职责猜测，不表示helper/repository已实现。
+URI解析与规范化的当前唯一权威实现仍是`domain-policy`；`kernel-task-creation`只做编排和错误映射，不得复制、分叉或包装出第二套语义。长期如需消除领域命名耦合，可另立ADR把该实现抽到中立URI crate，但在该ADR与迁移完成前不得先制造并行实现。当前pure library已实现，但repository/handler/materializer尚未接入；不得把library完成误记为runtime composition或cutover完成。
 
 ### domain-memory
 

@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：contract-only；本 ADR 未实现 TaskCreate v2 repository/handler/materializer，但首批相关 Schema source、manifest entries 与 generated Rust root types 已落地；production MethodVersionBindings、`expires_at`非零亚秒Schema硬门、official fixtures、`kernel-task-creation`与 cutover 仍未完成
+- 实现状态：pure-library implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper已实现；本 ADR仍未实现TaskCreate v2 repository/handler/materializer，production MethodVersionBindings、official fixtures、schema-tool CLI pointer与cutover仍未完成
 
 ## 背景
 
@@ -34,7 +34,7 @@ Action 的 `structured_arguments` 使用版本化 `ChildTaskProposalV1`，完整
 
 父关系只由 `ActionRequest.task_id` 确定。任何 arguments 内同义字段、嵌套 shadow 字段或通过开放 JSON 伪装的 parent/id/state 字段都必须在 proposal Schema/producer validation 中拒绝。
 
-root v2与child proposal的正式生产normalization owner固定为未来纯crate `kernel-task-creation`。本阶段范围只含root/child proposal normalize、root receipt/idempotency projection与hash、child proposal/receipt hash、root/child allocation validation；`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`未来由专门authorization projection owner或独立切片实现，不得塞入task creation。依赖方向是`kernel-contracts + domain-policy -> kernel-task-creation -> kernel-sqlite（未来调用方）`；全部repository事实由caller typed input注入，crate不读repo、不分配ID、不写存储，也不依赖SQLite/KCP。URI parser/normalizer继续以`domain-policy`为当前唯一权威，task creation只编排调用、不得复制；长期抽取中立URI crate须另立ADR，当前不制造第二实现。`domain-task`继续保持纯状态机，不新增policy依赖。此crate当前尚未创建，不能把文档职责拍板误记为helper实现。
+root v2与child proposal的正式生产normalization owner现为纯crate `kernel-task-creation`。本阶段范围只含root/child proposal normalize、root receipt/idempotency projection与hash、child proposal/receipt hash、root/child allocation validation；`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`未来由专门authorization projection owner或独立切片实现，不得塞入task creation。依赖方向是`kernel-contracts + domain-policy -> kernel-task-creation -> kernel-sqlite（未来调用方）`；全部repository事实由caller typed input注入，crate不读repo、不分配ID、不写存储，也不依赖SQLite/KCP。URI parser/normalizer继续以`domain-policy`为当前唯一权威，task creation只编排调用、不得复制；长期抽取中立URI crate须另立ADR，当前不制造第二实现。`domain-task`继续保持纯状态机，不新增policy依赖。该crate已实现pure library但尚未接入repository/handler。
 
 ### 3. 直接因果与版本升级
 
@@ -107,7 +107,7 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 
 ## 实现影响
 
-后续实现必须新增 v2 Schema/生成类型、正式`kernel-task-creation`纯crate、TaskCreate v2 handler、child materialization repository、Action/PermissionDecision/Approval repositories、CausationRef/EventEnvelope/ContentOrigin/Audit v2、migration/provenance 与 Conformance。official测试制品路径固定为root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation合并 `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。现有 v1 Rust/Schema/SQLite 事实不因本 ADR 自动改变，当前 production dispatcher 仍未达到本决策。
+后续实现必须在已落地的`kernel-task-creation` pure library之上新增TaskCreate v2 handler、child materialization repository、Action/PermissionDecision/Approval repositories、CausationRef/EventEnvelope/ContentOrigin/Audit v2、migration/provenance 与 Conformance，不得复制helper语义。official测试制品路径固定为root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation合并 `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。现有 v1 Rust/Schema/SQLite 事实不因本 ADR 自动改变，当前 production dispatcher 仍未达到本决策。
 
 ## 验收
 
@@ -121,4 +121,4 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 ## 实现状态（非规范）
 
 - 首批12 Schema source/manifest/generated types 已落地（含 ChildTaskProposal/NormalizedChild/Allocation 与 TaskCreate v2 相关对象）。
-- production MethodVersionBindings 仍为空；`expires_at`非零亚秒Schema硬门、`kernel-task-creation`、repository/handler/materializer/cutover 与三份 official fixture 均未完成。
+- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API与`kernel-task-creation` pure helper已完成；repository/handler/materializer/cutover、schema-tool CLI pointer与三份official fixture仍未完成。

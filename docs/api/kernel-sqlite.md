@@ -37,7 +37,7 @@ store.with_write_transaction(|transaction| {
 
 ## Legacy TaskCreate v1 repository
 
-现有`WriteTransaction::create_task(TaskCreateCommand)`允许payload `parent_task_id`并实现direct-child；自ADR-0006起仅用于legacy read/validation/migration与代码事实对照，不得由active server路由。
+现有`WriteTransaction::create_task(TaskCreateCommand)`是仍在production构建与回归测试中的retained v1 compatibility write path：允许payload `parent_task_id`并实现direct-child，但不得由active v2 server路由。其内部prepare/type/normalization/savepoint/materialization helper均显式标记`legacy_v1`，新v2 repository只能调用`kernel-task-creation` pure API，禁止复用这些v1 helper或在当前函数上增加v2可选分支。
 
 后续必须新增独立的root v2 create repository与child materialization repository。child repository以Action ID为唯一业务键，在同一事务写Origin/Scope/Task/provenance/Audit/Event/Verification与Action completion，canonical readback，全有或全无；不能在当前v1 create函数上增加可选分支继续维持双入口。
 
