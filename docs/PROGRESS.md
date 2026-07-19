@@ -14,7 +14,7 @@
 
 ### 规范与工程基线
 
-- [ ] 双仓维护流程与同步 library/CLI 已实现，**publication pending**：主仓仍需完成独立验收、提交并推送；随后才能从已推送 `master` SHA 运行真实 `--check` / `--sync`，复验纯文档镜像远端后再勾选“已发布”。
+- [x] 双仓维护流程与同步 library/CLI 已实现并完成首次真实发布：主仓提交 `dcf39df07d8deedcff5813368b92382bc499f98e` 已推送，文档仓提交 `5dd8bf963e904ec8e54b3a41bef63868a724e932` 以 `文档: 同步shittim@dcf39df07d8deedcff5813368b92382bc499f98e` 记录来源；发布后 `check:docs-repository` 返回 `noop_idempotent`，两仓远端 SHA、本地 checkout、文档闭集和身份门均验证通过。后续每个切片继续执行同一闭环。
 - [x] 落地零依赖主仓→纯文档镜像同步工具：`scripts/sync-docs-repository.mjs`（`--check`/`--sync`/`--self-test`，真正只读 check 临时 bare 审计、source master first-parent 权威、严格 manifest、线性普通 push、push outcome 分类、本地 checkout plumbing）与 `scripts/sync-docs-repository.test.mjs`（`node:test` + 本地 bare remotes 覆盖当前列明门禁）；根 scripts：`check:docs-repository`、`sync:docs-repository`、`test:docs-repository`。工具不提交/推送主仓，不 force，不验证 private 可见性（人工事实）。
 
 - [x] 建立 Freedom-first、Kernel Owns Reality、Core 不可自改规范基线。
