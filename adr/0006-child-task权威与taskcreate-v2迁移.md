@@ -9,7 +9,7 @@
 
 现有 `TaskCreateRequestV1` 同时允许 `parent_task_id = null` 与非 null，因此同一个公开 KCP Command 既能创建根 Task，也能直接创建子 Task。与此同时，旧规范又写过“Child Task创建本身是一个Action”。这造成两个生产入口、两个因果模型和无法闭合的权限事实：直接 KCP 创建子 Task 时，没有一个父 Task 所拥有的 Action 可以承载 Policy、Lease、Stop Fence、Verification、重放与恢复。
 
-仓库当前已经实现 v1 `task.create` typed handler 与 SQLite create/get repository。该实现尚未发布为可连接 server，因此不为保持未发布实现而固化双入口。历史或测试数据库中已经存在的 v1 direct-child 记录仍是合法事实，但不能通过迁移伪造过去并不存在的 Action、Approval 或认证证据。
+仓库当前已实现 active root `task.create` v2 kcp handler/preflight（切片3b）与 SQLite `create_root_task_v2` repository（切片2）；legacy v1 sqlite create write 仍待切片6删除。该实现尚未发布为可连接 server，因此不为保持未发布实现而固化双入口。历史或测试数据库中已经存在的 v1 direct-child 记录仍是合法事实，但不能通过迁移伪造过去并不存在的 Action、Approval 或认证证据。
 
 ## 决策
 
@@ -110,7 +110,7 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 
 ## 实现影响
 
-后续实现必须在已落地的`kernel-task-creation` pure library之上新增TaskCreate v2 handler、child materialization repository、Action/PermissionDecision/Approval repositories、CausationRef/EventEnvelope/ContentOrigin/Audit v2、migration/provenance 与 Conformance（历史：migration/provenance 的 v1 数据迁移部分已被 ADR-0009 supersede，实际仅 root_command_v2/child_action_v2 两支 provenance），不得复制helper语义。official测试制品路径固定为root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation合并 `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。现有 v1 Rust/Schema/SQLite 事实不因本 ADR 自动改变，当前 production dispatcher 仍未达到本决策。
+后续实现必须在已落地的`kernel-task-creation` pure library、root repository 与 kcp create v2 handler 之上继续 child materialization repository、Action/PermissionDecision/Approval repositories、其余 CausationRef/EventEnvelope/ContentOrigin/Audit v2 producer 与 Conformance（历史：migration/provenance 的 v1 数据迁移部分已被 ADR-0009 supersede，实际仅 root_command_v2/child_action_v2 两支 provenance），不得复制helper语义。official测试制品路径固定为root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation合并 `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。kcp production create 入口已达 root-only v2；legacy sqlite write 删除与 §13.7 闭合仍属后续切片。
 
 ## 验收
 

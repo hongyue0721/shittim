@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；首批 Envelope V2 / TaskCreate v2 Schema、generated root types 与 **production MethodVersionBindings（切片3a，八方法精确集）** 已落地。当前 `kernel-kcp` 的Value preflight/dispatcher/handler仍是retained v1库级实现（runtime切换属切片3b）；active method-aware preflight、`V2InitialBuildActive` 完整初始交付与可连接server均未完成。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
+> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；Envelope V2 / TaskCreate v2 Schema、generated root types、**production MethodVersionBindings（切片3a）** 与 **kernel-kcp method-aware runtime（切片3b）** 已落地。`V2InitialBuildActive` 完整谓词与可连接 server 仍未完成（五方法无 handler；legacy sqlite write 待删）。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -30,7 +30,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 | 方法 | 类型 | 状态/副作用 | 幂等说明 |
 |---|---|---|---|
 | `system.ping` | Query | 只读 | 不适用 |
-| `task.create` | Command | active v2只创建root Task | v2精确projection；v1仅`unsupported_schema_version`，写路径待删除 |
+| `task.create` | Command | active v2只创建root Task | v2精确projection；kcp production 入口仅 v2；v1 → `unsupported_schema_version`；legacy sqlite create write 待切片6删除 |
 | `task.get` | Query | 只读 | 不适用 |
 | `task.list` | Query | 只读 | 不适用 |
 | `event.subscribe` | Query | 创建连接级临时订阅句柄，无领域副作用 | 不适用 |
@@ -38,16 +38,16 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task只通过父Task Action原子materialization。当前`kernel-sqlite`已实现统一Outbox shape与mixed API（legacy append待删除），但`kernel-kcp` runtime仍只有legacy v1 create/get（待删除）；active runtime、child Action、Audit v2、active producer与versioned poll均未实现。
+完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task只通过父Task Action原子materialization。当前`kernel-sqlite`已实现统一Outbox shape与mixed API（legacy append待删除）及 root `create_root_task_v2`；`kernel-kcp` runtime 已接 method-aware preflight 与 root create v2 / get / ping。child Action materializer、其余 active producer、Publisher 与 versioned poll 未实现。
 
 ## Value preflight 与 registration 合同
 
 - 输入只接受调用方已经解析的 `serde_json::Value`，不接 bytes/UTF-8/JSON parse/frame。
-- 现有 Value preflight、registration 与 dispatcher 是 retained v1 库级路径；active method-aware payload version preflight 仍待完成。最终优先级、完整 Schema/generated decode 与 production binding/`V2InitialBuildActive` 以 IC §5.11、§13.5、§13.7 为准。
-- active `task.create`只接受v2；v1虽有known legacy Schema，也必须返回`unsupported_schema_version`且不能进入active registration。当前Rust实现尚未完成该升级。
-- MethodVersionBinding完整validator已在工具阶段以synthetic 8-method非空manifest测试；expected family/method集合直接从registry V2 Envelope facts派生，不读取generated catalog形成循环。切片3a起production manifest由`validate_production_manifest_stage`在check/generate入口断言精确等于IC §13.5目标表（Envelope-derived 完整八方法 + lifecycle）；synthetic plan/render仍走显式non-production profile。`KCP_ENVELOPE_AUTHORITY_*`只表达family structure authority；`METHOD_VERSION_BINDINGS`表达bound version；两者都不代表registration/handler/server可用。kernel-kcp仍消费retained v1路径，runtime切换在3b。不得以旧`KCP_METHODS`类名称混淆三层职责。
-- active `task.create` v2的task creation纯逻辑正式owner已实现为crate`kernel-task-creation`：本阶段只负责root/child proposal normalize、root receipt/idempotency、child proposal/receipt hash与root/child allocation validation；authorization projections另切片。它依赖`kernel-contracts`并调用`domain-policy`唯一URI parser，不依赖KCP/SQLite、不分配ID、不读repo、不写存储，全部事实由caller typed input注入；handler/未来SQLite adapter只调用，不复制。当前尚未接入handler/repository。
-- task creation三份official测试制品已位于root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。official fixtures/harness已完成：production owner负责业务hash关系，独立CLI进程/Schema路径负责中立validate/canonicalize，stored bytes/hash自一致性共享唯一JCS authority；repository/handler/materializer/`V2InitialBuildActive`仍未完成。
+- Value preflight、registration 与 dispatcher 是 method-aware 库级路径（切片3b）：V2 Envelope 结构门 + `select_request_version` 业务门。最终优先级、完整 Schema/generated decode 与 production binding/`V2InitialBuildActive` 以 IC §5.11、§13.5、§13.7 为准。
+- active `task.create`只接受v2；v1虽有known legacy Schema，也必须返回`unsupported_schema_version`且不能进入active registration（已实现）。
+- MethodVersionBinding完整validator已在工具阶段以synthetic 8-method非空manifest测试；expected family/method集合直接从registry V2 Envelope facts派生。切片3a起production manifest由`validate_production_manifest_stage`断言精确等于IC §13.5目标表；`KCP_ENVELOPE_AUTHORITY_*`只表达family structure authority；`METHOD_VERSION_BINDINGS`表达bound version；**registration/handler 可用性由 kernel-kcp 显式实现，不由 bindings 暗示 server 可连接**。
+- active `task.create` v2的task creation纯逻辑正式owner为crate`kernel-task-creation`；repository `create_root_task_v2` 与 kcp handler/adapter 已接入（切片2/3b）。authorization projections / child materializer 另切片。
+- task creation三份official测试制品已位于root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation `schemas/fixtures/task/task_creation_allocations.v1.json`。child materializer 与 §13.7 完整谓词仍未完成。
 - request ID 不可关联时本地拒绝且不发响应；可关联的五类 preflight error 使用固定安全 message、`details=null`、`retryable=false`，并经过不可替换 Response Schema 门。
 - 八方法合法请求都必须先成为 generated typed Accepted；三方法 narrow 为 `RegisteredRequest`，其余五个得到本地不可序列化 `KnownCatalogMethodNotImplemented`，不是 wire error。
 - 公开调用分成 `preflight_value -> narrow_to_registered -> TypedDispatcher.dispatch`，已在 `kernel-kcp` 实现；详细 API 见 [`kcp-preflight-dispatcher.md`](kcp-preflight-dispatcher.md)。
@@ -59,13 +59,13 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 - 响应固定 `protocol_version=1.0`、`message_kind=response`、request ID 原样；success/error 互斥。Response 无 method discriminator，调用方依原请求方法校验成功 payload。
 - `KernelClock`、`KernelIdGenerator` 与闭集 `BackendError` 的 Task backend 可注入；backend 只暴露 create/get 高阶操作，不暴露 SQLite transaction 或 SQL。SQLite adapter 必须逐项把 `StoreErrorCode` 转成公开 backend 分类或 Internal，禁止消息匹配。
 - deadline 将 Envelope RFC 3339 文本解析为 UTC instant 后比较，禁止字符串比较；解析失败在 ID/backend 前返回 `internal_error`。
-- `task.create` 的第一次时钟读取同时是入口 deadline 检查和唯一 `accepted_at`。**本段描述的当前已实现 handler 是 legacy v1**：在 backend 前按 purpose 分配六个对象 ID（Task/Scope/Origin/receipt/Audit/Event），为合法、两两不同的唯一 UUID，版本不固定；correlation/dedup 是独立生成的非空 opaque 值，不从 caller 字段派生。**active `task.create` v2 不使用该六 UUID 口径**，必须由自身`schema_version=2`的`RootTaskCreateAllocationV2`分配**七个** UUID（`task_id,task_scope_id,content_origin_id,kernel_receipt_id,creation_provenance_id,audit_record_id,task_created_event_id`，含 provenance）与两个non-empty opaque ID；schema_version不计入七UUID。未来helper先验证Schema，再用typed `RootTaskCreateExternalUuidRefsV1 {command_request_id,delegation_ref,parent_origin_refs}`验证内部UUID互异、external碰撞与opaque独立；不接受自由UUID bag，该Rust input也不进manifest。legacy 六 UUID 与 active 七 UUID不得混写。
+- `task.create` 的第一次时钟读取同时是入口 deadline 检查和唯一 `accepted_at`。**当前已实现 active root v2 handler**：backend 前按 purpose 分配 **七个** UUID（`Task`/`TaskScope`/`ContentOrigin`/`KernelReceipt`/`CreationProvenance`/`AuditRecord`/`Event`）与两个 non-empty opaque ID；映射 `RootTaskCreateAllocationV2`。repository 侧再以 typed `RootTaskCreateExternalUuidRefsV1` 验证内部 UUID 互异、external 碰撞与 opaque 独立。root-only：Envelope `task_id`/`expected_revision` 必须 null；成功响应为 `TaskCreateResponseV2`。
 - SQLite 创建事务不可中途取消。commit 后到期仍返回 `deadline_exceeded`，但事实保留；客户端用同一 idempotency key 重放或用已知 Task ID 查询。
 - Created/Replayed 都返回当前 Task；Created 的 **backend 结果**还必须返回与本次 operation 中 Event UUID 相等的 `committed_event_id`（它不是 wire `TaskCreateResponse` 字段），仅据此产生一个 post-commit Publisher wake-up intent。它不表示 Event 已 delivered；后续 deadline/internal/response contract failure 仍保留 intent，通知失败不回滚 durable Outbox。
 
 ## 实现阶段门
 
-当前已实现的是 retained v1 Value preflight/registration/dispatcher 与三个 legacy typed application handler；五个 Catalog 方法仍无正式 handler。active method-aware preflight、八方法 registration 完整闭合、bytes/frame/transport/server 生命周期均未完成，因此不得启动 server，也不新增 `method_unavailable`。
+当前已实现 method-aware Value preflight/registration/dispatcher 与三个 typed application handler（ping / create v2 / get）；五个 Catalog 方法仍无正式 handler。bytes/frame/transport/server 生命周期均未完成，因此不得启动 server，也不新增 `method_unavailable`。
 
 
 ## Cursor

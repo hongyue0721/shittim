@@ -17,7 +17,7 @@
 - `adr/0009-v2从零构建并取消v1数据迁移.md` — 122 lines
 - `adr/README.md` — 28 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 122 lines
+- `docs/PROGRESS.md` — 120 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 158 lines
 - `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 48 lines
@@ -26,9 +26,9 @@
 - `docs/api/domain-task.md` — 122 lines
 - `docs/api/error-catalog.md` — 22 lines
 - `docs/api/event-catalog.md` — 28 lines
-- `docs/api/kcp-preflight-dispatcher.md` — 90 lines
+- `docs/api/kcp-preflight-dispatcher.md` — 95 lines
 - `docs/api/kernel-control-protocol.md` — 90 lines
-- `docs/api/kernel-kcp.md` — 63 lines
+- `docs/api/kernel-kcp.md` — 73 lines
 - `docs/api/kernel-sqlite.md` — 146 lines
 - `docs/api/schema-generation.md` — 121 lines
 - `docs/api/task-repository-contract.md` — 44 lines
@@ -38,7 +38,7 @@
 - `specs/CORE_ARCHITECTURE.md` — 856 lines
 - `specs/EXTENSION_SDK.md` — 682 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 2538 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 2555 lines
 - `specs/MODEL_RUNTIME.md` — 355 lines
 - `specs/REFERENCES.md` — 254 lines
 - `specs/SECURITY_PRIVILEGE.md` — 432 lines

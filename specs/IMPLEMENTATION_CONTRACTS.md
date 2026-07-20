@@ -865,18 +865,18 @@ Approval不可变链的每次current-head变化都必须可观察，正式Catalo
 
 Extension RPC 是 agentd 与 Extension/Provider 进程之间的协议，不在本节定义（见 `extension-protocol` crate 和 `EXTENSION_SDK.md`）。Extension RPC 有自己的消息格式、错误模型和生命周期管理，不与 KCP 共享 envelope；其现有“JSON-RPC 风格”描述也不构成 KCP 的传输决策。
 
-### 5.10 Legacy v1 `system.ping` / `task.create` / `task.get` typed application handler
+### 5.10 `system.ping` / active root `task.create` v2 / `task.get` typed application handler
 
-本节记录**现有未发布Rust代码事实**：三个handler仍绑定v1 generated envelope/payload，其中`task.create v1`允许`parent_task_id`。自ADR-0006与ADR-0009起，它不是active production合同；后续实现必须以active v2 handler替换dispatcher中的v1 create registration，并**删除** v1 create handler/adapter/repository write API，不得以migration/test工具名义保留production可触达写路径。
+**切片3b起代码事实**：`kernel-kcp` 三个 registered handler 为 `system.ping`（retained v1 query）、active root-only `task.create` v2、`task.get`（retained v1 query）。v1 create 不再进入 preflight Accepted / registration / handler；production 请求携带 create v1 仅得 `unsupported_schema_version`。kcp 侧 v1 create handler/adapter/ports 路径已删除。`kernel-sqlite` 的 legacy `create_task` repository write 与 `append_legacy_event_v1` 仍在仓库内，属切片6删除范围，不得再被 kcp production adapter 触达。
 
-除task.create世代状态外，本节的response门、clock/ID/backend分层仍是v2实现应复用的实现原则，不能复制平行栈。公共`handle_*`函数当前接受generated typed Envelope，并在family/discriminator/payload variant错配时本地`InputMethodMismatch`；handler不得接受raw JSON或transport frame，也不得把内部错误伪装成`invalid_request`。
+本节的 response 门、clock/ID/backend 分层是 active 实现必须遵循的原则，不能复制平行栈。公共 `handle_*` 在 family/discriminator/payload variant 错配时本地 `InputMethodMismatch`；handler 不得接受 raw JSON 或 transport frame，也不得把内部错误伪装成 `invalid_request`（root-only 的 Envelope `task_id`/`expected_revision` 非 null 除外，固定映射 `invalid_request`）。
 
 #### 5.10.1 输入、输出与最终 Schema 门
 
 handler 输入分别是：
 
 - `system.ping`：discriminator已确认为`system.ping`的typed query与v1 request；
-- `task.create`：**当前legacy实现**为discriminator已确认为`task.create`的v1 typed command/request；active实现必须替换为v2 typed request，v1不得由dispatcher传入；
+- `task.create`：discriminator已确认为`task.create`的 **active v2** typed request（`TaskCreateCommandRequestV2` / `TaskCreateRequestV2`）；v1 不得由 dispatcher 传入；
 - `task.get`：discriminator已确认为`task.get`的typed query与v1 request。
 
 每次调用输出一个库级 `HandlerResult` 概念值：
@@ -911,13 +911,15 @@ HandlerResult =
 KernelClock.now_utc() -> RFC3339 UTC instant | ClockError
 
 KernelIdGenerator.next_uuid(purpose: Task | TaskScope | ContentOrigin
-  | KernelReceipt | AuditRecord | Event) -> UUID | IdGenerationError
+  | KernelReceipt | CreationProvenance | AuditRecord | Event)
+  -> UUID | IdGenerationError
 KernelIdGenerator.next_opaque_id(purpose: Correlation | EventDedup)
   -> non-empty string | IdGenerationError
 
 TaskApplicationBackend.create_task(operation: TaskCreateOperation)
-  -> Created { current_task: TaskSpec, committed_event_id: UUID }
-   | Replayed { current_task: TaskSpec }
+  -> Created { current_task: TaskSpec, creation_provenance_ref: UUID text,
+               committed_event_id: UUID }
+   | Replayed { current_task: TaskSpec, creation_provenance_ref: UUID text }
    | BackendError
 TaskApplicationBackend.get_task(task_id: UUID)
   -> Some(current TaskSpec) | None | BackendError
@@ -926,7 +928,6 @@ BackendError =
   | InvalidScopePattern
   | IdempotencyConflict
   | DelegationNotFound
-  | ParentTaskNotFound
   | ParentOriginNotFound
   | SqliteBusy
   | SqliteFull
@@ -937,16 +938,16 @@ BackendError =
 
 `RootTaskCreateAllocationV2`（active root v2）是task component、`kind=object`的正式封闭对象，全部字段required，且自身`schema_version: const 2`。其七个UUID为`task_id,task_scope_id,content_origin_id,kernel_receipt_id,creation_provenance_id,audit_record_id,task_created_event_id`，另有独立`correlation_id,task_created_dedup_key`。`schema_version`不计入七UUID数量。
 
-`BackendError` 是 handler 唯一接受的 backend 失败分类，不携带 SQL 或 payload。SQLite adapter 必须按 `StoreError.code` 穷举转换：同名业务/storage code 转为对应同名变体；`ConstraintViolation`、`ContractInvalid`、`SerializationFailed`、`NotFound`、`InternalStoreError`、`InvalidDatabasePath`、`SqliteOpenFailed`、`SqliteConfigurationFailed`、`MigrationFailed`、`MigrationDrift`、`DatabaseSchemaTooNew`、`InvalidCursor` 及未来未在本合同增加公开映射的 Store code 均转为 `Internal`。handler 只匹配 `BackendError`，不得直接依赖 `kernel-sqlite` 或匹配 `StoreError.message`。
+`BackendError` 是 handler 唯一接受的 backend 失败分类，不携带 SQL 或 payload。active create 不再映射 `ParentTaskNotFound`（root-only 无 parent_task_id）；adapter 若收到该 store code 必须折为 `Internal`。SQLite adapter 必须按 `StoreError.code` 穷举转换：同名业务/storage code 转为对应同名变体；`ConstraintViolation`、`ContractInvalid`、`SerializationFailed`、`NotFound`、`InternalStoreError`、`InvalidDatabasePath`、`SqliteOpenFailed`、`SqliteConfigurationFailed`、`MigrationFailed`、`MigrationDrift`、`DatabaseSchemaTooNew`、`InvalidCursor`、`ParentTaskNotFound` 及未来未在本合同增加公开映射的 Store code 均转为 `Internal`。handler 只匹配 `BackendError`，不得直接依赖 `kernel-sqlite` 或匹配 `StoreError.message`。
 
 SQLite adapter 的 `create_task` 必须在 adapter/agentd 组合边界调用：
 
 ```text
 SqliteStore::with_write_transaction(|transaction|
-  transaction.create_task(task_create_command))
+  transaction.create_root_task_v2(root_task_create_v2_command))
 ```
 
-只有 `with_write_transaction` 已成功 commit 后，backend 才能返回 `Created` 或 `Replayed`。`Created.committed_event_id` 必须等于本次 `TaskCreateOperation` 中传入并由 repository 写入 Outbox 的 Event UUID；adapter 若不能证明该绑定必须返回 `BackendError::Internal`，不得产生 Created。handler 构造 notification intent 时使用 `current_task.id` 和 `committed_event_id`，不从响应 payload、查询或第二次分配猜测 Event ID。handler 不复制 URI normalize、receipt/idempotency hash、引用校验、Audit producer 或 Event producer。两种结果都使用 backend 返回的**当前** `TaskSpec` 构造响应，不使用 handler 预先拼装的 Task。
+只有 `with_write_transaction` 已成功 commit 后，backend 才能返回 `Created` 或 `Replayed`。`Created.committed_event_id` 必须等于本次 `TaskCreateOperation` 中传入并由 repository 写入 Outbox 的 Event UUID；`creation_provenance_ref` 必须等于本次 allocation 的 provenance UUID 文本；adapter 若不能证明绑定必须返回 `BackendError::Internal`，不得产生 Created。handler 构造 notification intent 时使用 `current_task.id` 和 `committed_event_id`，不从响应 payload、查询或第二次分配猜测 Event ID。handler 不复制 URI normalize、receipt/idempotency hash、引用校验、Audit producer 或 Event producer。两种结果都使用 backend 返回的**当前** `TaskSpec` 与 provenance ref 构造 `TaskCreateResponseV2`，不使用 handler 预先拼装的 Task。
 
 backend error 必须是稳定枚举/分类；SQLite adapter 按 `StoreErrorCode` 穷举映射，严禁匹配 `StoreError.message`。clock/ID 生成失败进入 `internal_error`，且在 backend 调用前失败时不得访问 backend。
 
@@ -983,7 +984,7 @@ UUID版本不由任何合同固定：generator必须返回满足对应Schema `fo
 | `InvalidScopePattern` | `invalid_scope_pattern` | `task scope contains an invalid URI pattern` | `false` |
 | `IdempotencyConflict` | `idempotency_conflict` | `idempotency key was used for different task facts` | `false` |
 | `DelegationNotFound` | `delegation_not_found` | `delegation was not found` | `false` |
-| `ParentTaskNotFound` | `parent_task_not_found` | `parent task was not found` | `false`（legacy TaskCreate v1 only） |
+| `ParentTaskNotFound`（仅 legacy sqlite store code；active adapter 折为 Internal） | `internal_error` | `internal kernel error` | `false` |
 | `ParentOriginNotFound` | `parent_origin_not_found` | `parent content origin was not found` | `false` |
 | `SqliteBusy` | `sqlite_busy` | `kernel storage is busy` | `true` |
 | `SqliteFull` | `sqlite_full` | `kernel storage is full` | `false` |
@@ -1022,6 +1023,10 @@ narrow_to_registered(request: TypedCatalogRequest) -> RegistrationResult
 RegistrationResult =
   | Registered(RegisteredRequest)
   | KnownCatalogMethodNotImplemented(KnownCatalogMethodNotImplemented)
+  | InternalContractViolation(InternalContractViolation)
+
+InternalContractViolation =
+  | TaskCreateV1AfterActivePreflight
 
 PreflightLocalRejection =
   | UncorrelatableRequest {
@@ -1042,7 +1047,7 @@ KnownCatalogMethodNotImplemented =
 
 RegisteredRequest =
   | SystemPing(TypedKcpQueryEnvelope)
-  | TaskCreate(TypedKcpCommandEnvelope)
+  | TaskCreate(TaskCreateCommandRequestV2)   // active root-only v2; not TypedKcpCommandEnvelopeV2
   | TaskGet(TypedKcpQueryEnvelope)
 
 TypedDispatcher::new(clock, ids, task_backend)
@@ -1051,7 +1056,7 @@ TypedDispatcher.dispatch(request: RegisteredRequest) -> HandlerResult
 
 名称可按 Rust 社区惯例微调，但三步边界、结果分类和所有权不得合并。`TypedCatalogRequest` 必须携带 generated typed Envelope，不能退回 `Value`、手写 payload 或只保留 method string。`RegisteredRequest`的目标active集合仍为`system.ping`、`task.create`、`task.get`，但`task.create` variant必须是v2。当前代码中的v1 variant仅legacy实现，active narrow不得构造。
 
-`KnownCatalogMethodNotImplemented` 只用于已通过完整 Schema 与 generated typed decode 的 `task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`。它是本地库结果，不是 `KcpError`，不得实现 `Serialize`，不得进入 Response Envelope，也不得转换为 `unsupported_method`、`method_unavailable` 或 `internal_error`。组合根在这五个方法拥有正式 handler 前必须 fail closed 且禁止启动 KCP server；不能接收请求后再用本地缺口冒充协议错误。
+`KnownCatalogMethodNotImplemented` 只用于已通过完整 Schema 与 generated typed decode 的 `task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`。它是本地库结果，不是 `KcpError`，不得实现 `Serialize`，不得进入 Response Envelope，也不得转换为 `unsupported_method`、`method_unavailable` 或 `internal_error`。组合根在这五个方法拥有正式 handler 前必须 fail closed 且禁止启动 KCP server；不能接收请求后再用本地缺口冒充协议错误。`InternalContractViolation` 是主动 method-aware preflight 绝不可能产出的内部合同失败身份（当前唯一值 `TaskCreateV1AfterActivePreflight`：typed `task.create` v1 经构造旁路到达 narrowing）；它同样是本地库结果，不得实现 `Serialize`，不得冒充任何 Catalog 方法或 wire error。
 
 `TypedDispatcher` 是显式三方法注册表，不是按字符串开放反射的 router。它在构造时接收第 5.10 节已有的 `KernelClock`、`KernelIdGenerator` 与 `TaskApplicationBackend` 引用/所有权；dispatch 时按 variant 只把所需端口传给对应 handler：ping 使用 clock，create 使用 clock/ids/backend，get 使用 clock/backend。它只把三个 `RegisteredRequest` variant 路由到第 5.10 节对应 handler；不得重复 Schema、protocol/auth/method、payload version 或 deadline 检查，不得改写 handler 的 `HandlerResult`，并必须无损保留 `post_commit_notification_intents`。不得为 dispatcher 创造平行 clock/backend/ID 接口。新增注册方法必须同时增加正式 handler、注册 variant、dispatcher 路由、Conformance 与 server 阶段门更新。
 
@@ -2243,7 +2248,7 @@ MethodVersionBinding与manifest entry的`compatibility`是正交维度：binding
 启用分两阶段（ADR-0009；不再使用已作废的`V2ProductionWriteCutover`叙事）：
 
 1. **Schema/工具阶段**：实现上述完整validator、catalog生成与正反测试；测试使用合法非空的synthetic 8-method manifest/registry覆盖完整表。`SchemaRegistry::load`只负责与具体仓库阶段无关的通用完整validation，因此必须允许合法非空binding。production阶段约束由schema-tool production-profile模块中的单一owner `validate_production_manifest_stage(&SchemaRegistry)`承担：production CLI `check`与`generate`必须在registry load成功后、plan/render前调用它；仓库统一门`./scripts/check-schema.sh`通过这两个入口继承同一gate。该函数在空bindings实现切片中曾断言production `method_version_bindings`精确为空；**切片3a起**同一stage gate改为验证bindings精确等于下表目标集合（method覆盖从registry V2 Envelope facts派生，lifecycle为`task.create` active=`[2]`/legacy=`[1]`、其余七方法 active=`[1]`）。非空synthetic binding catalog的end-to-end plan/render测试必须走library API并使用显式non-production registry profile，不得调用production CLI check/generate stage gate；synthetic registry不能靠路径、环境变量、fixture目录名或调用栈隐式绕过。
-2. **V2InitialBuildActive 初始交付**：§13.7全部谓词满足时，production manifest非空八方法binding与v2 dispatcher registration、v2 repository write gate一并作为fresh baseline初始交付；不是从旧部署cutover。v1 runtime写路径删除而非双写切换。**切片3a状态**：production bindings与generated `METHOD_VERSION_BINDINGS`/`select_request_version`已激活；kernel-kcp preflight/dispatcher仍消费retained v1路径，runtime切换属切片3b。
+2. **V2InitialBuildActive 初始交付**：§13.7全部谓词满足时，production manifest非空八方法binding与v2 dispatcher registration、v2 repository write gate一并作为fresh baseline初始交付；不是从旧部署cutover。v1 runtime写路径删除而非双写切换。**切片3a状态**：production bindings与generated `METHOD_VERSION_BINDINGS`/`select_request_version`已激活。**切片3b状态**：kernel-kcp method-aware preflight/dispatcher/handler 已消费 bindings；active create v2 为唯一 kcp production 写入口；legacy sqlite create write 删除属切片6。
 
 最终production lifecycle目标如下；它由Envelope Catalog派生覆盖测试，不得转抄为第二份运行时目录：
 
@@ -2436,6 +2441,18 @@ component DAG保持`policy→[common]`无环；41 retained ownership/source byte
 ### 13.6.8 V2InitialBuildActive切片3a：production MethodVersionBindings基础层（Schema/tools/generated已落地）
 
 切片3a不新增manifest Schema（仍为83项）。它在production `schemas/manifest.json`写入精确八方法`method_version_bindings`（IC §13.5目标表），并将`validate_production_manifest_stage`从“必须为空”翻转为“必须精确等于从registry V2 Envelope facts派生的完整expected set + §13.5 lifecycle目标”。schema-tool重新生成非空`METHOD_VERSION_BINDINGS`与可用`select_request_version`。**本切片不改**kernel-kcp preflight/dispatcher（仍消费retained v1 catalog）；runtime method-aware切换属切片3b。generated binding catalog只证明library facts，不表示dispatcher/handler/server可用。
+
+### 13.6.9 V2InitialBuildActive切片3b：method-aware KCP runtime（kernel-kcp已落地）
+
+切片3b不新增manifest Schema（仍为83项）。它在`kernel-kcp`落地：
+
+1. **preflight**：废弃全局`schema_version==1`强制；先做 correlatable `request_id` → family → protocol → auth → method（`KCP_ENVELOPE_AUTHORITY_*`）→ 根`payload.schema_version`形状 → `select_request_version`（Active 继续；LegacyValidationOnly/Unsupported → `unsupported_schema_version`）→ V2 Command/Query Envelope Schema + active request Schema + typed decode。`task.create` v2 → Accepted；v1 → unsupported；其余七方法 v1 → Active。
+2. **dispatcher**：`RegisteredRequest` 的 create variant 为内部 `TaskCreateCommandRequestV2`（禁止合同禁止的 `TypedKcpCommandEnvelopeV2` 泛型 wrapper）；其余方法保持 v1 或 KnownCatalogMethodNotImplemented。
+3. **handler**：root-only 检查；第一次时钟=`accepted_at`；七 UUID（含 `CreationProvenance`）+ correlation/dedup；backend `create_task`；`TaskCreateResponseV2`；Created intent 绑定 committed event；deadline 语义保持。
+4. **ports/adapter**：`TaskCreateOperation` 七 UUID；`UuidPurpose::CreationProvenance`；`BackendError` 对齐 active 闭集（无 ParentTaskNotFound）；adapter 映射 `RootTaskCreateV2Command`/`create_root_task_v2`。
+5. **删除**：kcp 侧 v1 create handler/adapter/ports/dispatcher narrow。`kernel-sqlite` legacy `create_task` 写路径本片保留给切片6统一删除（及其全部调用方/测试）。
+
+**明确不在本切片**：五方法 handler、server、Publisher/poll、legacy sqlite write 删除、§13.7 闭合。
 
 ### 13.7 V2InitialBuildActive唯一谓词
 

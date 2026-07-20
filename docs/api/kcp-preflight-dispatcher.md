@@ -1,6 +1,6 @@
 # KCP Value preflight 与注册式 dispatcher
 
-> 状态：当前Rust已实现legacy v1不可连接边界；production MethodVersionBindings 已在切片3a作为library facts激活，但本crate preflight/dispatcher仍消费retained v1路径（切片3b切换）。active合同要求method-aware payload version与TaskCreate v2（`V2InitialBuildActive`），因此本实现不能作为未来server的active preflight，必须先升级并删除v1 create写路径。
+> 状态：切片3b 起 `kernel-kcp` 实现 method-aware active preflight/dispatcher/handler。production `METHOD_VERSION_BINDINGS` / `select_request_version` 被 runtime 消费；`task.create` 仅 active v2 进入 registration，v1 create production 请求返回 `unsupported_schema_version`。五方法仍无正式 handler，server 阶段门保持关闭；§13.7 未闭合。
 
 ## 范围
 
@@ -23,6 +23,7 @@ preflight_value(value)
 - `narrow_to_registered(TypedCatalogRequest) -> RegistrationResult`
 - `RegisteredRequest::method()`：只读查看 registered method；内部 variant 私有，只能由 narrow 构造。
 - `TypedDispatcher<'a, C, G, B>::new(&C, &G, &B)` / `dispatch(RegisteredRequest)`：借用现有 `KernelClock`、`KernelIdGenerator`、`TaskApplicationBackend`。
+- `TaskCreateCommandRequestV2`：active root-only create 的已解码请求（public，供 handler/测试使用）；不是泛型 `TypedKcpCommandEnvelopeV2`。
 
 `PreflightLocalRejection`、`KnownCatalogMethodNotImplemented`、`TypedCatalogRequest` 与 `RegisteredRequest` 均不实现 `Serialize`；测试使用负 trait assertion 锚定。生产 API 不接收 validator/catalog/bypass flag，response fault seam 只存在于 crate 私有单元测试。
 
@@ -30,7 +31,7 @@ preflight_value(value)
 
 `preflight_value` 只产生：
 
-- `Accepted(TypedCatalogRequest)`：完整 generated Envelope/方法 Schema 与 `decode_after_validation` 已通过；
+- `Accepted(TypedCatalogRequest)`：V2 Envelope 结构 + active method/version payload Schema 与 typed decode 已通过；
 - `Response(KcpResponseEnvelope)`：request ID 可关联的固定 preflight wire error，且最终 response 已通过 generated Response Schema；
 - `LocalRejection(PreflightLocalRejection)`：不能关联 request，或 catalog/schema/generated/response 出现内部合同失败；不得发送 wire response。
 
@@ -40,15 +41,21 @@ preflight_value(value)
 2. message kind / family；
 3. protocol；
 4. auth；
-5. family-specific method；
-6. 根 `payload.schema_version`；
-7. 完整 Envelope/方法 Schema + generated typed decode。
+5. family-specific method（`KCP_ENVELOPE_AUTHORITY_*`）；
+6. 根 `payload.schema_version` 形状 + `select_request_version`（Active 继续；LegacyValidationOnly / Unsupported → `unsupported_schema_version`）；
+7. V2 Command/Query Envelope Schema + 所选 active request Schema + typed decode。
 
-顶层 `request_id` 必须是 UUID parser 接受的 string；wire error 中逐字保留原字符串，不重新格式化。非 object、缺失/非 string/非法 UUID 都得到 `UncorrelatableRequest`。
+顶层 `request_id` 必须是 UUID parser 接受的 string；wire error 中逐字保留原字符串，不重新格式化。非 object、缺失/非 string/非法 UUID 都得到 `UncorrelatableRequest`。完整 Schema 阶段还要求 V2 Envelope 的 lowercase UUID pattern。
 
-当前Rust实现把根payload version全局固定为1；这只描述legacy代码缺口，不是规范规则。active实现必须读取generated `MethodVersionBinding`：`task.create active=[2], legacy=[1]`（v1仅判定`unsupported_schema_version`），其余首批方法active=[1]；按family+method+version选择request及response Schema。v1不得进入dispatcher。
+method-aware 版本矩阵：
 
-preflight的`unsupported_auth_schema`只在实际执行auth判定时适用。它不能被root official fixture harness借用：root harness执行raw Envelope Schema → payload Schema → normalization/projection/hash，auth非null固定为raw schema rejection并投影为`invalid_request`、details为null，两个hash不计算。
+| family | method | active | legacy validation | production 行为 |
+|---|---|---|---|---|
+| command | `task.create` | `[2]` | `[1]` | v2 Accepted；v1 → `unsupported_schema_version` |
+| command | `stop.activate` | `[1]` | `[]` | v1 Accepted → KnownCatalogMethodNotImplemented |
+| query | 其余六方法 | `[1]` | `[]` | v1 Accepted；`system.ping`/`task.get` Registered |
+
+preflight 的 `unsupported_auth_schema` 只在实际执行 auth 判定时适用。它不能被 root official fixture harness 借用。
 
 ## 结构化 contract error
 
@@ -58,11 +65,9 @@ preflight的`unsupported_auth_schema`只在实际执行auth判定时适用。它
 - `ContractFailureClassification`：`CallerInvalid` / `InternalContractFailure`；
 - `ContractError::stage()` 与 `classification_for_preflight()`。
 
-schema-tool 生成的 typed decoder 现在先由 `decode` 验证 Schema，再调用公开且有明确前置条件的 `decode_after_validation`。generated raw wire、payload 与 discriminator default 分别返回独立结构化变体。preflight 先单独 `validate_json`；只有 `SchemaValidation` 是 caller invalid，后续任何 decode/catalog 失败都本地 fail closed，不匹配错误文本。
+preflight 先单独 `validate_json`（Envelope 再 payload）；只有 `SchemaValidation` 是 caller invalid，后续任何 decode/catalog 失败都本地 fail closed，不匹配错误文本。
 
 ## 固定错误
-
-这里的错误表只描述Value preflight实际执行的判定层；official root fixture harness不调用preflight，不能复用本表的preflight-only code。root fixture的raw Schema拒绝由其自身合同固定投影为`invalid_request`，而不是`unsupported_auth_schema`。
 
 | code | 固定 message | details | retryable |
 |---|---|---|---:|
@@ -76,15 +81,15 @@ response 构造复用 `kernel-kcp` crate-private 通用 validated error finalize
 
 ## Registration 与 dispatcher
 
-全部八方法合法请求都先得到 typed `Accepted`。narrow 结果：
+全部八方法合法 **active** 请求都先得到 typed `Accepted`。narrow 结果：
 
-- registered：`system.ping`、`task.create`、`task.get`；
-- known-unimplemented：`task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`。
+| method | registration |
+|---|---|
+| `system.ping` | Registered → handler |
+| `task.create`（v2 only） | Registered → root-only v2 handler |
+| `task.get` | Registered → handler |
+| `task.list` / `event.subscribe` / `event.poll` / `stop.activate` / `stop.status` | `KnownCatalogMethodNotImplemented` |
 
-当前narrow把v1 `task.create`列为registered；active升级后必须改为v2 typed variant，v1不得Accepted/registered且handler写路径删除。其余registered/known集合不变，直到各方法另行升级。
+`KnownCatalogMethodNotImplemented` 不是 wire error，不得序列化，也不得伪装成 `unsupported_method` / `method_unavailable`。组合根在五方法拥有正式 handler 前必须 fail closed 且禁止启动 server。`InternalContractViolation`（当前唯一值 `TaskCreateV1AfterActivePreflight`）是主动 method-aware preflight 不可达的内部合同失败身份：typed `task.create` v1 只可能经构造旁路到达 narrowing；同样不得序列化，不得冒充任何 Catalog 方法或 wire error。
 
-`TypedDispatcher` 只调用现有公共 `handle_system_ping`、`handle_task_create`、`handle_task_get`，不重复 Schema/protocol/auth/method/payload version/deadline 检查，不改写 `HandlerResult` 或 post-commit intents，也不创建平行端口。
-
-## 阶段门
-
-五个 Catalog 方法仍缺正式 handler，bytes/frame/transport/server 生命周期也未关闭。因此当前仍禁止启动 Socket/Named Pipe server；known-unimplemented 不能作为“先启动 server、收到请求后再报错”的兜底。
+`TypedDispatcher` 是显式三方法注册表：ping 用 clock，create 用 clock/ids/backend，get 用 clock/backend；无损保留 `post_commit_notification_intents`。
