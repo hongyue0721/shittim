@@ -388,7 +388,7 @@ fn event_catalog_bindings_are_single_source_and_projected() {
     assert_eq!(EVENT_LEGACY_V1_BINDINGS.len(), 3);
     assert_eq!(EVENT_ACTIVE_TYPES.len(), 5);
     assert_eq!(EVENT_LEGACY_V1_TYPES.len(), 3);
-    assert!(METHOD_VERSION_BINDINGS.is_empty());
+    assert_eq!(METHOD_VERSION_BINDINGS.len(), 8);
     for (index, binding) in EVENT_ACTIVE_BINDINGS.iter().enumerate() {
         assert_eq!(EVENT_ACTIVE_TYPES[index], binding.event_type);
         assert!(binding.payload_schema_version >= 1);

@@ -1,4 +1,9 @@
 //! Registration narrowing and the explicit three-method typed dispatcher.
+//!
+//! Production MethodVersionBindings are active as library facts (slice 3a), but this
+//! dispatcher still narrows retained v1 typed catalog requests only. Slice 3b switches
+//! registration/dispatch onto method-aware V2 bindings; do not treat non-empty
+//! `METHOD_VERSION_BINDINGS` as proof that this path is the active runtime.
 
 use crate::handlers::{
     handle_system_ping_with_validator, handle_task_create_with_validator,

@@ -102,7 +102,123 @@
       ]
     }
   ],
-  "method_version_bindings": [],
+  "method_version_bindings": [
+    {
+      "family": "command",
+      "method": "stop.activate",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/stop_activate_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/stop_activate_response.json"
+      }
+    },
+    {
+      "family": "command",
+      "method": "task.create",
+      "active_request_versions": [
+        2
+      ],
+      "legacy_validation_versions": [
+        1
+      ],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+        "2": "https://schemas.shittim.local/kcp/task_create_request/v2"
+      },
+      "response_schema_id_by_version": {
+        "2": "https://schemas.shittim.local/kcp/task_create_response/v2"
+      }
+    },
+    {
+      "family": "query",
+      "method": "event.poll",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/event_poll_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/event_poll_response.json"
+      }
+    },
+    {
+      "family": "query",
+      "method": "event.subscribe",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/event_subscribe_response.json"
+      }
+    },
+    {
+      "family": "query",
+      "method": "stop.status",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/stop_status_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/stop_status_response.json"
+      }
+    },
+    {
+      "family": "query",
+      "method": "system.ping",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/system_ping_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/system_ping_response.json"
+      }
+    },
+    {
+      "family": "query",
+      "method": "task.get",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/task_get_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/task_get_response.json"
+      }
+    },
+    {
+      "family": "query",
+      "method": "task.list",
+      "active_request_versions": [
+        1
+      ],
+      "legacy_validation_versions": [],
+      "request_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/task_list_request.json"
+      },
+      "response_schema_id_by_version": {
+        "1": "https://schemas.shittim.local/v1/kcp/task_list_response.json"
+      }
+    }
+  ],
   "schemas": [
     {
       "id": "https://schemas.shittim.local/common/input_content_origin/v1",

@@ -248,7 +248,7 @@ fn all_roots() -> [(&'static str, Value); 8] {
 }
 
 #[test]
-fn manifest_batch_contains_identity_roots_and_bindings_remain_empty() {
+fn manifest_batch_contains_identity_roots_and_bindings_are_complete_eight_method_set() {
     let manifest: Value =
         serde_json::from_str(include_str!("../../../../schemas/manifest.json")).expect("manifest");
     let entries = manifest["schemas"].as_array().expect("schemas");
@@ -260,10 +260,14 @@ fn manifest_batch_contains_identity_roots_and_bindings_remain_empty() {
         "production baseline (83) plus optional synthetic probe roots, got {}",
         entries.len()
     );
-    assert!(manifest["method_version_bindings"]
-        .as_array()
-        .expect("bindings")
-        .is_empty());
+    assert_eq!(
+        manifest["method_version_bindings"]
+            .as_array()
+            .expect("bindings")
+            .len(),
+        8,
+        "slice 3a production MethodVersionBindings equal IC §13.5 eight-method set"
+    );
     for id in [
         ALGO,
         CRED,

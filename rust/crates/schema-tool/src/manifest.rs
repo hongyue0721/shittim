@@ -78,7 +78,8 @@ pub struct ManifestComponent {
 
 /// Manifest-derived method lifecycle binding. Validated fully by
 /// [`crate::method_bindings::validate_method_version_bindings`]; empty arrays are
-/// allowed by the generic loader, while production emptiness is a separate stage gate.
+/// allowed by the generic loader. Production must hold the complete IC §13.5
+/// eight-method expected set, enforced by `validate_production_manifest_stage`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ManifestMethodVersionBinding {

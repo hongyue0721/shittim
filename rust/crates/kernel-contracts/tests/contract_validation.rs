@@ -644,7 +644,9 @@ fn kcp_unknown_command_method_rejected() {
 fn kcp_eight_methods_closed_set_constants() {
     // Production has V2 Envelope family structure authority for eight methods.
     // This authority catalog is not a bound-version or executable registry.
-    // Retained first-batch set remains LEGACY and orthogonal; bindings stay empty.
+    // Retained first-batch set remains LEGACY and orthogonal; since slice 3a the
+    // production METHOD_VERSION_BINDINGS carry the IC §13.5 eight-method set
+    // (library facts, not executable registration).
     assert_eq!(KCP_ENVELOPE_AUTHORITY_METHODS.len(), 8);
     assert_eq!(KCP_LEGACY_V1_METHODS.len(), 8);
     assert_eq!(KCP_PROTOCOL_VERSION, "1.0");

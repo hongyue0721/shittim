@@ -3,6 +3,11 @@
 //! This crate accepts only already parsed `serde_json::Value` at its preflight boundary and
 //! generated typed envelopes at its handler boundary. It intentionally provides no bytes/UTF-8
 //! parser, frame codec, socket, named pipe, transport server, or `agentd` composition root.
+//!
+//! Slice 3a (`V2InitialBuildActive`) activates production `METHOD_VERSION_BINDINGS` and the
+//! generated `select_request_version` library selectors. This crate still consumes the retained
+//! v1 preflight/dispatcher path; method-aware V2 preflight/dispatcher/handler wiring is slice 3b.
+//! Non-empty bindings therefore do not imply this runtime path is active or server-ready.
 
 #![deny(missing_docs)]
 

@@ -362,9 +362,10 @@ fn install_complete_synthetic_registry(root: &Path) {
 }
 
 #[test]
-fn production_load_empty_bindings_and_retained_lifecycle_labels() {
+fn production_load_complete_bindings_and_retained_lifecycle_labels() {
     let registry = SchemaRegistry::load(&repo_root()).expect("production load");
-    assert!(registry.manifest().method_version_bindings.is_empty());
+    assert_eq!(registry.manifest().method_version_bindings.len(), 8);
+    assert_production_binding_lifecycle_targets(&registry);
     let mut counts = BTreeMap::new();
     for entry in &registry.manifest().schemas {
         *counts.entry(entry.compatibility.as_str()).or_insert(0usize) += 1;
@@ -384,6 +385,32 @@ fn production_load_empty_bindings_and_retained_lifecycle_labels() {
         let expected = entry["source_sha256"].as_str().unwrap();
         assert_eq!(sha256_file(&repo_root().join(source)), expected, "{source}");
     }
+}
+
+fn assert_production_binding_lifecycle_targets(registry: &SchemaRegistry) {
+    let mut seen_task_create = false;
+    for binding in &registry.manifest().method_version_bindings {
+        if binding.family == schema_tool::MethodFamily::Command && binding.method == "task.create" {
+            assert_eq!(binding.active_request_versions, vec![2]);
+            assert_eq!(binding.legacy_validation_versions, vec![1]);
+            seen_task_create = true;
+        } else {
+            assert_eq!(
+                binding.active_request_versions,
+                vec![1],
+                "{:?}/{}",
+                binding.family,
+                binding.method
+            );
+            assert!(
+                binding.legacy_validation_versions.is_empty(),
+                "{:?}/{}",
+                binding.family,
+                binding.method
+            );
+        }
+    }
+    assert!(seen_task_create, "task.create binding required");
 }
 
 #[test]
@@ -428,7 +455,10 @@ fn component_native_positive_general_and_kcp_envelopes() {
             schema_version_field: Some("schema_version"),
         },
     );
+    // Reduced Envelope method enums must not leave the production 8-method binding
+    // catalog behind; empty bindings keep this test focused on component-native IDs.
     install_v2_envelopes(&temp, &["task.create"], &["system.ping"]);
+    set_bindings(&temp, json!([]));
     SchemaRegistry::load(&temp).expect("component-native positives load");
     std::fs::remove_dir_all(temp).ok();
 }
@@ -524,14 +554,12 @@ fn synthetic_eight_method_bindings_load_lower_render_stable() {
 
     let registry = SchemaRegistry::load(&temp).expect("synthetic load");
     assert_eq!(registry.manifest().method_version_bindings.len(), 8);
+    assert_production_binding_lifecycle_targets(&registry);
 
-    // production stage gate rejects non-empty synthetic registry
-    let stage_err = validate_production_manifest_stage(&registry)
-        .unwrap_err()
-        .to_string();
-    assert!(
-        stage_err.contains("production manifest stage gate"),
-        "{stage_err}"
+    // Complete IC §13.5 lifecycle targets also satisfy the production stage gate;
+    // synthetic tests still use SyntheticRegistry for plan/render profile proof.
+    validate_production_manifest_stage(&registry).expect(
+        "complete envelope-derived eight-method set with IC §13.5 lifecycle targets passes production stage gate",
     );
 
     // generic library path succeeds
@@ -728,7 +756,10 @@ fn production_cli_still_succeeds_while_library_accepts_synthetic() {
     let temp = temporary_repo("stage-vs-library");
     install_complete_synthetic_registry(&temp);
     let synthetic = SchemaRegistry::load(&temp).expect("synthetic load");
-    assert!(validate_production_manifest_stage(&synthetic).is_err());
+    // Same complete expected set + lifecycle targets pass the production stage gate,
+    // but synthetic plan/render still uses the explicit non-production profile.
+    validate_production_manifest_stage(&synthetic)
+        .expect("complete synthetic set matches production gate");
     let synthetic_profile = schema_tool::SyntheticRegistry::new(&synthetic).unwrap();
     let plan = build_target_plan(synthetic_profile).expect("synthetic library target plan");
     lower_target_contract_graph(&plan, GenerationTarget::Rust).expect("lower synthetic");
@@ -798,6 +829,10 @@ fn source_title_and_schema_version_contracts_fail_independently() {
 #[test]
 fn production_lifecycle_ledger_rejects_label_swap() {
     let temp = temporary_repo("lifecycle-swap");
+    // Clear bindings so this case isolates lifecycle ledger rejection from the
+    // MethodVersionBinding legacy-request compatibility rule (which would fail
+    // generic load when task.create legacy points at a non-legacy-validation-only entry).
+    set_bindings(&temp, json!([]));
     let path = temp.join("schemas/manifest.json");
     let mut manifest = read_json(&path);
     let schemas = manifest["schemas"].as_array_mut().unwrap();
@@ -943,9 +978,17 @@ mod request_version_selection_contracts {
 }
 
 #[test]
-fn production_cli_check_and_generate_reject_nonempty_stage() {
-    let temp = temporary_repo("production-cli-nonempty");
+fn production_cli_check_and_generate_reject_incomplete_stage() {
+    let temp = temporary_repo("production-cli-incomplete");
     install_complete_synthetic_registry(&temp);
+    // Drop one binding so coverage no longer equals Envelope-derived expected set.
+    let path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&path);
+    manifest["method_version_bindings"]
+        .as_array_mut()
+        .unwrap()
+        .pop();
+    write_json(&path, &manifest);
     let lock_path = temp.join(".schema-tool-generate.lock");
     std::fs::remove_file(&lock_path).ok();
     let binary = std::env::var("CARGO_BIN_EXE_schema-tool")
@@ -960,11 +1003,13 @@ fn production_cli_check_and_generate_reject_nonempty_stage() {
             .expect("run schema-tool CLI");
         assert!(
             !output.status.success(),
-            "{command} must reject nonempty production stage"
+            "{command} must reject incomplete production stage"
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("production manifest stage gate"),
+            stderr.contains("production manifest stage gate")
+                || stderr.contains("exactly cover")
+                || stderr.contains("missing"),
             "{stderr}"
         );
     }
@@ -973,6 +1018,175 @@ fn production_cli_check_and_generate_reject_nonempty_stage() {
         "generate must reject the production profile before ArtifactTransaction::begin"
     );
     std::fs::remove_dir_all(temp).ok();
+}
+
+#[test]
+fn production_stage_gate_rejects_empty_missing_extra_and_wrong_lifecycle() {
+    // empty
+    {
+        let temp = temporary_repo("stage-empty");
+        install_v2_envelopes(&temp, COMMAND_METHODS, QUERY_METHODS);
+        set_bindings(&temp, json!([]));
+        let registry = SchemaRegistry::load(&temp).expect("empty bindings load");
+        let err = validate_production_manifest_stage(&registry)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("production manifest stage gate") && err.contains("missing"),
+            "{err}"
+        );
+        std::fs::remove_dir_all(temp).ok();
+    }
+    // missing method
+    {
+        let temp = temporary_repo("stage-missing");
+        install_complete_synthetic_registry(&temp);
+        let path = temp.join("schemas/manifest.json");
+        let mut manifest = read_json(&path);
+        manifest["method_version_bindings"]
+            .as_array_mut()
+            .unwrap()
+            .pop();
+        write_json(&path, &manifest);
+        // Generic load already fails closed on incomplete coverage.
+        let err = SchemaRegistry::load(&temp).unwrap_err().to_string();
+        assert!(err.contains("missing") || err.contains("cover"), "{err}");
+        std::fs::remove_dir_all(temp).ok();
+    }
+    // extra method not in Envelope authority
+    {
+        let temp = temporary_repo("stage-extra");
+        install_complete_synthetic_registry(&temp);
+        let path = temp.join("schemas/manifest.json");
+        let mut manifest = read_json(&path);
+        let arr = manifest["method_version_bindings"].as_array_mut().unwrap();
+        arr.push(simple_v1_binding("query", "task.extra"));
+        // Keep family/method sort order (command then query, method UTF-8).
+        arr.sort_by(|left, right| {
+            let left_key = (
+                left["family"].as_str().unwrap_or_default(),
+                left["method"].as_str().unwrap_or_default(),
+            );
+            let right_key = (
+                right["family"].as_str().unwrap_or_default(),
+                right["method"].as_str().unwrap_or_default(),
+            );
+            left_key.cmp(&right_key)
+        });
+        write_json(&path, &manifest);
+        let err = SchemaRegistry::load(&temp).unwrap_err().to_string();
+        assert!(err.contains("extra") || err.contains("cover"), "{err}");
+        std::fs::remove_dir_all(temp).ok();
+    }
+    // wrong active version for task.create
+    {
+        let temp = temporary_repo("stage-wrong-version");
+        install_complete_synthetic_registry(&temp);
+        let path = temp.join("schemas/manifest.json");
+        let mut manifest = read_json(&path);
+        let binding = manifest["method_version_bindings"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|b| b["method"] == "task.create")
+            .unwrap();
+        // Keep maps consistent with generic validator: active=[1] only, no legacy,
+        // request/response point at retained v1-stable would fail active-legacy rule;
+        // use a non-target lifecycle that still loads generically if maps match.
+        // Easiest valid load path: active=[2] legacy=[] (drop legacy) — maps must match.
+        binding["legacy_validation_versions"] = json!([]);
+        binding["request_schema_id_by_version"] = json!({
+            "2": "https://schemas.shittim.local/kcp/task_create_request/v2"
+        });
+        write_json(&path, &manifest);
+        let registry =
+            SchemaRegistry::load(&temp).expect("generic load accepts non-target lifecycle");
+        let err = validate_production_manifest_stage(&registry)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("production manifest stage gate")
+                && (err.contains("legacy_validation_versions") || err.contains("task.create")),
+            "{err}"
+        );
+        std::fs::remove_dir_all(temp).ok();
+    }
+    // wrong active for a non-create method
+    {
+        let temp = temporary_repo("stage-wrong-ping");
+        install_complete_synthetic_registry(&temp);
+        // Install a synthetic v2 pair for system.ping so active=[2] can load generically.
+        write_component_native_schema(
+            &temp,
+            ComponentNativeSpec {
+                component: "kcp",
+                stem: "system_ping_request",
+                version: 2,
+                title: "SystemPingRequestV2",
+                kind: "kcp_request",
+                compatibility: "breaking-replacement",
+                document: json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["schema_version"],
+                    "properties": {
+                        "schema_version": {"type": "integer", "const": 2}
+                    }
+                }),
+                generation_targets: &["rust"],
+                schema_version_field: Some("schema_version"),
+            },
+        );
+        write_component_native_schema(
+            &temp,
+            ComponentNativeSpec {
+                component: "kcp",
+                stem: "system_ping_response",
+                version: 2,
+                title: "SystemPingResponseV2",
+                kind: "kcp_response",
+                compatibility: "breaking-replacement",
+                document: json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["schema_version"],
+                    "properties": {
+                        "schema_version": {"type": "integer", "const": 2}
+                    }
+                }),
+                generation_targets: &["rust"],
+                schema_version_field: Some("schema_version"),
+            },
+        );
+        let path = temp.join("schemas/manifest.json");
+        let mut manifest = read_json(&path);
+        let binding = manifest["method_version_bindings"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|b| b["method"] == "system.ping")
+            .unwrap();
+        binding["active_request_versions"] = json!([2]);
+        binding["legacy_validation_versions"] = json!([]);
+        binding["request_schema_id_by_version"] = json!({
+            "2": "https://schemas.shittim.local/kcp/system_ping_request/v2"
+        });
+        binding["response_schema_id_by_version"] = json!({
+            "2": "https://schemas.shittim.local/kcp/system_ping_response/v2"
+        });
+        write_json(&path, &manifest);
+        let registry =
+            SchemaRegistry::load(&temp).expect("generic load accepts non-target ping lifecycle");
+        let err = validate_production_manifest_stage(&registry)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("production manifest stage gate")
+                && err.contains("active_request_versions"),
+            "{err}"
+        );
+        std::fs::remove_dir_all(temp).ok();
+    }
 }
 
 #[test]
@@ -987,7 +1201,11 @@ fn production_catalog_keeps_types_typed_mod_stable_and_renames_active_catalog() 
     assert!(catalog.contains("KCP_ENVELOPE_AUTHORITY_METHODS"));
     assert!(catalog.contains("KCP_LEGACY_V1_METHODS"));
     assert!(!catalog.contains("KCP_V1_METHODS"));
-    assert!(catalog.contains("METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[\n];"));
+    assert!(catalog.contains("METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &["));
+    assert!(!catalog.contains("METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[\n];"));
+    assert!(catalog.contains("task.create"));
+    assert!(catalog.contains("system.ping"));
+    assert!(catalog.contains("select_request_version"));
 
     // Anchor byte stability for types/typed/mod against the already generated production files.
     let generated = repo_root().join("rust/crates/kernel-contracts/src/generated");
@@ -1003,7 +1221,46 @@ fn production_catalog_keeps_types_typed_mod_stable_and_renames_active_catalog() 
         mod_rs,
         std::fs::read_to_string(generated.join("mod.rs")).unwrap()
     );
-    // Only types/typed/mod remain byte-stable; catalog intentionally changes with
-    // the typed request-version selection API.
+    // catalog is intentionally non-empty with production bindings (slice 3a).
     assert!(catalog.contains("pub enum RequestVersionSelection"));
+    assert_eq!(
+        catalog,
+        std::fs::read_to_string(generated.join("catalog.rs")).unwrap(),
+        "production catalog must match generated METHOD_VERSION_BINDINGS"
+    );
+}
+
+#[test]
+fn production_generated_selector_matches_ic_targets() {
+    use kernel_contracts::{
+        method_version_binding, select_request_version, KcpMethodFamily, RequestVersionSelection,
+        METHOD_VERSION_BINDINGS,
+    };
+
+    assert_eq!(METHOD_VERSION_BINDINGS.len(), 8);
+    assert!(method_version_binding(KcpMethodFamily::Command, "task.create").is_some());
+    assert_eq!(
+        select_request_version(KcpMethodFamily::Command, "task.create", 2),
+        RequestVersionSelection::Active {
+            request_schema_id: "https://schemas.shittim.local/kcp/task_create_request/v2",
+            response_schema_id: "https://schemas.shittim.local/kcp/task_create_response/v2",
+        }
+    );
+    assert_eq!(
+        select_request_version(KcpMethodFamily::Command, "task.create", 1),
+        RequestVersionSelection::LegacyValidationOnly {
+            request_schema_id: "https://schemas.shittim.local/v1/kcp/task_create_request.json",
+        }
+    );
+    assert_eq!(
+        select_request_version(KcpMethodFamily::Command, "task.create", 9),
+        RequestVersionSelection::Unsupported
+    );
+    assert_eq!(
+        select_request_version(KcpMethodFamily::Query, "system.ping", 1),
+        RequestVersionSelection::Active {
+            request_schema_id: "https://schemas.shittim.local/v1/kcp/system_ping_request.json",
+            response_schema_id: "https://schemas.shittim.local/v1/kcp/system_ping_response.json",
+        }
+    );
 }

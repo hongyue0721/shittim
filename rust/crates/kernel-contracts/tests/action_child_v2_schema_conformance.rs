@@ -194,10 +194,14 @@ fn manifest_batch_identity_refs_and_retained_boundary() {
         entries.len() >= 70,
         "production baseline plus synthetic probe roots"
     );
-    assert!(manifest["method_version_bindings"]
-        .as_array()
-        .expect("bindings")
-        .is_empty());
+    assert_eq!(
+        manifest["method_version_bindings"]
+            .as_array()
+            .expect("bindings")
+            .len(),
+        8,
+        "slice 3a production MethodVersionBindings equal IC §13.5 eight-method set"
+    );
 
     let expected = [
         (

@@ -1331,25 +1331,36 @@ fn envelope_payload_closure_requires_payload_target_via_unified_conditional_ir()
     let temp = temporary_repo("envelope-payload-closure");
     let envelope_id = "https://schemas.shittim.local/v1/kcp/command_envelope.json";
     let payload_id = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
+    // Isolate retained v1 Envelope conditional-ref closure from MethodVersionBinding
+    // common-target checks (production bindings are non-empty after slice 3a).
+    // Production CLI stage gate requires the complete binding set, so this case
+    // uses the explicit non-production library profile with empty bindings.
+    let manifest_path = temp.join("schemas/manifest.json");
+    let mut manifest = read_json(&manifest_path);
+    manifest["method_version_bindings"] = serde_json::json!([]);
+    write_json(&manifest_path, &manifest);
     // Remove rust target from task_create_request while command_envelope stays rust.
     set_generation_targets_for_id(&temp, payload_id, serde_json::json!(["typescript"]));
-    let (code, _stdout, stderr) = run_tool_for_root(&["generate"], &temp);
-    assert_ne!(code, 0, "payload missing rust target must fail: {stderr}");
+    let registry = SchemaRegistry::load(&temp).expect("load stripped-binding registry");
+    let profile = schema_tool::SyntheticRegistry::new(&registry).expect("synthetic profile");
+    let error = schema_tool::codegen::plan_artifacts(profile)
+        .expect_err("payload missing rust target must fail")
+        .to_string();
     assert!(
-        stderr.contains("generation target closure error"),
-        "expected exact closure topic: {stderr}"
+        error.contains("generation target closure error"),
+        "expected exact closure topic: {error}"
     );
     assert!(
-        stderr.contains(envelope_id),
-        "closure error must name the envelope (from) schema: {stderr}"
+        error.contains(envelope_id),
+        "closure error must name the envelope (from) schema: {error}"
     );
     assert!(
-        stderr.contains(payload_id),
-        "closure error must name the payload dependency: {stderr}"
+        error.contains(payload_id),
+        "closure error must name the payload dependency: {error}"
     );
     assert!(
-        stderr.contains("rust"),
-        "closure error must name the required target: {stderr}"
+        error.contains("rust"),
+        "closure error must name the required target: {error}"
     );
     std::fs::remove_dir_all(temp).expect("clean temp repo");
 }

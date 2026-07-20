@@ -170,7 +170,7 @@ fn production_event_authority_is_exact_and_bindings_are_single_source() {
             .collect::<Vec<_>>()
     );
     assert_eq!(registry.schema_count(), 83);
-    assert!(registry.manifest().method_version_bindings.is_empty());
+    assert_eq!(registry.manifest().method_version_bindings.len(), 8);
     let event = registry
         .manifest()
         .components

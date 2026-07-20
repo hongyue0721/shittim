@@ -138,10 +138,11 @@ fn preflight_value_with_seams(
         None => return wire_error(&request_id, SafeWireErrorKind::InvalidRequest, validator),
     }
 
-    // Current production stage still validates retained v1 envelopes. The
-    // KCP_ENVELOPE_AUTHORITY_* catalogs describe V2 family structure only and
-    // do not imply executable registration; this legacy preflight path must not
-    // consume authority names.
+    // Slice 3a activated production MethodVersionBindings + generated
+    // select_request_version, but this preflight still consumes retained v1
+    // envelopes / KCP_LEGACY_V1_* catalogs only. Runtime switch to method-aware
+    // V2 Envelope structure + METHOD_VERSION_BINDINGS is slice 3b; authority
+    // catalogs and non-empty bindings must not be treated as executable here.
     let method = match family {
         Family::Command => method_for_family(object, "command_type", KCP_LEGACY_V1_COMMAND_METHODS),
         Family::Query => method_for_family(object, "query_type", KCP_LEGACY_V1_QUERY_METHODS),

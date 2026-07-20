@@ -437,7 +437,7 @@ fn generated_root_types_exist_and_typed_v2_wrappers_do_not() {
 }
 
 #[test]
-fn envelope_authority_and_legacy_catalogs_are_each_eight_and_bindings_empty() {
+fn envelope_authority_and_legacy_catalogs_are_each_eight_and_bindings_complete() {
     assert_eq!(KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS.len(), 2);
     assert_eq!(KCP_ENVELOPE_AUTHORITY_QUERY_METHODS.len(), 6);
     assert_eq!(KCP_ENVELOPE_AUTHORITY_METHODS.len(), 8);
@@ -447,7 +447,7 @@ fn envelope_authority_and_legacy_catalogs_are_each_eight_and_bindings_empty() {
     assert_eq!(EVENT_ACTIVE_TYPES.len(), 5);
     assert_eq!(EVENT_LEGACY_V1_BINDINGS.len(), 3);
     assert_eq!(EVENT_LEGACY_V1_TYPES.len(), 3);
-    assert!(METHOD_VERSION_BINDINGS.is_empty());
+    assert_eq!(METHOD_VERSION_BINDINGS.len(), 8);
     for method in [
         "task.create",
         "stop.activate",
@@ -465,6 +465,69 @@ fn envelope_authority_and_legacy_catalogs_are_each_eight_and_bindings_empty() {
         assert!(
             KCP_LEGACY_V1_METHODS.contains(&method),
             "missing legacy {method}"
+        );
+    }
+}
+
+#[test]
+fn production_method_version_bindings_match_ic_table_field_by_field() {
+    use kernel_contracts::{method_version_binding, KcpMethodFamily};
+
+    const V1: &str = "https://schemas.shittim.local/v1/kcp";
+
+    let create = method_version_binding(KcpMethodFamily::Command, "task.create")
+        .expect("task.create binding");
+    assert_eq!(create.active_request_versions, &[2u32]);
+    assert_eq!(create.legacy_validation_versions, &[1u32]);
+    assert_eq!(
+        create.request_schema_id_by_version,
+        &[
+            (
+                1u32,
+                "https://schemas.shittim.local/v1/kcp/task_create_request.json"
+            ),
+            (
+                2u32,
+                "https://schemas.shittim.local/kcp/task_create_request/v2"
+            ),
+        ]
+    );
+    assert_eq!(
+        create.response_schema_id_by_version,
+        &[(
+            2u32,
+            "https://schemas.shittim.local/kcp/task_create_response/v2"
+        )]
+    );
+
+    let expected_v1_only: &[(KcpMethodFamily, &str, &str)] = &[
+        (KcpMethodFamily::Command, "stop.activate", "stop_activate"),
+        (KcpMethodFamily::Query, "event.poll", "event_poll"),
+        (KcpMethodFamily::Query, "event.subscribe", "event_subscribe"),
+        (KcpMethodFamily::Query, "stop.status", "stop_status"),
+        (KcpMethodFamily::Query, "system.ping", "system_ping"),
+        (KcpMethodFamily::Query, "task.get", "task_get"),
+        (KcpMethodFamily::Query, "task.list", "task_list"),
+    ];
+    for (family, method, stem) in expected_v1_only {
+        let binding = method_version_binding(*family, method).expect("binding");
+        assert_eq!(binding.active_request_versions, &[1u32], "{method} active");
+        assert_eq!(
+            binding.legacy_validation_versions,
+            &[] as &[u32],
+            "{method} legacy"
+        );
+        let expected_request = format!("{V1}/{stem}_request.json");
+        let expected_response = format!("{V1}/{stem}_response.json");
+        assert_eq!(
+            binding.request_schema_id_by_version,
+            &[(1u32, expected_request.as_str())],
+            "{method} request map"
+        );
+        assert_eq!(
+            binding.response_schema_id_by_version,
+            &[(1u32, expected_response.as_str())],
+            "{method} response map"
         );
     }
 }

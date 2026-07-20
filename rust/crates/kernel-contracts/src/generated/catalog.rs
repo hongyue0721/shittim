@@ -259,7 +259,136 @@ pub enum RequestVersionSelection {
     Unsupported,
 }
 
+const _METHOD_BINDING_0_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_0_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_0_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/stop_activate_request.json"),
+];
+const _METHOD_BINDING_0_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/stop_activate_response.json"),
+];
+const _METHOD_BINDING_1_ACTIVE: &[u32] = &[2];
+const _METHOD_BINDING_1_LEGACY: &[u32] = &[1];
+const _METHOD_BINDING_1_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/task_create_request.json"),
+    (2, "https://schemas.shittim.local/kcp/task_create_request/v2"),
+];
+const _METHOD_BINDING_1_RESPONSE_IDS: &[(u32, &str)] = &[
+    (2, "https://schemas.shittim.local/kcp/task_create_response/v2"),
+];
+const _METHOD_BINDING_2_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_2_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_2_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/event_poll_request.json"),
+];
+const _METHOD_BINDING_2_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/event_poll_response.json"),
+];
+const _METHOD_BINDING_3_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_3_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_3_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/event_subscribe_request.json"),
+];
+const _METHOD_BINDING_3_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/event_subscribe_response.json"),
+];
+const _METHOD_BINDING_4_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_4_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_4_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/stop_status_request.json"),
+];
+const _METHOD_BINDING_4_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/stop_status_response.json"),
+];
+const _METHOD_BINDING_5_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_5_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_5_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/system_ping_request.json"),
+];
+const _METHOD_BINDING_5_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/system_ping_response.json"),
+];
+const _METHOD_BINDING_6_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_6_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_6_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/task_get_request.json"),
+];
+const _METHOD_BINDING_6_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/task_get_response.json"),
+];
+const _METHOD_BINDING_7_ACTIVE: &[u32] = &[1];
+const _METHOD_BINDING_7_LEGACY: &[u32] = &[];
+const _METHOD_BINDING_7_REQUEST_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/task_list_request.json"),
+];
+const _METHOD_BINDING_7_RESPONSE_IDS: &[(u32, &str)] = &[
+    (1, "https://schemas.shittim.local/v1/kcp/task_list_response.json"),
+];
 pub const METHOD_VERSION_BINDINGS: &[MethodVersionBinding] = &[
+    MethodVersionBinding {
+        family: KcpMethodFamily::Command,
+        method: "stop.activate",
+        active_request_versions: _METHOD_BINDING_0_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_0_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_0_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_0_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Command,
+        method: "task.create",
+        active_request_versions: _METHOD_BINDING_1_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_1_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_1_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_1_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "event.poll",
+        active_request_versions: _METHOD_BINDING_2_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_2_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_2_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_2_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "event.subscribe",
+        active_request_versions: _METHOD_BINDING_3_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_3_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_3_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_3_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "stop.status",
+        active_request_versions: _METHOD_BINDING_4_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_4_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_4_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_4_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "system.ping",
+        active_request_versions: _METHOD_BINDING_5_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_5_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_5_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_5_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "task.get",
+        active_request_versions: _METHOD_BINDING_6_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_6_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_6_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_6_RESPONSE_IDS,
+    },
+    MethodVersionBinding {
+        family: KcpMethodFamily::Query,
+        method: "task.list",
+        active_request_versions: _METHOD_BINDING_7_ACTIVE,
+        legacy_validation_versions: _METHOD_BINDING_7_LEGACY,
+        request_schema_id_by_version: _METHOD_BINDING_7_REQUEST_IDS,
+        response_schema_id_by_version: _METHOD_BINDING_7_RESPONSE_IDS,
+    },
 ];
 
 /// Lookup a method version binding by family + method.

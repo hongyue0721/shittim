@@ -1683,12 +1683,13 @@ fn registry_load_rejects_component_ref_gate_before_public_use() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
+fn production_manifest_loads_with_complete_bindings_and_lifecycle_labels() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
-    assert!(
-        registry.manifest().method_version_bindings.is_empty(),
-        "production bindings remain empty in the schema/tool stage"
+    assert_eq!(
+        registry.manifest().method_version_bindings.len(),
+        8,
+        "production bindings must equal the IC §13.5 eight-method expected set"
     );
     let mut legacy_validation = 0usize;
     let mut legacy_read = 0usize;
@@ -1711,7 +1712,7 @@ fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
     assert_eq!(breaking, 12);
     assert_eq!(registry.schema_count(), 83);
     schema_tool::validate_production_manifest_stage(&registry)
-        .expect("production stage gate accepts empty bindings");
+        .expect("production stage gate accepts complete Envelope-derived bindings");
 }
 
 #[test]
@@ -2253,10 +2254,10 @@ fn target_plan_and_rust_graph_exclude_typescript_only_orphan() {
         .expect("typescript TargetSchemaSet");
 
     assert_eq!(rust_set.target(), GenerationTarget::Rust);
-    // Production now includes active V2 Envelope authority; this mixed-target
-    // fixture inherits those roots for rust and keeps production-empty bindings.
+    // Production includes active V2 Envelope authority and the complete
+    // eight-method MethodVersionBinding set (slice 3a).
     assert!(!rust_set.active_envelope_authority().is_empty());
-    assert!(rust_set.method_version_bindings().is_empty());
+    assert_eq!(rust_set.method_version_bindings().len(), 8);
 
     assert!(
         !rust_set.roots().contains(orphan_id),
