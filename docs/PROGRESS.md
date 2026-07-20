@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-20（`V2InitialBuildActive`切片2完成：migration 0004 + `kernel-sqlite` active root TaskCreate v2 原子持久化 repository；`kernel-task-creation` pure API 接入；幂等/回滚/corruption fail-closed 测试闭合。production MethodVersionBindings 仍为空；KCP handler/preflight、child materializer、v1 写路径删除未完成。）
+> 状态日期：2026-07-21（`V2InitialBuildActive`切片3a完成：production MethodVersionBindings 八方法精确集 + stage gate 翻转 + generated `METHOD_VERSION_BINDINGS`/`select_request_version`；kernel-kcp preflight/dispatcher 仍走 retained v1，runtime 切换属切片3b；§13.7 未闭合。）
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 
@@ -34,7 +34,8 @@
 | 1c-i | 授权核心五Schema：PermissionDecisionV2、PolicyRuleV2、ApprovalRecordV2、SubjectProjectionV1、ApprovalEventAllocationV1 | **已完成** |
 | 1c-ii | 身份/挑战/证据与远程签名八Schema | **已完成** |
 | 2 | fresh SQLite 基线 + root repository | **已完成** |
-| 3 | method-aware KCP v2 preflight/dispatcher/handler + production bindings | 未开始 |
+| 3a | production MethodVersionBindings 基础层（manifest 八方法 + stage gate + generated catalog/selector） | **已完成** |
+| 3b | method-aware KCP v2 preflight/dispatcher/handler 消费 bindings | 未开始 |
 | 4 | Action / PD / Approval / Identity repository | 未开始 |
 | 5 | child Action materializer | 未开始 |
 | 6 | 删除 v1 写路径收口 + 旧库拒绝 + §13.7 谓词闭合 | 未开始 |
@@ -42,7 +43,7 @@
 **已实现（代码/Schema 事实）**
 
 - 规范与工程基线：Freedom-first / Kernel Owns Reality 合同、Apache-2.0、双仓同步 library/CLI、Node/pnpm 零依赖根基座（exact Node 24.18.0 / pnpm 11.3.0）、统一门 `scripts/check-schema.sh`。
-- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=83 entries，41 retained + 42 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / string-array const / RFC 8785；production `METHOD_VERSION_BINDINGS=[]`。
+- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=83 entries，41 retained + 42 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / string-array const / RFC 8785；production `METHOD_VERSION_BINDINGS` 为 IC §13.5 八方法集（切片3a）。
 - 纯领域：`domain-task`（Task/Action 状态图、revision/plan_version）、`domain-policy`（URI/glob/Default Allow/rate-limit draft，Stop Fence/Recovery 独立 Blocked）。
 - 持久化：`kernel-sqlite` migration 0001–0004；Audit canonical Store；legacy Task create/get（**待删除**）；版本化统一 Outbox + mixed v1/v2 append/read + 严格 stored decoder + savepoint poison（legacy append **待删除**）；**active root TaskCreate v2 repository**（`create_root_task_v2`）。
 - KCP 库级：`kernel-kcp` retained v1 Value preflight、三方法 registration/dispatcher/handler（`system.ping` / legacy `task.create` / `task.get`）与 SQLite adapter；不可连接，无 bytes/frame/server。
@@ -50,11 +51,12 @@
 - ADR-0008 前两段：Event v2 八 Schema、`EventTypeBinding`/active·legacy catalog、typed EventEnvelope v1/v2、migration 0003 descriptor v1 与 mixed Outbox API。
 - V2InitialBuildActive切片1a–1c-ii：root 持久对象、Action/child 授权、授权核心、身份/挑战/证据 Schema 与 pure crate 已落地（manifest=83）。
 - V2InitialBuildActive切片2：migration 0004（`content_origins_v2`、`task_creation_provenances`、`audit_records_v2`、`root_task_create_idempotency_v2` + tasks/scope FK 重建以允许 v2 origin）；`WriteTransaction::create_root_task_v2` 单事务写 Origin/Scope/Task/Provenance/Audit/idempotency/Event；全闭包 canonical readback（Created/Replayed 共用）；幂等重放/冲突；回滚不占号；与 v1 表互不污染。
+- V2InitialBuildActive切片3a：production `method_version_bindings` 精确八方法（`task.create` active=[2]/legacy=[1]，其余 active=[1]）；`validate_production_manifest_stage` 要求 Envelope-derived 完整集 + IC §13.5 lifecycle；generated `METHOD_VERSION_BINDINGS` 非空且 `select_request_version` 可用。
 
 **未实现（不得宣称完成）**
 
-- method-aware payload version preflight；active `task.create` 只接受 2；替换并删除 registered v1 create。
-- KCP root v2 handler + production MethodVersionBindings。
+- method-aware payload version preflight（切片3b）；active `task.create` 只接受 2；替换并删除 registered v1 create。
+- KCP root v2 handler（bindings 库事实已在 3a 激活，runtime 消费在 3b）。
 - child Action materializer；Action/PermissionDecision/Approval v2 repositories。
 - 删除 v1 runtime 写路径与旧库 `reinitialize-required` 启动拒绝。
 - 其它 active business **producer**（child/action/approval）；**Publisher** 与 versioned KCP **poll** 明确不在本里程碑。
@@ -70,7 +72,8 @@
 - [x] 切片 1c-i：授权核心五Schema + SubjectProjection pure API/fixture
 - [x] 切片 1c-ii：Credential/Challenge/Evidence/Remote signature家族
 - [x] 切片 2：fresh SQLite 基线 + root repository
-- [ ] 切片 3：method-aware KCP v2 + production bindings
+- [x] 切片 3a：production MethodVersionBindings 基础层
+- [ ] 切片 3b：method-aware KCP v2 preflight/dispatcher/handler
 - [ ] 切片 4：Action/PD/Approval/Identity repository
 - [ ] 切片 5：child materializer
 - [ ] 切片 6：删除 v1 写路径 + 旧库拒绝 + §13.7 收口

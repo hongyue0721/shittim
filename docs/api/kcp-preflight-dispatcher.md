@@ -1,6 +1,6 @@
 # KCP Value preflight 与注册式 dispatcher
 
-> 状态：当前Rust已实现legacy v1不可连接边界；active合同已升级为method-aware payload version与TaskCreate v2（`V2InitialBuildActive`），因此本实现不能作为未来server的active preflight，必须先升级并删除v1 create写路径。
+> 状态：当前Rust已实现legacy v1不可连接边界；production MethodVersionBindings 已在切片3a作为library facts激活，但本crate preflight/dispatcher仍消费retained v1路径（切片3b切换）。active合同要求method-aware payload version与TaskCreate v2（`V2InitialBuildActive`），因此本实现不能作为未来server的active preflight，必须先升级并删除v1 create写路径。
 
 ## 范围
 

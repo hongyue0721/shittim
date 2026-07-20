@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；首批 Envelope V2 / TaskCreate v2 Schema与generated root types 已落地，但production MethodVersionBindings 仍为空。当前 `kernel-kcp` 的Value preflight/dispatcher/handler仍是retained v1库级实现，active method-aware preflight、`V2InitialBuildActive` 初始交付与可连接server均未完成。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
+> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；首批 Envelope V2 / TaskCreate v2 Schema、generated root types 与 **production MethodVersionBindings（切片3a，八方法精确集）** 已落地。当前 `kernel-kcp` 的Value preflight/dispatcher/handler仍是retained v1库级实现（runtime切换属切片3b）；active method-aware preflight、`V2InitialBuildActive` 完整初始交付与可连接server均未完成。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -45,7 +45,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 - 输入只接受调用方已经解析的 `serde_json::Value`，不接 bytes/UTF-8/JSON parse/frame。
 - 现有 Value preflight、registration 与 dispatcher 是 retained v1 库级路径；active method-aware payload version preflight 仍待完成。最终优先级、完整 Schema/generated decode 与 production binding/`V2InitialBuildActive` 以 IC §5.11、§13.5、§13.7 为准。
 - active `task.create`只接受v2；v1虽有known legacy Schema，也必须返回`unsupported_schema_version`且不能进入active registration。当前Rust实现尚未完成该升级。
-- MethodVersionBinding完整validator已在工具阶段以synthetic 8-method非空manifest测试；expected family/method集合直接从registry V2 Envelope facts派生，不读取generated catalog形成循环。production manifest仍由`validate_production_manifest_stage`在check/generate入口按当前阶段断言（完成前为空；`V2InitialBuildActive`完成后等于IC §13.5目标表），synthetic registry不走该stage gate。`KCP_ENVELOPE_AUTHORITY_*`只表达family structure authority；`METHOD_VERSION_BINDINGS`表达bound version；两者都不代表registration/handler/server可用。不得以旧`KCP_METHODS`类名称混淆三层职责。
+- MethodVersionBinding完整validator已在工具阶段以synthetic 8-method非空manifest测试；expected family/method集合直接从registry V2 Envelope facts派生，不读取generated catalog形成循环。切片3a起production manifest由`validate_production_manifest_stage`在check/generate入口断言精确等于IC §13.5目标表（Envelope-derived 完整八方法 + lifecycle）；synthetic plan/render仍走显式non-production profile。`KCP_ENVELOPE_AUTHORITY_*`只表达family structure authority；`METHOD_VERSION_BINDINGS`表达bound version；两者都不代表registration/handler/server可用。kernel-kcp仍消费retained v1路径，runtime切换在3b。不得以旧`KCP_METHODS`类名称混淆三层职责。
 - active `task.create` v2的task creation纯逻辑正式owner已实现为crate`kernel-task-creation`：本阶段只负责root/child proposal normalize、root receipt/idempotency、child proposal/receipt hash与root/child allocation validation；authorization projections另切片。它依赖`kernel-contracts`并调用`domain-policy`唯一URI parser，不依赖KCP/SQLite、不分配ID、不读repo、不写存储，全部事实由caller typed input注入；handler/未来SQLite adapter只调用，不复制。当前尚未接入handler/repository。
 - task creation三份official测试制品已位于root `schemas/fixtures/kcp/task_create_normalized_hash.v2.json`、child `schemas/fixtures/task/child_task_proposal_normalized_hash.v1.json`、allocation `schemas/fixtures/task/task_creation_allocations.v1.json`；wrapper不是business Schema。official fixtures/harness已完成：production owner负责业务hash关系，独立CLI进程/Schema路径负责中立validate/canonicalize，stored bytes/hash自一致性共享唯一JCS authority；repository/handler/materializer/`V2InitialBuildActive`仍未完成。
 - request ID 不可关联时本地拒绝且不发响应；可关联的五类 preflight error 使用固定安全 message、`details=null`、`retryable=false`，并经过不可替换 Response Schema 门。
@@ -84,7 +84,7 @@ Event cursor 只使用十进制字符串表示的全局 `outbox_position`。`seq
 
 ## 已有契约产物
 
-- KCP retained v1 Envelope与八方法v1 request/response JSON Schema：`schemas/source/kcp/`；首批12个Schema的source/manifest entries与generated Rust root types已落地，包括两Envelope V2与TaskCreate request/response V2；production MethodVersionBindings仍为空。
+- KCP retained v1 Envelope与八方法v1 request/response JSON Schema：`schemas/source/kcp/`；首批12个Schema的source/manifest entries与generated Rust root types已落地，包括两Envelope V2与TaskCreate request/response V2；production MethodVersionBindings为IC §13.5八方法集（切片3a），generated `select_request_version`可用。
 - 生成的 Rust 类型与manifest catalog，以及现有 Command/Query/Event typed decode：`kernel-contracts`（见 [schema-generation.md](schema-generation.md)）。通用`decode_validated`、结构化post-Schema decode taxonomy与共享format assertion配置已完成；当前运行时仍以retained v1路径为准，active method-aware 初始交付尚未完成；
 - Response Envelope 只按 `status = ok | error` 校验。它不携带原始方法 discriminator，因此不生成方法级 typed envelope；handler/客户端必须根据原请求方法用对应 response Schema 校验成功 `payload`，再校验通用 Response Envelope；
 - 这表示不可连接 Value preflight、三方法 dispatcher/handler 已可供未来组合根调用；不表示五个缺失 handler或 KCP server 已可用。

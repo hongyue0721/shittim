@@ -1,6 +1,6 @@
 # Task创建、Child materialization 与 repository 硬合同
 
-> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness，切片1b Action/child 授权 Schema + `kernel-authorization` pure crate，以及切片2 `kernel-sqlite` **active root TaskCreate v2 repository**（migration 0004）**已实现**；production MethodVersionBindings 仍为空；KCP handler/method-aware preflight/child materializer **未实现**；legacy TaskCreate v1 create/get 仍可用但标记为 **待删除**，不得进入 future production server）
+> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness，切片1b Action/child 授权 Schema + `kernel-authorization` pure crate，以及切片2 `kernel-sqlite` **active root TaskCreate v2 repository**（migration 0004）**已实现**；production MethodVersionBindings 已激活（切片3a）；KCP handler/method-aware preflight/child materializer **未实现**；legacy TaskCreate v1 create/get 仍可用但标记为 **待删除**，不得进入 future production server）
 
 ## 唯一事实源
 

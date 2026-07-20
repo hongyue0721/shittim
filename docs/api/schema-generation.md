@@ -1,12 +1,12 @@
 # Schema 生成与契约类型
 
-> 状态徽章：**library implemented**（manifest v2 / walker / transaction / Event·KCP authority 与 catalog 已落地；production bindings 仍为 `[]`；`V2InitialBuildActive` production bindings 初始交付 / server **未完成**）
+> 状态徽章：**library implemented**（manifest v2 / walker / transaction / Event·KCP authority 与 catalog 已落地；production bindings 为 IC §13.5 八方法集（切片3a）；runtime method-aware preflight / server **未完成**）
 > 完成状态见 [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md)。
 
 ## 权威边界
 
 - 字段、枚举、错误与兼容规则：`specs/` 与 `schemas/source/**/*.json`（合同细节见 IC §5、§6、§13 与 [ADR-0002](../../adr/0002-schema生成与兼容策略.md)）。
-- 索引：`schemas/manifest.json`（production=83 entries；41 retained + 42 component-native；`method_version_bindings=[]`）。
+- 索引：`schemas/manifest.json`（production=83 entries；41 retained + 42 component-native；`method_version_bindings`=IC §13.5 八方法精确集）。
 - Rust 生成物：`rust/crates/kernel-contracts/src/generated/`（禁止手改）。
 - CLI：`schema-tool`；运行时库：`kernel-contracts`。
 - 许可证：根目录 [`LICENSE`](../../LICENSE)（Apache-2.0）。
@@ -110,3 +110,12 @@ manifest=83（41 retained + 42 component-native），bindings仍空，DAG保持`
 - [`../../adr/0002-schema生成与兼容策略.md`](../../adr/0002-schema生成与兼容策略.md)
 - [Task repository 合同](task-repository-contract.md)
 - [API 索引](README.md)
+
+## V2InitialBuildActive切片3a
+
+切片3a不新增Schema条目（manifest仍=83）。它写入production `method_version_bindings`精确八方法，并将`validate_production_manifest_stage`翻转为要求：
+
+1. method覆盖精确等于从registry V2 Envelope facts派生的expected set（不得手写第二张方法表）；
+2. lifecycle精确为IC §13.5：`task.create` active=`[2]`/legacy=`[1]`，其余七方法 active=`[1]`/legacy=`[]`。
+
+schema-tool generate输出非空`METHOD_VERSION_BINDINGS`与`select_request_version`。kernel-kcp preflight/dispatcher本片不改，仍消费retained v1 catalog；runtime切换在切片3b。bindings只证明library facts，不表示handler/server可用。
