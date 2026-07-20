@@ -82,6 +82,89 @@ pub struct ActionRequestSchemaVersion;
 impl Serialize for ActionRequestSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for ActionRequestSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2 {
+    pub action_id: String,
+    pub approval_chain_id: Option<String>,
+    pub capability_id: String,
+    pub created_at: String,
+    pub execution_generation: i64,
+    pub idempotency_key: String,
+    pub lease: Option<ActionRequestV2Lease>,
+    pub operation: String,
+    pub parent_action_id: Option<String>,
+    pub permission_decision_ref: Option<String>,
+    pub recovery_meta: Option<ActionRequestV2RecoveryMeta>,
+    pub resource_refs: Vec<String>,
+    pub result: Option<ActionRequestV2Result>,
+    pub revision: i64,
+    pub rollback_policy: Option<ActionRequestV2RollbackPolicy>,
+    pub schema_version: ActionRequestV2SchemaVersion,
+    pub side_effect_class: SideEffectClass,
+    pub status: ActionStatus,
+    pub step_id: Option<String>,
+    pub structured_arguments: JsonValue,
+    pub task_id: String,
+    pub task_scope_ref: String,
+    pub updated_at: String,
+    pub verification_policy: ActionRequestV2VerificationPolicy,
+}
+
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2Lease {
+    pub expires_at: String,
+    pub generation: i64,
+    pub holder: String,
+    pub max_uses: i64,
+}
+
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2RecoveryMeta {
+    pub last_recovery_error: Option<String>,
+    pub recovery_attempt_refs: Vec<String>,
+    pub recovery_attempted: bool,
+    pub recovery_decision_candidate_ids: Vec<String>,
+    pub unknown_side_effect_at: Option<String>,
+}
+
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2Result {
+    pub materialized_child_task_ref: Option<String>,
+    pub verification_result_refs: Vec<String>,
+}
+
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2RollbackPolicy {
+    pub auto_rollback_on: Vec<String>,
+    pub compensatable: bool,
+    pub compensation_action_ref: Option<String>,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ActionRequestV2SchemaVersion;
+impl Serialize for ActionRequestV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for ActionRequestV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/task/action_request/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionRequestV2VerificationPolicy {
+    pub expected_outcome: JsonValue,
+    pub strategy: String,
+    pub timeout: String,
+}
+
 /// Generated from `https://schemas.shittim.local/v1/task/action_request.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -175,6 +258,28 @@ impl ActionStatus {
         }
     }
 }
+
+/// Generated from `https://schemas.shittim.local/task/action_transition_intent/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionTransitionIntentV1 {
+    pub action_id: String,
+    pub correlation_id: String,
+    pub created_at: String,
+    pub execution_generation: i64,
+    pub expected_action_revision: i64,
+    pub from_status: ActionStatus,
+    pub reason_code: String,
+    pub schema_version: ActionTransitionIntentV1SchemaVersion,
+    pub to_status: ActionStatus,
+    pub transition_id: String,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/action_transition_intent/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ActionTransitionIntentV1SchemaVersion;
+impl Serialize for ActionTransitionIntentV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ActionTransitionIntentV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/common/action_transition_ref/v1`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1165,6 +1270,97 @@ pub enum CausationRefV2 {
         transition_id: String,
     },
 }
+
+/// Generated from `https://schemas.shittim.local/task/child_task_delta_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChildTaskDeltaProjectionV1 {
+    pub added_capabilities: Vec<String>,
+    pub added_exclusions: Vec<String>,
+    pub added_resource_patterns: Vec<String>,
+    pub authority_status: ChildTaskDeltaProjectionV1AuthorityStatus,
+    pub child_allowed_capability_hints: Vec<String>,
+    pub child_delegation_ref: Option<String>,
+    pub child_exclusions: Vec<String>,
+    pub child_resource_patterns: Vec<String>,
+    pub delegation_authority_ref: Option<String>,
+    pub delegation_change: ChildTaskDeltaProjectionV1DelegationChange,
+    pub delegation_revision: Option<i64>,
+    pub delegation_scope_hash: Option<String>,
+    pub parent_allowed_capability_hints: Vec<String>,
+    pub parent_delegation_ref: Option<String>,
+    pub parent_exclusions: Vec<String>,
+    pub parent_resource_patterns: Vec<String>,
+    pub parent_task_id: String,
+    pub parent_task_revision: i64,
+    pub parent_task_scope_ref: String,
+    pub removed_capabilities: Vec<String>,
+    pub removed_exclusions: Vec<String>,
+    pub removed_resource_patterns: Vec<String>,
+    pub schema_version: ChildTaskDeltaProjectionV1SchemaVersion,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/task/child_task_delta_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChildTaskDeltaProjectionV1AuthorityStatus {
+    #[serde(rename = "not_applicable")]
+    NotApplicable,
+    #[serde(rename = "verified")]
+    Verified,
+}
+
+impl ChildTaskDeltaProjectionV1AuthorityStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::NotApplicable,
+        Self::Verified,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotApplicable => "not_applicable",
+            Self::Verified => "verified",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/task/child_task_delta_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChildTaskDeltaProjectionV1DelegationChange {
+    #[serde(rename = "unchanged")]
+    Unchanged,
+    #[serde(rename = "added")]
+    Added,
+    #[serde(rename = "removed")]
+    Removed,
+    #[serde(rename = "replaced")]
+    Replaced,
+}
+
+impl ChildTaskDeltaProjectionV1DelegationChange {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Unchanged,
+        Self::Added,
+        Self::Removed,
+        Self::Replaced,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unchanged => "unchanged",
+            Self::Added => "added",
+            Self::Removed => "removed",
+            Self::Replaced => "replaced",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/child_task_delta_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ChildTaskDeltaProjectionV1SchemaVersion;
+impl Serialize for ChildTaskDeltaProjectionV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ChildTaskDeltaProjectionV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/task/child_task_materialization_allocation/v1`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -2354,6 +2550,66 @@ impl KcpResponseEnvelopeStatus {
     }
 }
 
+/// Generated from `https://schemas.shittim.local/policy/material_authorization_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialAuthorizationProjectionV1 {
+    pub action_id: String,
+    pub action_revision: i64,
+    pub actor: Actor,
+    pub capability_id: String,
+    pub child_task_delta_hash: Option<String>,
+    pub content_origin_refs: Vec<String>,
+    pub delegation_authority_ref: Option<String>,
+    pub delegation_ref: Option<String>,
+    pub delegation_revision: Option<i64>,
+    pub destination: Option<MaterialAuthorizationProjectionV1Destination>,
+    pub entry_point: EntryPoint,
+    pub key_params_hash: String,
+    pub normalized_key_params: JsonValue,
+    pub operation: String,
+    pub policy_set_revision: i64,
+    pub proposed_plan_hash: Option<String>,
+    pub proposed_plan_version: Option<i64>,
+    pub protected_surface_labels: Vec<MaterialAuthorizationProjectionV1ProtectedSurfaceLabelsItem>,
+    pub resource_refs: Vec<String>,
+    pub resource_refs_hash: String,
+    pub schema_version: MaterialAuthorizationProjectionV1SchemaVersion,
+    pub side_effect_class: SideEffectClass,
+    pub target_kind: String,
+    pub target_stable_ref: Option<String>,
+    pub task_id: String,
+    pub task_plan_version: i64,
+    pub task_proposal_hash: Option<String>,
+    pub task_revision: i64,
+    pub task_scope_ref: String,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/material_authorization_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialAuthorizationProjectionV1Destination {
+    pub account_ref: Option<String>,
+    pub channel_ref: Option<String>,
+    pub kind: String,
+    pub stable_ref: String,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/material_authorization_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MaterialAuthorizationProjectionV1ProtectedSurfaceLabelsItem {
+    pub classification: String,
+    pub label: String,
+    pub source_ref: String,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/material_authorization_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct MaterialAuthorizationProjectionV1SchemaVersion;
+impl Serialize for MaterialAuthorizationProjectionV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for MaterialAuthorizationProjectionV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/task/normalized_child_task_proposal/v1`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -2425,6 +2681,43 @@ impl NormalizedRootTaskCreatePayloadV2Proposer {
 pub struct NormalizedRootTaskCreatePayloadV2SchemaVersion;
 impl Serialize for NormalizedRootTaskCreatePayloadV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
 impl<'de> Deserialize<'de> for NormalizedRootTaskCreatePayloadV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/observation_evidence_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "observation_kind", deny_unknown_fields)]
+pub enum ObservationEvidenceProjectionV1 {
+    #[serde(rename = "not_applicable")]
+    NotApplicable {
+        schema_version: ObservationEvidenceProjectionV1NotApplicableSchemaVersion,
+    },
+    #[serde(rename = "observed")]
+    Observed {
+        coordinate_transform_hash: Option<String>,
+        destination_observation_ref: Option<String>,
+        evidence_refs: Vec<String>,
+        observed_at: String,
+        protected_surface_observations: Vec<JsonValue>,
+        provider_ref: String,
+        provider_revision: i64,
+        schema_version: ObservationEvidenceProjectionV1ObservedSchemaVersion,
+        snapshot_generation: Option<i64>,
+        snapshot_ref: Option<String>,
+        target_observation_ref: Option<String>,
+        valid_until: String,
+    },
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/observation_evidence_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ObservationEvidenceProjectionV1NotApplicableSchemaVersion;
+impl Serialize for ObservationEvidenceProjectionV1NotApplicableSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ObservationEvidenceProjectionV1NotApplicableSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated integer const from `https://schemas.shittim.local/policy/observation_evidence_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ObservationEvidenceProjectionV1ObservedSchemaVersion;
+impl Serialize for ObservationEvidenceProjectionV1ObservedSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for ObservationEvidenceProjectionV1ObservedSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/policy/permission_decision.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4516,6 +4809,32 @@ mod string_enum_contracts {
                 "event",
             ],
             CausationRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn child_task_delta_projection_v1_authority_status_string_enum_contract() {
+        assert_string_enum_contract(
+            ChildTaskDeltaProjectionV1AuthorityStatus::ALL,
+            &[
+                "not_applicable",
+                "verified",
+            ],
+            ChildTaskDeltaProjectionV1AuthorityStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn child_task_delta_projection_v1_delegation_change_string_enum_contract() {
+        assert_string_enum_contract(
+            ChildTaskDeltaProjectionV1DelegationChange::ALL,
+            &[
+                "unchanged",
+                "added",
+                "removed",
+                "replaced",
+            ],
+            ChildTaskDeltaProjectionV1DelegationChange::as_str,
         );
     }
 

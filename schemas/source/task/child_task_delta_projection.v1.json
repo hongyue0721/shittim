@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/child_task_delta_projection/v1",
+  "title": "ChildTaskDeltaProjectionV1",
+  "description": "Canonical authorization projection of parent and proposed child scope, capability, and delegation deltas.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "parent_task_id",
+    "parent_task_revision",
+    "parent_task_scope_ref",
+    "parent_resource_patterns",
+    "parent_exclusions",
+    "child_resource_patterns",
+    "child_exclusions",
+    "parent_allowed_capability_hints",
+    "child_allowed_capability_hints",
+    "added_resource_patterns",
+    "removed_resource_patterns",
+    "added_exclusions",
+    "removed_exclusions",
+    "added_capabilities",
+    "removed_capabilities",
+    "parent_delegation_ref",
+    "child_delegation_ref",
+    "delegation_change",
+    "delegation_authority_ref",
+    "delegation_revision",
+    "delegation_scope_hash",
+    "authority_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "parent_task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "parent_task_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "parent_task_scope_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "parent_resource_patterns": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "parent_exclusions": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "child_resource_patterns": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "child_exclusions": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "parent_allowed_capability_hints": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "child_allowed_capability_hints": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "added_resource_patterns": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "removed_resource_patterns": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "added_exclusions": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "removed_exclusions": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "added_capabilities": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "removed_capabilities": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "parent_delegation_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "child_delegation_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "delegation_change": {
+      "type": "string",
+      "enum": ["unchanged", "added", "removed", "replaced"]
+    },
+    "delegation_authority_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "delegation_revision": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "delegation_scope_hash": {
+      "$ref": "#/$defs/nullable_hash"
+    },
+    "authority_status": {
+      "type": "string",
+      "enum": ["not_applicable", "verified"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "parent_delegation_ref": { "type": "null" },
+          "child_delegation_ref": { "type": "null" }
+        },
+        "required": ["parent_delegation_ref", "child_delegation_ref"]
+      },
+      "then": {
+        "properties": {
+          "delegation_change": { "const": "unchanged" },
+          "delegation_authority_ref": { "type": "null" },
+          "delegation_revision": { "type": "null" },
+          "delegation_scope_hash": { "type": "null" },
+          "authority_status": { "const": "not_applicable" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parent_delegation_ref": { "type": "null" },
+          "child_delegation_ref": { "type": "string", "format": "uuid" }
+        },
+        "required": ["parent_delegation_ref", "child_delegation_ref"]
+      },
+      "then": {
+        "$ref": "#/$defs/verified_added"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parent_delegation_ref": { "type": "string", "format": "uuid" },
+          "child_delegation_ref": { "type": "null" }
+        },
+        "required": ["parent_delegation_ref", "child_delegation_ref"]
+      },
+      "then": {
+        "properties": {
+          "delegation_change": { "const": "removed" },
+          "delegation_authority_ref": { "type": "null" },
+          "delegation_revision": { "type": "null" },
+          "delegation_scope_hash": { "type": "null" },
+          "authority_status": { "const": "not_applicable" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "parent_delegation_ref": { "type": "string", "format": "uuid" },
+          "child_delegation_ref": { "type": "string", "format": "uuid" }
+        },
+        "required": ["parent_delegation_ref", "child_delegation_ref"]
+      },
+      "then": {
+        "$ref": "#/$defs/verified_existing"
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonempty_string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "verified_added": {
+      "properties": {
+        "delegation_change": { "const": "added" },
+        "delegation_authority_ref": { "type": "string", "minLength": 1 },
+        "delegation_revision": { "type": "integer", "minimum": 1 },
+        "delegation_scope_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "authority_status": { "const": "verified" }
+      }
+    },
+    "verified_existing": {
+      "properties": {
+        "delegation_change": { "enum": ["unchanged", "replaced"] },
+        "delegation_authority_ref": { "type": "string", "minLength": 1 },
+        "delegation_revision": { "type": "integer", "minimum": 1 },
+        "delegation_scope_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "authority_status": { "const": "verified" }
+      }
+    }
+  }
+}

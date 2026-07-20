@@ -1,0 +1,53 @@
+{
+  "fixture_version": 1,
+  "normalized_object": {
+    "observation_kind": "not_applicable",
+    "schema_version": 1
+  },
+  "preimage": {
+    "jcs_utf8_hex": "7b226f62736572766174696f6e5f6b696e64223a226e6f745f6170706c696361626c65222c22736368656d615f76657273696f6e223a317d",
+    "sha256": "6a92f747124fb00970a909708946dc170bb03bfee1bbbf4bf7f152289b2666c0"
+  },
+  "raw_input": {
+    "observation_kind": "not_applicable"
+  },
+  "schema_id": "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+  "tamper_cases": [
+    {
+      "case_id": "unknown_observation_kind",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "not_computed",
+        "result": "raw_input_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/observation_kind",
+      "value": "maybe"
+    },
+    {
+      "case_id": "not_applicable_with_unknown_field",
+      "expected": {
+        "result": "raw_input_rejected",
+        "schema_valid": false,
+        "domain_error": null,
+        "hash_relation": "not_computed"
+      },
+      "operation": "add",
+      "pointer": "/extra_material",
+      "value": true
+    },
+    {
+      "case_id": "switch_to_observed_without_fields",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "not_computed",
+        "result": "raw_input_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/observation_kind",
+      "value": "observed"
+    }
+  ]
+}

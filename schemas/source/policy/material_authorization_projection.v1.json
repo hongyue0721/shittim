@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/material_authorization_projection/v1",
+  "title": "MaterialAuthorizationProjectionV1",
+  "description": "Canonical material authorization facts. PermissionDecision identity, freshness, observation evidence, and approval reuse fields are deliberately excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "actor",
+    "entry_point",
+    "task_id",
+    "task_revision",
+    "task_plan_version",
+    "action_id",
+    "action_revision",
+    "capability_id",
+    "operation",
+    "side_effect_class",
+    "normalized_key_params",
+    "key_params_hash",
+    "task_scope_ref",
+    "resource_refs",
+    "resource_refs_hash",
+    "child_task_delta_hash",
+    "delegation_ref",
+    "delegation_authority_ref",
+    "delegation_revision",
+    "policy_set_revision",
+    "target_kind",
+    "target_stable_ref",
+    "destination",
+    "protected_surface_labels",
+    "content_origin_refs",
+    "task_proposal_hash",
+    "proposed_plan_version",
+    "proposed_plan_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "task_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "task_plan_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "action_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "action_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "side_effect_class": {
+      "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+    },
+    "normalized_key_params": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "key_params_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "task_scope_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "resource_refs": {
+      "$ref": "#/$defs/nonempty_string_array"
+    },
+    "resource_refs_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "child_task_delta_hash": {
+      "$ref": "#/$defs/nullable_hash"
+    },
+    "delegation_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "delegation_authority_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "delegation_revision": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "policy_set_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "target_kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_stable_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "destination": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/destination" }
+      ]
+    },
+    "protected_surface_labels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/protected_surface_label"
+      }
+    },
+    "content_origin_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid"
+      }
+    },
+    "task_proposal_hash": {
+      "$ref": "#/$defs/nullable_hash"
+    },
+    "proposed_plan_version": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "proposed_plan_hash": {
+      "$ref": "#/$defs/nullable_hash"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "delegation_ref": { "type": "null" }
+        },
+        "required": ["delegation_ref"]
+      },
+      "then": {
+        "properties": {
+          "delegation_authority_ref": { "type": "null" },
+          "delegation_revision": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "delegation_ref": { "type": "string", "format": "uuid" }
+        },
+        "required": ["delegation_ref"]
+      },
+      "then": {
+        "properties": {
+          "delegation_authority_ref": { "type": "string", "minLength": 1 },
+          "delegation_revision": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullable_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonempty_string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "stable_ref", "account_ref", "channel_ref"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stable_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "account_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "channel_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    },
+    "protected_surface_label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "classification", "source_ref"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

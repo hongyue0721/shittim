@@ -1,0 +1,287 @@
+{
+  "fixture_version": 1,
+  "normalized_object": {
+    "coordinate_transform_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "destination_observation_ref": null,
+    "evidence_refs": [
+      "evidence://1",
+      "evidence://2"
+    ],
+    "observation_kind": "observed",
+    "observed_at": "2026-07-20T08:00:00Z",
+    "protected_surface_observations": [
+      {
+        "label": "first"
+      },
+      {
+        "label": "first"
+      }
+    ],
+    "provider_ref": "provider://desktop/1",
+    "provider_revision": 2,
+    "schema_version": 1,
+    "snapshot_generation": null,
+    "snapshot_ref": null,
+    "target_observation_ref": "observation://target/1",
+    "valid_until": "2026-07-20T08:01:00Z"
+  },
+  "preimage": {
+    "jcs_utf8_hex": "7b22636f6f7264696e6174655f7472616e73666f726d5f68617368223a2265656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565656565222c2264657374696e6174696f6e5f6f62736572766174696f6e5f726566223a6e756c6c2c2265766964656e63655f72656673223a5b2265766964656e63653a2f2f31222c2265766964656e63653a2f2f32225d2c226f62736572766174696f6e5f6b696e64223a226f62736572766564222c226f627365727665645f6174223a22323032362d30372d32305430383a30303a30305a222c2270726f7465637465645f737572666163655f6f62736572766174696f6e73223a5b7b226c6162656c223a226669727374227d2c7b226c6162656c223a226669727374227d5d2c2270726f76696465725f726566223a2270726f76696465723a2f2f6465736b746f702f31222c2270726f76696465725f7265766973696f6e223a322c22736368656d615f76657273696f6e223a312c22736e617073686f745f67656e65726174696f6e223a6e756c6c2c22736e617073686f745f726566223a6e756c6c2c227461726765745f6f62736572766174696f6e5f726566223a226f62736572766174696f6e3a2f2f7461726765742f31222c2276616c69645f756e74696c223a22323032362d30372d32305430383a30313a30305a227d",
+    "sha256": "f79786db5eb5b0b51a3871407ebd49b5da51d0726c96f67826e275e706f75972"
+  },
+  "raw_input": {
+    "coordinate_transform_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "destination_observation_ref": null,
+    "evidence_refs": [
+      "evidence://2",
+      "evidence://1",
+      "evidence://1"
+    ],
+    "observation_kind": "observed",
+    "observed_at": "2026-07-20T10:00:00+02:00",
+    "protected_surface_observations": [
+      {
+        "label": "first"
+      },
+      {
+        "label": "first"
+      }
+    ],
+    "provider_ref": "provider://desktop/1",
+    "provider_revision": 2,
+    "snapshot_generation": null,
+    "snapshot_ref": null,
+    "target_observation_ref": "observation://target/1",
+    "valid_until": "2026-07-20T08:01:00Z"
+  },
+  "schema_id": "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+  "tamper_cases": [
+    {
+      "case_id": "empty_provider_ref",
+      "expected": {
+        "domain_error": {
+          "field": "provider_ref",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_ref",
+      "value": ""
+    },
+    {
+      "case_id": "pseudo_provider_core",
+      "expected": {
+        "domain_error": {
+          "field": "provider_ref",
+          "reason": "reserved pseudo-provider is forbidden"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_ref",
+      "value": "core"
+    },
+    {
+      "case_id": "pseudo_provider_none",
+      "expected": {
+        "domain_error": {
+          "field": "provider_ref",
+          "reason": "reserved pseudo-provider is forbidden"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_ref",
+      "value": "none"
+    },
+    {
+      "case_id": "pseudo_provider_system",
+      "expected": {
+        "domain_error": {
+          "field": "provider_ref",
+          "reason": "reserved pseudo-provider is forbidden"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_ref",
+      "value": "system"
+    },
+    {
+      "case_id": "zero_provider_revision",
+      "expected": {
+        "domain_error": {
+          "field": "provider_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_revision",
+      "value": 0
+    },
+    {
+      "case_id": "snapshot_ref_without_generation",
+      "expected": {
+        "domain_error": {
+          "field": "snapshot_ref",
+          "reason": "snapshot_ref and snapshot_generation must be jointly null or non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/snapshot_ref",
+      "value": "snapshot://desktop/4"
+    },
+    {
+      "case_id": "snapshot_generation_without_ref",
+      "expected": {
+        "domain_error": {
+          "field": "snapshot_ref",
+          "reason": "snapshot_ref and snapshot_generation must be jointly null or non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/snapshot_generation",
+      "value": 4
+    },
+    {
+      "case_id": "empty_snapshot_ref_with_null_generation",
+      "expected": {
+        "domain_error": {
+          "field": "snapshot_ref",
+          "reason": "snapshot_ref and snapshot_generation must be jointly null or non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/snapshot_ref",
+      "value": ""
+    },
+    {
+      "case_id": "invalid_coordinate_transform_hash",
+      "expected": {
+        "domain_error": {
+          "field": "coordinate_transform_hash",
+          "reason": "must be lowercase 64-hex"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/coordinate_transform_hash",
+      "value": "nope"
+    },
+    {
+      "case_id": "valid_until_not_after_observed_at",
+      "expected": {
+        "domain_error": {
+          "field": "valid_until",
+          "reason": "must be later than observed_at"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/valid_until",
+      "value": "2026-07-20T08:00:00Z"
+    },
+    {
+      "case_id": "invalid_observed_at",
+      "expected": {
+        "domain_error": {
+          "field": "observed_at",
+          "reason": "invalid timestamp"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/observed_at",
+      "value": "not-a-timestamp"
+    },
+    {
+      "case_id": "empty_evidence_ref",
+      "expected": {
+        "domain_error": {
+          "field": "evidence_refs",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/evidence_refs/0",
+      "value": ""
+    },
+    {
+      "case_id": "evidence_refs_reorder_same_after_set_projection",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "same",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/evidence_refs",
+      "value": [
+        "evidence://1",
+        "evidence://2",
+        "evidence://1"
+      ]
+    },
+    {
+      "case_id": "protected_surface_order_different_hash",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "different",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/protected_surface_observations",
+      "value": [
+        {
+          "label": "second"
+        },
+        {
+          "label": "first"
+        }
+      ]
+    },
+    {
+      "case_id": "missing_provider_ref",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "not_computed",
+        "result": "raw_input_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/provider_ref",
+      "value": null
+    }
+  ]
+}

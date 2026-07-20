@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/action_transition_intent/v1",
+  "title": "ActionTransitionIntentV1",
+  "description": "Immutable authority prepared before an Action status event is committed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "transition_id",
+    "action_id",
+    "expected_action_revision",
+    "execution_generation",
+    "from_status",
+    "to_status",
+    "reason_code",
+    "correlation_id",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "transition_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "action_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "expected_action_revision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "execution_generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "from_status": {
+      "$ref": "https://schemas.shittim.local/v1/common/action_status.json"
+    },
+    "to_status": {
+      "$ref": "https://schemas.shittim.local/v1/common/action_status.json"
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "from_status": { "const": "pending" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["approved", "cancelled"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "approved" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["leased", "cancelled"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "leased" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["in_flight", "approved", "cancelled", "unknown_side_effect"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "in_flight" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["completed", "failed", "unknown_side_effect"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "unknown_side_effect" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["completed", "failed", "rolling_back"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "failed" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "const": "rolling_back" } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "const": "rolling_back" } }, "required": ["from_status"] },
+      "then": { "properties": { "to_status": { "enum": ["rolled_back", "rollback_failed"] } } }
+    },
+    {
+      "if": { "properties": { "from_status": { "enum": ["completed", "rolled_back", "rollback_failed", "cancelled"] } }, "required": ["from_status"] },
+      "then": false
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }
+  }
+}

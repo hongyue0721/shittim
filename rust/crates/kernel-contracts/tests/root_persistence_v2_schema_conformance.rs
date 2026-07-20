@@ -306,8 +306,8 @@ fn slice_roots_match_manifest_identity_refs_and_component_dag() {
         .expect("manifest json");
     let entries = manifest["schemas"].as_array().expect("manifest schemas");
     assert!(
-        entries.len() >= 65,
-        "production baseline plus optional synthetic probe roots"
+        entries.len() >= 70,
+        "production baseline plus optional synthetic probe roots after slice 1b"
     );
     assert!(manifest["method_version_bindings"]
         .as_array()

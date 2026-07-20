@@ -1,8 +1,9 @@
 //! First-batch task-creation and root-persistence business-v2 Schema/typed conformance.
 //!
 //! Scope: the historical first task-creation batch of 12 component-native roots,
-//! the Event v2 eight-schema batch, and the V2InitialBuildActive slice 1a four
-//! source roots (65 total = 41 retained + 24 component-native).
+//! the Event v2 eight-schema batch, V2InitialBuildActive slice 1a four roots,
+//! and slice 1b five Action/authorization roots (70 total = 41 retained + 29
+//! component-native).
 
 use kernel_contracts::{
     decode_validated, validate_json, ChildTaskMaterializationAllocationV1, ChildTaskProposalV1,
@@ -283,12 +284,12 @@ where
 fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_creation_roots() {
     let catalog = catalog();
     let ids = catalog.schema_ids();
-    // Production is exactly 65 = 41 retained + 24 component-native. Synthetic probe
+    // Production is exactly 70 = 41 retained + 29 component-native. Synthetic probe
     // repos used by schema-tool tests may temporarily append extra component-native
     // entries; those must not weaken the 12-root identity assertions below.
     assert!(
-        ids.len() >= 65,
-        "embedded catalog must contain at least production 65 schemas, got {}",
+        ids.len() >= 70,
+        "embedded catalog must contain at least production 70 schemas, got {}",
         ids.len()
     );
     let retained_prefix = "https://schemas.shittim.local/v1/";
@@ -317,7 +318,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         12,
         "historical task-creation batch remains 12 roots"
     );
-    // Pure production catalogs must still be exact 65. Probe-only extras are allowed
+    // Pure production catalogs must still be exact 70. Probe-only extras are allowed
     // only when additional component-native ids are present beyond the production set.
     let production_native_ids: BTreeSet<&str> = [
         "https://schemas.shittim.local/audit/audit_allocation/v2",
@@ -336,6 +337,11 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         "https://schemas.shittim.local/kcp/task_create_response/v2",
         "https://schemas.shittim.local/policy/approval_record_kind/v2",
         "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+        "https://schemas.shittim.local/policy/material_authorization_projection/v1",
+        "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+        "https://schemas.shittim.local/task/action_request/v2",
+        "https://schemas.shittim.local/task/action_transition_intent/v1",
+        "https://schemas.shittim.local/task/child_task_delta_projection/v1",
         "https://schemas.shittim.local/task/child_task_materialization_allocation/v1",
         "https://schemas.shittim.local/task/child_task_proposal/v1",
         "https://schemas.shittim.local/task/input_task_scope/v1",
@@ -354,7 +360,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         })
         .count();
     if extra_native == 0 {
-        assert_eq!(ids.len(), 65, "pure production catalog must be exactly 65");
+        assert_eq!(ids.len(), 70, "pure production catalog must be exactly 70");
     }
 }
 

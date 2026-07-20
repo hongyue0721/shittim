@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+  "title": "ObservationEvidenceProjectionV1",
+  "description": "Canonical instantaneous observation evidence, represented as a closed not_applicable or observed tagged union.",
+  "type": "object",
+  "required": ["schema_version", "observation_kind"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "observation_kind": {
+      "type": "string",
+      "enum": ["not_applicable", "observed"]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "observation_kind"],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "observation_kind": {
+          "type": "string",
+          "const": "not_applicable"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "observation_kind",
+        "provider_ref",
+        "provider_revision",
+        "snapshot_ref",
+        "snapshot_generation",
+        "target_observation_ref",
+        "coordinate_transform_hash",
+        "observed_at",
+        "valid_until",
+        "evidence_refs",
+        "protected_surface_observations",
+        "destination_observation_ref"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "observation_kind": {
+          "type": "string",
+          "const": "observed"
+        },
+        "provider_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snapshot_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "snapshot_generation": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "target_observation_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "coordinate_transform_hash": {
+          "$ref": "#/$defs/nullable_hash"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_until": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidence_refs": {
+          "$ref": "#/$defs/nonempty_string_array"
+        },
+        "protected_surface_observations": {
+          "type": "array",
+          "items": true
+        },
+        "destination_observation_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "snapshot_ref": { "type": "null" }
+            },
+            "required": ["snapshot_ref"]
+          },
+          "then": {
+            "properties": {
+              "snapshot_generation": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "snapshot_generation": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "snapshot_generation": { "type": "null" }
+            },
+            "required": ["snapshot_generation"]
+          },
+          "then": {
+            "properties": {
+              "snapshot_ref": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "snapshot_ref": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "nullable_hash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonempty_string_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

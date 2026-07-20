@@ -1,0 +1,21 @@
+[package]
+name = "kernel-authorization"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pure authorization projection construction, validation, JCS, and SHA-256"
+
+[dependencies]
+chrono.workspace = true
+domain-policy = { path = "../domain-policy" }
+kernel-contracts = { path = "../kernel-contracts" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+hex.workspace = true
+schema-tool = { path = "../schema-tool" }
+sha2.workspace = true

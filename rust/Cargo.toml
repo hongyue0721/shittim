@@ -4,6 +4,7 @@ members = [
     "crates/domain-policy",
     "crates/domain-task",
     "crates/kernel-contracts",
+    "crates/kernel-authorization",
     "crates/kernel-kcp",
     "crates/kernel-sqlite",
     "crates/kernel-task-creation",

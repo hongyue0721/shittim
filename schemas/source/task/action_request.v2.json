@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/action_request/v2",
+  "title": "ActionRequestV2",
+  "description": "Active persisted Action shape with current authorization binding, execution generation, child materialization result, verification references, revision, and lease facts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "action_id",
+    "task_id",
+    "step_id",
+    "parent_action_id",
+    "capability_id",
+    "operation",
+    "structured_arguments",
+    "resource_refs",
+    "task_scope_ref",
+    "side_effect_class",
+    "idempotency_key",
+    "execution_generation",
+    "permission_decision_ref",
+    "approval_chain_id",
+    "verification_policy",
+    "rollback_policy",
+    "result",
+    "status",
+    "recovery_meta",
+    "lease",
+    "schema_version",
+    "revision",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "action_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "step_id": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "parent_action_id": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "structured_arguments": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "resource_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "task_scope_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "side_effect_class": {
+      "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "execution_generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "permission_decision_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "approval_chain_id": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "verification_policy": {
+      "$ref": "#/$defs/verification_policy"
+    },
+    "rollback_policy": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/rollback_policy" }
+      ]
+    },
+    "result": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/result" }
+      ]
+    },
+    "status": {
+      "$ref": "https://schemas.shittim.local/v1/common/action_status.json"
+    },
+    "recovery_meta": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/recovery_meta" }
+      ]
+    },
+    "lease": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/lease" }
+      ]
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "verification_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "expected_outcome", "timeout"],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_outcome": true,
+        "timeout": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rollback_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compensatable", "compensation_action_ref", "auto_rollback_on"],
+      "properties": {
+        "compensatable": {
+          "type": "boolean"
+        },
+        "compensation_action_ref": {
+          "$ref": "#/$defs/nullable_uuid"
+        },
+        "auto_rollback_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["materialized_child_task_ref", "verification_result_refs"],
+      "properties": {
+        "materialized_child_task_ref": {
+          "$ref": "#/$defs/nullable_uuid"
+        },
+        "verification_result_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        }
+      }
+    },
+    "recovery_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknown_side_effect_at",
+        "recovery_attempted",
+        "recovery_decision_candidate_ids",
+        "recovery_attempt_refs",
+        "last_recovery_error"
+      ],
+      "properties": {
+        "unknown_side_effect_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "recovery_attempted": {
+          "type": "boolean"
+        },
+        "recovery_decision_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "recovery_attempt_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "last_recovery_error": {
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["holder", "generation", "expires_at", "max_uses"],
+      "properties": {
+        "holder": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "max_uses": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,325 @@
+{
+  "fixture_version": 1,
+  "normalized_object": {
+    "added_capabilities": [
+      "write"
+    ],
+    "added_exclusions": [],
+    "added_resource_patterns": [
+      "https://example.com/b/**"
+    ],
+    "authority_status": "verified",
+    "child_allowed_capability_hints": [
+      "read",
+      "write"
+    ],
+    "child_delegation_ref": "00000000-0000-4000-8000-000000000009",
+    "child_exclusions": [],
+    "child_resource_patterns": [
+      "https://example.com/a/**",
+      "https://example.com/b/**"
+    ],
+    "delegation_authority_ref": "delegation-authority://1",
+    "delegation_change": "replaced",
+    "delegation_revision": 3,
+    "delegation_scope_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "parent_allowed_capability_hints": [
+      "read"
+    ],
+    "parent_delegation_ref": "00000000-0000-4000-8000-000000000008",
+    "parent_exclusions": [
+      "https://example.com/a/tmp/**"
+    ],
+    "parent_resource_patterns": [
+      "https://example.com/a/**",
+      "https://example.com/a/**",
+      "https://example.com/c/**"
+    ],
+    "parent_task_id": "00000000-0000-4000-8000-000000000001",
+    "parent_task_revision": 2,
+    "parent_task_scope_ref": "00000000-0000-4000-8000-000000000002",
+    "removed_capabilities": [],
+    "removed_exclusions": [
+      "https://example.com/a/tmp/**"
+    ],
+    "removed_resource_patterns": [
+      "https://example.com/a/**",
+      "https://example.com/c/**"
+    ],
+    "schema_version": 1
+  },
+  "preimage": {
+    "jcs_utf8_hex": "7b2261646465645f6361706162696c6974696573223a5b227772697465225d2c2261646465645f6578636c7573696f6e73223a5b5d2c2261646465645f7265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f622f2a2a225d2c22617574686f726974795f737461747573223a227665726966696564222c226368696c645f616c6c6f7765645f6361706162696c6974795f68696e7473223a5b2272656164222c227772697465225d2c226368696c645f64656c65676174696f6e5f726566223a2230303030303030302d303030302d343030302d383030302d303030303030303030303039222c226368696c645f6578636c7573696f6e73223a5b5d2c226368696c645f7265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f622f2a2a225d2c2264656c65676174696f6e5f617574686f726974795f726566223a2264656c65676174696f6e2d617574686f726974793a2f2f31222c2264656c65676174696f6e5f6368616e6765223a227265706c61636564222c2264656c65676174696f6e5f7265766973696f6e223a332c2264656c65676174696f6e5f73636f70655f68617368223a2261616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161222c22706172656e745f616c6c6f7765645f6361706162696c6974795f68696e7473223a5b2272656164225d2c22706172656e745f64656c65676174696f6e5f726566223a2230303030303030302d303030302d343030302d383030302d303030303030303030303038222c22706172656e745f6578636c7573696f6e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f746d702f2a2a225d2c22706172656e745f7265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f612f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f632f2a2a225d2c22706172656e745f7461736b5f6964223a2230303030303030302d303030302d343030302d383030302d303030303030303030303031222c22706172656e745f7461736b5f7265766973696f6e223a322c22706172656e745f7461736b5f73636f70655f726566223a2230303030303030302d303030302d343030302d383030302d303030303030303030303032222c2272656d6f7665645f6361706162696c6974696573223a5b5d2c2272656d6f7665645f6578636c7573696f6e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f746d702f2a2a225d2c2272656d6f7665645f7265736f757263655f7061747465726e73223a5b2268747470733a2f2f6578616d706c652e636f6d2f612f2a2a222c2268747470733a2f2f6578616d706c652e636f6d2f632f2a2a225d2c22736368656d615f76657273696f6e223a317d",
+    "sha256": "eaabdfcf048f973eb65bd3caec27e7694cbb6250094bc3432601863ed32ed74c"
+  },
+  "raw_input": {
+    "child_allowed_capability_hints": [
+      "write",
+      "read"
+    ],
+    "child_delegation_authority": {
+      "authority_ref": "delegation-authority://1",
+      "revision": 3,
+      "scope_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "child_delegation_ref": "00000000-0000-4000-8000-000000000009",
+    "child_exclusions": [],
+    "child_resource_patterns": [
+      "https://example.com/a/**",
+      "https://example.com/b/**"
+    ],
+    "parent_allowed_capability_hints": [
+      "read",
+      "read"
+    ],
+    "parent_delegation_ref": "00000000-0000-4000-8000-000000000008",
+    "parent_exclusions": [
+      "https://example.com/a/tmp/**"
+    ],
+    "parent_resource_patterns": [
+      "https://example.com/a/**",
+      "https://example.com/a/**",
+      "https://example.com/c/**"
+    ],
+    "parent_task_id": "00000000-0000-4000-8000-000000000001",
+    "parent_task_revision": 2,
+    "parent_task_scope_ref": "00000000-0000-4000-8000-000000000002"
+  },
+  "schema_id": "https://schemas.shittim.local/task/child_task_delta_projection/v1",
+  "tamper_cases": [
+    {
+      "case_id": "missing_parent_task_revision_type",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "not_computed",
+        "result": "raw_input_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/parent_task_revision",
+      "value": "not-an-int"
+    },
+    {
+      "case_id": "zero_parent_task_revision",
+      "expected": {
+        "domain_error": {
+          "field": "parent_task_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/parent_task_revision",
+      "value": 0
+    },
+    {
+      "case_id": "empty_parent_resource_pattern",
+      "expected": {
+        "domain_error": {
+          "field": "parent_resource_patterns",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/parent_resource_patterns/0",
+      "value": ""
+    },
+    {
+      "case_id": "noncanonical_parent_resource_pattern",
+      "expected": {
+        "domain_error": {
+          "field": "parent_resource_patterns",
+          "reason": "URI pattern is not canonical"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/parent_resource_patterns/0",
+      "value": "HTTPS://Example.COM:443/a/**"
+    },
+    {
+      "case_id": "invalid_child_resource_pattern",
+      "expected": {
+        "domain_error": {
+          "field": "child_resource_patterns",
+          "reason": "invalid URI pattern"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_resource_patterns/0",
+      "value": "not a uri"
+    },
+    {
+      "case_id": "empty_parent_capability_hint",
+      "expected": {
+        "domain_error": {
+          "field": "parent_allowed_capability_hints",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/parent_allowed_capability_hints/0",
+      "value": ""
+    },
+    {
+      "case_id": "empty_child_exclusion",
+      "expected": {
+        "domain_error": {
+          "field": "child_exclusions",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "add",
+      "pointer": "/child_exclusions/0",
+      "value": ""
+    },
+    {
+      "case_id": "clear_child_delegation_ref_with_authority_present",
+      "expected": {
+        "domain_error": {
+          "field": "child_delegation_authority",
+          "reason": "must be absent when child_delegation_ref is null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_ref",
+      "value": null
+    },
+    {
+      "case_id": "remove_child_delegation_authority_while_ref_present",
+      "expected": {
+        "domain_error": {
+          "field": "child_delegation_authority",
+          "reason": "is required when child_delegation_ref is non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_authority",
+      "value": null
+    },
+    {
+      "case_id": "empty_delegation_authority_ref",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_authority_ref",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_authority/authority_ref",
+      "value": ""
+    },
+    {
+      "case_id": "zero_delegation_revision",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_authority/revision",
+      "value": 0
+    },
+    {
+      "case_id": "invalid_delegation_scope_hash",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_scope_hash",
+          "reason": "must be lowercase 64-hex"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_authority/scope_hash",
+      "value": "not-a-hash"
+    },
+    {
+      "case_id": "uppercase_delegation_scope_hash",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_scope_hash",
+          "reason": "must be lowercase 64-hex"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_delegation_authority/scope_hash",
+      "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "case_id": "capability_hint_reorder_same_hash",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "same",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/child_allowed_capability_hints",
+      "value": [
+        "read",
+        "write"
+      ]
+    },
+    {
+      "case_id": "resource_pattern_reorder_different_hash",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "different",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/child_resource_patterns",
+      "value": [
+        "https://example.com/b/**",
+        "https://example.com/a/**"
+      ]
+    },
+    {
+      "case_id": "parent_task_id_change_different_hash",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "different",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/parent_task_id",
+      "value": "00000000-0000-4000-8000-000000000063"
+    }
+  ]
+}

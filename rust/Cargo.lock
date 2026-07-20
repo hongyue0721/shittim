@@ -747,6 +747,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernel-authorization"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "domain-policy",
+ "hex",
+ "kernel-contracts",
+ "schema-tool",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "kernel-contracts"
 version = "0.1.0"
 dependencies = [

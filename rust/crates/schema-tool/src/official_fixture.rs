@@ -1,10 +1,15 @@
-//! Shared parser and invariant owner for the three official task-creation fixtures.
+//! Shared parser and invariant owner for official projection and task-creation fixtures.
 //!
 //! This module is a public, non-stable test-artifact API. It exists so the
-//! `schema-tool` CLI oracle and the `kernel-task-creation` business harness read
-//! exactly the same wrapper contract. These Rust types are not production
-//! business contracts, are not generated SDK types, and must not be added to the
-//! Schema manifest or generated artifacts.
+//! `schema-tool` CLI oracle and production-owner harnesses read exactly the same
+//! wrapper contract. These Rust types are not production business contracts, are
+//! not generated SDK types, and must not be added to the Schema manifest or
+//! generated artifacts.
+//!
+//! Authorization projection fixtures reuse the same strict RFC6901 pointer,
+//! case-id uniqueness, and expected cross-invariant discipline as the three
+//! task-creation wrappers. Their outer shape is the generic single-object form
+//! `raw_input` / `normalized_object` / `preimage` / `tamper_cases`.
 
 use crate::{JsonMutationOperation, JsonPointer};
 use serde::{Deserialize, Serialize};
@@ -17,6 +22,10 @@ pub const ROOT_TAMPER_CASE_COUNT: usize = 43;
 pub const CHILD_TAMPER_CASE_COUNT: usize = 34;
 pub const ROOT_ALLOCATION_TAMPER_CASE_COUNT: usize = 7;
 pub const CHILD_ALLOCATION_TAMPER_CASE_COUNT: usize = 7;
+pub const CHILD_DELTA_TAMPER_CASE_COUNT: usize = 16;
+pub const MATERIAL_TAMPER_CASE_COUNT: usize = 16;
+pub const OBSERVATION_NOT_APPLICABLE_TAMPER_CASE_COUNT: usize = 3;
+pub const OBSERVATION_OBSERVED_TAMPER_CASE_COUNT: usize = 15;
 
 #[derive(Debug, Error)]
 pub enum OfficialFixtureError {
@@ -93,6 +102,135 @@ pub struct AllocationFixture {
     pub fixture_version: u32,
     pub root: AllocationSide,
     pub child: AllocationSide,
+}
+
+/// Generic single-object official fixture used by authorization projections.
+///
+/// `raw_input` is a JSON encoding of production typed Facts (not a business Schema).
+/// `normalized_object` is the Schema-validated projection value. Preimage fields hold
+/// exact lowercase JCS hex and SHA-256 only — never a canonical JSON string.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionFixture {
+    pub fixture_version: u32,
+    pub schema_id: String,
+    pub raw_input: Value,
+    pub normalized_object: Value,
+    pub preimage: Preimage,
+    pub tamper_cases: Vec<ProjectionTamperCase>,
+}
+
+impl ProjectionFixture {
+    pub fn validate(&self) -> Result<(), OfficialFixtureError> {
+        require_version(self.fixture_version, "projection")?;
+        require_nonempty_text(&self.schema_id, "projection.schema_id")?;
+        require_object(&self.raw_input, "projection.raw_input")?;
+        require_object(&self.normalized_object, "projection.normalized_object")?;
+        require_nonempty_cases(&self.tamper_cases, "projection")?;
+        require_unique_case_ids(self.tamper_cases.iter().map(|case| case.case_id.as_str()))?;
+        for case in &self.tamper_cases {
+            case.validate()?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionTamperCase {
+    pub case_id: String,
+    pub operation: MutationOperation,
+    pub pointer: JsonPointer,
+    pub value: Value,
+    pub expected: ProjectionExpected,
+}
+
+impl ProjectionTamperCase {
+    fn validate(&self) -> Result<(), OfficialFixtureError> {
+        validate_case_identity(&self.case_id, &self.pointer)?;
+        self.expected.validate(&self.case_id)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionExpected {
+    pub result: ProjectionResult,
+    pub schema_valid: bool,
+    pub domain_error: Option<ProjectionDomainError>,
+    pub hash_relation: HashRelation,
+}
+
+impl ProjectionExpected {
+    fn validate(&self, case_id: &str) -> Result<(), OfficialFixtureError> {
+        match self.result {
+            ProjectionResult::RawInputRejected => {
+                if self.schema_valid {
+                    return contract_error(format!(
+                        "{case_id}: raw_input_rejected forbids schema_valid true"
+                    ));
+                }
+                require_no_domain_error(case_id, self.domain_error.as_ref(), "raw_input_rejected")?;
+                require_relation(
+                    case_id,
+                    "rejected projection hash",
+                    self.hash_relation,
+                    HashRelation::NotComputed,
+                )
+            }
+            ProjectionResult::DomainRejected => {
+                // Domain rejection may leave the mutated raw input Schema-invalid for the
+                // projection object; harness never Schema-validates raw Facts. schema_valid
+                // here describes the *normalized_object* path and is fixed false when domain
+                // fails before a projection object exists.
+                if self.schema_valid {
+                    return contract_error(format!(
+                        "{case_id}: domain_rejected forbids schema_valid true"
+                    ));
+                }
+                let error = self.domain_error.as_ref().ok_or_else(|| {
+                    OfficialFixtureError::Contract(format!(
+                        "{case_id}: domain_rejected must carry domain_error"
+                    ))
+                })?;
+                require_nonempty_text(&error.field, &format!("{case_id}.domain_error.field"))?;
+                require_nonempty_text(&error.reason, &format!("{case_id}.domain_error.reason"))?;
+                require_relation(
+                    case_id,
+                    "rejected projection hash",
+                    self.hash_relation,
+                    HashRelation::NotComputed,
+                )
+            }
+            ProjectionResult::HashComputed => {
+                if !self.schema_valid {
+                    return contract_error(format!(
+                        "{case_id}: hash_computed requires schema_valid true"
+                    ));
+                }
+                require_no_domain_error(case_id, self.domain_error.as_ref(), "hash_computed")?;
+                require_computed_relation(case_id, "computed projection hash", self.hash_relation)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectionDomainError {
+    pub field: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectionResult {
+    /// Mutated raw_input cannot be decoded into production typed Facts.
+    RawInputRejected,
+    /// Typed Facts decode, but production projection owner rejects them.
+    DomainRejected,
+    /// Projection succeeds and a hash is available for relation checks.
+    HashComputed,
 }
 
 impl AllocationFixture {
@@ -370,6 +508,13 @@ pub fn load_allocation_fixture(
     parse_allocation_fixture(&bytes)
 }
 
+pub fn load_projection_fixture(
+    path: impl AsRef<Path>,
+) -> Result<ProjectionFixture, OfficialFixtureError> {
+    let bytes = read_fixture(path)?;
+    parse_projection_fixture(&bytes)
+}
+
 pub fn parse_root_fixture(bytes: &[u8]) -> Result<RootFixture, OfficialFixtureError> {
     parse_validated(bytes, "root", RootFixture::validate)
 }
@@ -380,6 +525,10 @@ pub fn parse_child_fixture(bytes: &[u8]) -> Result<ChildFixture, OfficialFixture
 
 pub fn parse_allocation_fixture(bytes: &[u8]) -> Result<AllocationFixture, OfficialFixtureError> {
     parse_validated(bytes, "allocation", AllocationFixture::validate)
+}
+
+pub fn parse_projection_fixture(bytes: &[u8]) -> Result<ProjectionFixture, OfficialFixtureError> {
+    parse_validated(bytes, "projection", ProjectionFixture::validate)
 }
 
 fn read_fixture(path: impl AsRef<Path>) -> Result<Vec<u8>, OfficialFixtureError> {
@@ -484,6 +633,18 @@ fn require_no_public_error(
         Ok(())
     } else {
         contract_error(format!("{case_id}: {result} forbids public_error"))
+    }
+}
+
+fn require_no_domain_error(
+    case_id: &str,
+    error: Option<&ProjectionDomainError>,
+    result: &str,
+) -> Result<(), OfficialFixtureError> {
+    if error.is_none() {
+        Ok(())
+    } else {
+        contract_error(format!("{case_id}: {result} forbids domain_error"))
     }
 }
 
@@ -660,5 +821,71 @@ mod tests {
         fixture["tamper_cases"][0]["expected"]["hash_relations"]["receipt"] = json!("future");
         let error = parse_root_fixture(&serde_json::to_vec(&fixture).unwrap()).unwrap_err();
         assert!(matches!(error, OfficialFixtureError::Decode { .. }));
+    }
+
+    fn minimal_projection_case() -> Value {
+        json!({
+            "case_id": "case",
+            "operation": "replace",
+            "pointer": "/value",
+            "value": true,
+            "expected": {
+                "result": "hash_computed",
+                "schema_valid": true,
+                "domain_error": null,
+                "hash_relation": "same"
+            }
+        })
+    }
+
+    fn minimal_projection_fixture() -> Value {
+        json!({
+            "fixture_version": 1,
+            "schema_id": "https://example.test/projection",
+            "raw_input": {},
+            "normalized_object": {},
+            "preimage": { "jcs_utf8_hex": "00", "sha256": "00" },
+            "tamper_cases": [minimal_projection_case()]
+        })
+    }
+
+    #[test]
+    fn projection_parser_enforces_wrapper_and_domain_cross_invariants() {
+        let mut fixture = minimal_projection_fixture();
+        fixture["schema_id"] = json!("");
+        let error = parse_projection_fixture(&serde_json::to_vec(&fixture).unwrap()).unwrap_err();
+        assert!(error.to_string().contains("schema_id must be non-empty"));
+
+        fixture = minimal_projection_fixture();
+        fixture["tamper_cases"][0]["expected"] = json!({
+            "result": "domain_rejected",
+            "schema_valid": true,
+            "domain_error": { "field": "x", "reason": "y" },
+            "hash_relation": "not_computed"
+        });
+        let error = parse_projection_fixture(&serde_json::to_vec(&fixture).unwrap()).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("domain_rejected forbids schema_valid true"));
+
+        fixture["tamper_cases"][0]["expected"] = json!({
+            "result": "domain_rejected",
+            "schema_valid": false,
+            "domain_error": null,
+            "hash_relation": "not_computed"
+        });
+        let error = parse_projection_fixture(&serde_json::to_vec(&fixture).unwrap()).unwrap_err();
+        assert!(error.to_string().contains("must carry domain_error"));
+
+        fixture["tamper_cases"][0]["expected"] = json!({
+            "result": "raw_input_rejected",
+            "schema_valid": false,
+            "domain_error": { "field": "x", "reason": "y" },
+            "hash_relation": "not_computed"
+        });
+        let error = parse_projection_fixture(&serde_json::to_vec(&fixture).unwrap()).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("raw_input_rejected forbids domain_error"));
     }
 }

@@ -948,6 +948,71 @@
       ],
       "schema_version_field": "schema_version",
       "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/action_transition_intent/v1",
+      "title": "ActionTransitionIntentV1",
+      "version": 1,
+      "source": "schemas/source/task/action_transition_intent.v1.json",
+      "kind": "domain_object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/action_request/v2",
+      "title": "ActionRequestV2",
+      "version": 2,
+      "source": "schemas/source/task/action_request.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/child_task_delta_projection/v1",
+      "title": "ChildTaskDeltaProjectionV1",
+      "version": 1,
+      "source": "schemas/source/task/child_task_delta_projection.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/material_authorization_projection/v1",
+      "title": "MaterialAuthorizationProjectionV1",
+      "version": 1,
+      "source": "schemas/source/policy/material_authorization_projection.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+      "title": "ObservationEvidenceProjectionV1",
+      "version": 1,
+      "source": "schemas/source/policy/observation_evidence_projection.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
     }
   ]
 }

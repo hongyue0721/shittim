@@ -339,8 +339,8 @@ fn event_v2_eight_roots_match_manifest_and_embedded_documents_in_production_or_s
         .expect("manifest json");
     let entries = manifest["schemas"].as_array().expect("manifest schemas");
     assert!(
-        entries.len() >= 65,
-        "production baseline plus optional synthetic probes must contain at least 65 entries"
+        entries.len() >= 70,
+        "production baseline plus optional synthetic probes must contain at least 70 entries"
     );
     assert_eq!(EVENT_V2_ROOTS.len(), 8);
 

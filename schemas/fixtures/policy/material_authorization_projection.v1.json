@@ -1,0 +1,377 @@
+{
+  "fixture_version": 1,
+  "normalized_object": {
+    "action_id": "00000000-0000-4000-8000-000000000003",
+    "action_revision": 4,
+    "actor": {
+      "authentication_level": "platform_verified",
+      "confidence": 0.9,
+      "id": "actor-local-1",
+      "kind": "known_user",
+      "revision": 2,
+      "schema_version": 1,
+      "source": "local-desktop"
+    },
+    "capability_id": "computer.input",
+    "child_task_delta_hash": null,
+    "content_origin_refs": [
+      "00000000-0000-4000-8000-000000000007",
+      "00000000-0000-4000-8000-000000000008"
+    ],
+    "delegation_authority_ref": null,
+    "delegation_ref": null,
+    "delegation_revision": null,
+    "destination": {
+      "account_ref": "account://owner",
+      "channel_ref": "channel://personal/1",
+      "kind": "channel",
+      "stable_ref": "channel://personal/1"
+    },
+    "entry_point": "local_desktop",
+    "key_params_hash": "99168216144c7fed5d4c54916cf98d9c66096280c04a499822a99b6658bd177a",
+    "normalized_key_params": {
+      "a": 1,
+      "z": 2
+    },
+    "operation": "click",
+    "policy_set_revision": 5,
+    "proposed_plan_hash": null,
+    "proposed_plan_version": null,
+    "protected_surface_labels": [
+      {
+        "classification": "sensitive",
+        "label": "authentication",
+        "source_ref": "surface://2"
+      },
+      {
+        "classification": "critical",
+        "label": "payment",
+        "source_ref": "surface://1"
+      }
+    ],
+    "resource_refs": [
+      "https://example.com/a",
+      "https://example.com/b"
+    ],
+    "resource_refs_hash": "d737a0285f6ba68383e89f64ed54dfcdc20ca3dda15bfe162bd7a1770dd3d836",
+    "schema_version": 1,
+    "side_effect_class": "S2",
+    "target_kind": "semantic_element",
+    "target_stable_ref": "element://button/7",
+    "task_id": "00000000-0000-4000-8000-000000000001",
+    "task_plan_version": 1,
+    "task_proposal_hash": null,
+    "task_revision": 2,
+    "task_scope_ref": "00000000-0000-4000-8000-000000000002"
+  },
+  "preimage": {
+    "jcs_utf8_hex": "7b22616374696f6e5f6964223a2230303030303030302d303030302d343030302d383030302d303030303030303030303033222c22616374696f6e5f7265766973696f6e223a342c226163746f72223a7b2261757468656e7469636174696f6e5f6c6576656c223a22706c6174666f726d5f7665726966696564222c22636f6e666964656e6365223a302e392c226964223a226163746f722d6c6f63616c2d31222c226b696e64223a226b6e6f776e5f75736572222c227265766973696f6e223a322c22736368656d615f76657273696f6e223a312c22736f75726365223a226c6f63616c2d6465736b746f70227d2c226361706162696c6974795f6964223a22636f6d70757465722e696e707574222c226368696c645f7461736b5f64656c74615f68617368223a6e756c6c2c22636f6e74656e745f6f726967696e5f72656673223a5b2230303030303030302d303030302d343030302d383030302d303030303030303030303037222c2230303030303030302d303030302d343030302d383030302d303030303030303030303038225d2c2264656c65676174696f6e5f617574686f726974795f726566223a6e756c6c2c2264656c65676174696f6e5f726566223a6e756c6c2c2264656c65676174696f6e5f7265766973696f6e223a6e756c6c2c2264657374696e6174696f6e223a7b226163636f756e745f726566223a226163636f756e743a2f2f6f776e6572222c226368616e6e656c5f726566223a226368616e6e656c3a2f2f706572736f6e616c2f31222c226b696e64223a226368616e6e656c222c22737461626c655f726566223a226368616e6e656c3a2f2f706572736f6e616c2f31227d2c22656e7472795f706f696e74223a226c6f63616c5f6465736b746f70222c226b65795f706172616d735f68617368223a2239393136383231363134346337666564356434633534393136636639386439633636303936323830633034613439393832326139396236363538626431373761222c226e6f726d616c697a65645f6b65795f706172616d73223a7b2261223a312c227a223a327d2c226f7065726174696f6e223a22636c69636b222c22706f6c6963795f7365745f7265766973696f6e223a352c2270726f706f7365645f706c616e5f68617368223a6e756c6c2c2270726f706f7365645f706c616e5f76657273696f6e223a6e756c6c2c2270726f7465637465645f737572666163655f6c6162656c73223a5b7b22636c617373696669636174696f6e223a2273656e736974697665222c226c6162656c223a2261757468656e7469636174696f6e222c22736f757263655f726566223a22737572666163653a2f2f32227d2c7b22636c617373696669636174696f6e223a22637269746963616c222c226c6162656c223a227061796d656e74222c22736f757263655f726566223a22737572666163653a2f2f31227d5d2c227265736f757263655f72656673223a5b2268747470733a2f2f6578616d706c652e636f6d2f61222c2268747470733a2f2f6578616d706c652e636f6d2f62225d2c227265736f757263655f726566735f68617368223a2264373337613032383566366261363833383365383966363465643534646663646332306361336464613135626665313632626437613137373064643364383336222c22736368656d615f76657273696f6e223a312c22736964655f6566666563745f636c617373223a225332222c227461726765745f6b696e64223a2273656d616e7469635f656c656d656e74222c227461726765745f737461626c655f726566223a22656c656d656e743a2f2f627574746f6e2f37222c227461736b5f6964223a2230303030303030302d303030302d343030302d383030302d303030303030303030303031222c227461736b5f706c616e5f76657273696f6e223a312c227461736b5f70726f706f73616c5f68617368223a6e756c6c2c227461736b5f7265766973696f6e223a322c227461736b5f73636f70655f726566223a2230303030303030302d303030302d343030302d383030302d303030303030303030303032227d",
+    "sha256": "3e4287d10fc0aadc9a41722b41f524117835b3b67b814cd757a268833338da1d"
+  },
+  "raw_input": {
+    "action_id": "00000000-0000-4000-8000-000000000003",
+    "action_revision": 4,
+    "actor": {
+      "authentication_level": "platform_verified",
+      "confidence": 0.9,
+      "id": "actor-local-1",
+      "kind": "known_user",
+      "revision": 2,
+      "schema_version": 1,
+      "source": "local-desktop"
+    },
+    "capability_id": "computer.input",
+    "child_task_delta_hash": null,
+    "content_origin_refs": [
+      "00000000-0000-4000-8000-000000000008",
+      "00000000-0000-4000-8000-000000000007",
+      "00000000-0000-4000-8000-000000000008"
+    ],
+    "delegation_authority_ref": null,
+    "delegation_ref": null,
+    "delegation_revision": null,
+    "destination": {
+      "account_ref": "account://owner",
+      "channel_ref": "channel://personal/1",
+      "kind": "channel",
+      "stable_ref": "channel://personal/1"
+    },
+    "entry_point": "local_desktop",
+    "normalized_key_params": {
+      "a": 1,
+      "z": 2
+    },
+    "operation": "click",
+    "policy_set_revision": 5,
+    "proposed_plan_hash": null,
+    "proposed_plan_version": null,
+    "protected_surface_labels": [
+      {
+        "classification": "sensitive",
+        "label": "authentication",
+        "source_ref": "surface://2"
+      },
+      {
+        "classification": "sensitive",
+        "label": "authentication",
+        "source_ref": "surface://2"
+      },
+      {
+        "classification": "critical",
+        "label": "payment",
+        "source_ref": "surface://1"
+      }
+    ],
+    "resource_refs": [
+      "HTTPS://Example.COM:443/b",
+      "https://example.com/a",
+      "https://example.com/a"
+    ],
+    "side_effect_class": "S2",
+    "target_kind": "semantic_element",
+    "target_stable_ref": "element://button/7",
+    "task_id": "00000000-0000-4000-8000-000000000001",
+    "task_plan_version": 1,
+    "task_proposal_hash": null,
+    "task_revision": 2,
+    "task_scope_ref": "00000000-0000-4000-8000-000000000002"
+  },
+  "schema_id": "https://schemas.shittim.local/policy/material_authorization_projection/v1",
+  "tamper_cases": [
+    {
+      "case_id": "zero_task_revision",
+      "expected": {
+        "domain_error": {
+          "field": "task_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/task_revision",
+      "value": 0
+    },
+    {
+      "case_id": "zero_action_revision",
+      "expected": {
+        "domain_error": {
+          "field": "action_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/action_revision",
+      "value": 0
+    },
+    {
+      "case_id": "zero_policy_set_revision",
+      "expected": {
+        "domain_error": {
+          "field": "policy_set_revision",
+          "reason": "must be positive"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/policy_set_revision",
+      "value": 0
+    },
+    {
+      "case_id": "empty_capability_id",
+      "expected": {
+        "domain_error": {
+          "field": "capability_id",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/capability_id",
+      "value": ""
+    },
+    {
+      "case_id": "empty_operation",
+      "expected": {
+        "domain_error": {
+          "field": "operation",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/operation",
+      "value": ""
+    },
+    {
+      "case_id": "empty_target_kind",
+      "expected": {
+        "domain_error": {
+          "field": "target_kind",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/target_kind",
+      "value": ""
+    },
+    {
+      "case_id": "invalid_child_task_delta_hash",
+      "expected": {
+        "domain_error": {
+          "field": "child_task_delta_hash",
+          "reason": "must be lowercase 64-hex"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/child_task_delta_hash",
+      "value": "not-a-hash"
+    },
+    {
+      "case_id": "delegation_ref_without_authority",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_authority_ref",
+          "reason": "required when delegation_ref is non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/delegation_ref",
+      "value": "00000000-0000-4000-8000-000000000009"
+    },
+    {
+      "case_id": "authority_without_delegation_ref",
+      "expected": {
+        "domain_error": {
+          "field": "delegation_ref",
+          "reason": "authority and revision must be null when delegation_ref is null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/delegation_authority_ref",
+      "value": "auth://orphan"
+    },
+    {
+      "case_id": "proposed_plan_version_without_hash",
+      "expected": {
+        "domain_error": {
+          "field": "proposed_plan_version",
+          "reason": "proposed plan version and hash must be jointly null or non-null"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/proposed_plan_version",
+      "value": 1
+    },
+    {
+      "case_id": "invalid_resource_uri",
+      "expected": {
+        "domain_error": {
+          "field": "resource_refs",
+          "reason": "invalid resource URI"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/resource_refs/0",
+      "value": "not a uri"
+    },
+    {
+      "case_id": "empty_destination_kind",
+      "expected": {
+        "domain_error": {
+          "field": "destination.kind",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/destination/kind",
+      "value": ""
+    },
+    {
+      "case_id": "empty_protected_surface_label",
+      "expected": {
+        "domain_error": {
+          "field": "protected_surface_labels.label",
+          "reason": "must be non-empty"
+        },
+        "hash_relation": "not_computed",
+        "result": "domain_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/protected_surface_labels/0/label",
+      "value": ""
+    },
+    {
+      "case_id": "missing_actor_id_type",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "not_computed",
+        "result": "raw_input_rejected",
+        "schema_valid": false
+      },
+      "operation": "replace",
+      "pointer": "/actor/id",
+      "value": null
+    },
+    {
+      "case_id": "resource_refs_reorder_same_after_normalize",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "same",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/resource_refs",
+      "value": [
+        "https://example.com/a",
+        "HTTPS://Example.COM:443/b",
+        "https://example.com/a"
+      ]
+    },
+    {
+      "case_id": "operation_change_different_hash",
+      "expected": {
+        "domain_error": null,
+        "hash_relation": "different",
+        "result": "hash_computed",
+        "schema_valid": true
+      },
+      "operation": "replace",
+      "pointer": "/operation",
+      "value": "type"
+    }
+  ]
+}
