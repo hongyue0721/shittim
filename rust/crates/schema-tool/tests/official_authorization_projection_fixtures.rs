@@ -5,9 +5,12 @@
 //! `CARGO_TARGET_DIR`, never under `/tmp`.
 
 use schema_tool::official_fixture::{
-    load_projection_fixture, Preimage, ProjectionFixture, CHILD_DELTA_TAMPER_CASE_COUNT,
+    load_approval_event_allocation_fixture, load_projection_fixture,
+    load_subject_projection_fixture, Preimage, ProjectionFixture, SubjectProjectionSide,
+    APPROVAL_EVENT_ALLOCATION_TAMPER_CASE_COUNT, CHILD_DELTA_TAMPER_CASE_COUNT,
     MATERIAL_TAMPER_CASE_COUNT, OBSERVATION_NOT_APPLICABLE_TAMPER_CASE_COUNT,
-    OBSERVATION_OBSERVED_TAMPER_CASE_COUNT,
+    OBSERVATION_OBSERVED_TAMPER_CASE_COUNT, SUBJECT_OPERATION_TAMPER_CASE_COUNT,
+    SUBJECT_PLAN_REVISION_TAMPER_CASE_COUNT, SUBJECT_TASK_PROPOSAL_TAMPER_CASE_COUNT,
 };
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -118,6 +121,58 @@ fn material_fixture_is_validated_and_canonicalized_by_real_cli() {
         "schemas/fixtures/policy/material_authorization_projection.v1.json",
         MATERIAL_TAMPER_CASE_COUNT,
     );
+}
+
+fn oracle_subject_side(
+    path: &Path,
+    schema_id: &str,
+    branch: &str,
+    side: &SubjectProjectionSide,
+    expected_case_count: usize,
+) {
+    assert_eq!(side.tamper_cases.len(), expected_case_count);
+    let pointer = format!("/branches/{branch}/normalized_object");
+    assert_validate_success(path, schema_id, &pointer);
+    assert_canonical_modes(path, &pointer, &side.preimage);
+}
+
+#[test]
+fn subject_projection_fixture_is_validated_and_canonicalized_by_real_cli() {
+    let path = fixture_path("schemas/fixtures/policy/subject_projection.v1.json");
+    let fixture = load_subject_projection_fixture(&path).expect("load subject projection fixture");
+    oracle_subject_side(
+        &path,
+        &fixture.schema_id,
+        "operation",
+        &fixture.branches.operation,
+        SUBJECT_OPERATION_TAMPER_CASE_COUNT,
+    );
+    oracle_subject_side(
+        &path,
+        &fixture.schema_id,
+        "task_proposal",
+        &fixture.branches.task_proposal,
+        SUBJECT_TASK_PROPOSAL_TAMPER_CASE_COUNT,
+    );
+    oracle_subject_side(
+        &path,
+        &fixture.schema_id,
+        "plan_revision",
+        &fixture.branches.plan_revision,
+        SUBJECT_PLAN_REVISION_TAMPER_CASE_COUNT,
+    );
+}
+
+#[test]
+fn approval_event_allocation_fixture_is_schema_validated_without_canonical_modes() {
+    let path = fixture_path("schemas/fixtures/policy/approval_event_allocation.v1.json");
+    let fixture = load_approval_event_allocation_fixture(&path)
+        .expect("load approval event allocation fixture");
+    assert_eq!(
+        fixture.tamper_cases.len(),
+        APPROVAL_EVENT_ALLOCATION_TAMPER_CASE_COUNT
+    );
+    assert_validate_success(&path, &fixture.schema_id, "/valid_allocation");
 }
 
 #[test]

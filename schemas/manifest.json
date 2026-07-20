@@ -1013,6 +1013,71 @@
       ],
       "schema_version_field": "schema_version",
       "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/permission_decision/v2",
+      "title": "PermissionDecisionV2",
+      "version": 2,
+      "source": "schemas/source/policy/permission_decision.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/policy_rule/v2",
+      "title": "PolicyRuleV2",
+      "version": 2,
+      "source": "schemas/source/policy/policy_rule.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/approval_record/v2",
+      "title": "ApprovalRecordV2",
+      "version": 2,
+      "source": "schemas/source/policy/approval_record.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/subject_projection/v1",
+      "title": "SubjectProjectionV1",
+      "version": 1,
+      "source": "schemas/source/policy/subject_projection.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/approval_event_allocation/v1",
+      "title": "ApprovalEventAllocationV1",
+      "version": 1,
+      "source": "schemas/source/policy/approval_event_allocation.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "policy"
     }
   ]
 }

@@ -1,0 +1,247 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/permission_decision/v2",
+  "title": "PermissionDecisionV2",
+  "description": "Immutable active permission evaluation with separated material and observation fingerprints and explicit Approval reuse binding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "action_id",
+    "decision",
+    "reason_codes",
+    "matched_rule_ref",
+    "decision_revision",
+    "evaluated_at",
+    "policy_set_revision",
+    "material_authorization_fingerprint",
+    "observation_evidence_fingerprint",
+    "binding",
+    "approval_requirement",
+    "expires_at",
+    "lease_ref"
+  ],
+  "properties": {
+    "id": { "$ref": "#/$defs/uuid" },
+    "schema_version": { "type": "integer", "const": 2 },
+    "action_id": { "$ref": "#/$defs/uuid" },
+    "decision": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny",
+        "require_confirmation",
+        "require_local_confirmation",
+        "require_system_authentication",
+        "require_remote_signature",
+        "require_plan_revision"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "matched_rule_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "decision_revision": { "type": "integer", "minimum": 1 },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "policy_set_revision": { "type": "integer", "minimum": 0 },
+    "material_authorization_fingerprint": { "$ref": "#/$defs/hash" },
+    "observation_evidence_fingerprint": { "$ref": "#/$defs/hash" },
+    "binding": { "$ref": "#/$defs/binding" },
+    "approval_requirement": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/approval_requirement" }
+      ]
+    },
+    "expires_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "lease_ref": { "$ref": "#/$defs/nullable_uuid" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "require_confirmation",
+              "require_local_confirmation",
+              "require_system_authentication",
+              "require_remote_signature",
+              "require_plan_revision"
+            ]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": { "$ref": "#/$defs/approval_requirement" }
+        }
+      },
+      "else": {
+        "properties": {
+          "approval_requirement": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "require_confirmation" } },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "confirmation_mode": { "const": "generic" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "require_local_confirmation" } },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "confirmation_mode": { "const": "local" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "require_system_authentication" } },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "confirmation_mode": { "const": "system_authentication" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "require_remote_signature" } },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "confirmation_mode": { "const": "remote_signature" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "require_plan_revision" } },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "confirmation_mode": { "const": "plan_revision" } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "approval_requirement": {
+            "type": "object",
+            "properties": { "reusable_resolution_ref": { "type": "string" } },
+            "required": ["reusable_resolution_ref"]
+          }
+        },
+        "required": ["approval_requirement"]
+      },
+      "then": {
+        "properties": {
+          "approval_requirement": {
+            "properties": { "approval_chain_id": { "type": "string" } }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "action_revision",
+        "task_id",
+        "plan_version",
+        "capability_id",
+        "operation",
+        "side_effect_class",
+        "resource_refs",
+        "key_params_hash",
+        "delegation_authority_ref"
+      ],
+      "properties": {
+        "action_id": { "$ref": "#/$defs/uuid" },
+        "action_revision": { "type": "integer", "minimum": 1 },
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "plan_version": { "type": "integer", "minimum": 0 },
+        "capability_id": { "type": "string", "minLength": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "side_effect_class": {
+          "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+        },
+        "resource_refs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "key_params_hash": { "$ref": "#/$defs/hash" },
+        "delegation_authority_ref": {
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    },
+    "approval_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "confirmation_mode",
+        "approval_chain_id",
+        "reusable_resolution_ref"
+      ],
+      "properties": {
+        "confirmation_mode": {
+          "$ref": "https://schemas.shittim.local/common/confirmation_mode/v1"
+        },
+        "approval_chain_id": { "$ref": "#/$defs/nullable_uuid" },
+        "reusable_resolution_ref": { "$ref": "#/$defs/nullable_uuid" }
+      }
+    }
+  }
+}

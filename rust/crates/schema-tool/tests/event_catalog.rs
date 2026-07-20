@@ -169,7 +169,7 @@ fn production_event_authority_is_exact_and_bindings_are_single_source() {
             .cloned()
             .collect::<Vec<_>>()
     );
-    assert_eq!(registry.schema_count(), 70);
+    assert_eq!(registry.schema_count(), 75);
     assert!(registry.manifest().method_version_bindings.is_empty());
     let event = registry
         .manifest()
@@ -257,6 +257,11 @@ fn zero_event_claimants_is_legal_when_authority_absent() {
         "https://schemas.shittim.local/common/confirmation_mode/v1",
         "https://schemas.shittim.local/policy/approval_record_kind/v2",
         "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+        "https://schemas.shittim.local/policy/approval_event_allocation/v1",
+        "https://schemas.shittim.local/policy/permission_decision/v2",
+        "https://schemas.shittim.local/policy/policy_rule/v2",
+        "https://schemas.shittim.local/policy/approval_record/v2",
+        "https://schemas.shittim.local/policy/subject_projection/v1",
     ];
     let manifest_path = temp.join("schemas/manifest.json");
     let mut manifest = read_json(&manifest_path);
@@ -281,6 +286,11 @@ fn zero_event_claimants_is_legal_when_authority_absent() {
         "schemas/source/common/confirmation_mode.v1.json",
         "schemas/source/policy/approval_record_kind.v2.json",
         "schemas/source/policy/approval_subject_kind.v2.json",
+        "schemas/source/policy/approval_event_allocation.v1.json",
+        "schemas/source/policy/permission_decision.v2.json",
+        "schemas/source/policy/policy_rule.v2.json",
+        "schemas/source/policy/approval_record.v2.json",
+        "schemas/source/policy/subject_projection.v1.json",
     ] {
         let _ = std::fs::remove_file(temp.join(relative));
     }

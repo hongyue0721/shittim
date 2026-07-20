@@ -2,8 +2,7 @@
 //! authorization projections.
 //!
 //! This crate accepts caller-injected typed authoritative facts. It does not read SQLite or any
-//! repository, allocate IDs, write storage, or replace the `domain-policy` matcher. The future
-//! `SubjectProjectionV1` API belongs to V2InitialBuildActive slice 1c and is intentionally absent.
+//! repository, allocate IDs, write storage, or replace the `domain-policy` matcher.
 
 #![deny(missing_docs)]
 
@@ -12,6 +11,7 @@ mod child_delta;
 mod error;
 mod material;
 mod observation;
+mod subject;
 
 pub use canonical::CanonicalProjection;
 pub use child_delta::{
@@ -25,3 +25,4 @@ pub use material::{
 pub use observation::{
     project_observation_evidence, ObservationEvidenceFactsV1, ObservedEvidenceFactsV1,
 };
+pub use subject::{project_subject_projection, SubjectProjectionFactsV1};

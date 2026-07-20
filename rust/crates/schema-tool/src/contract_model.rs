@@ -1918,6 +1918,7 @@ fn validate_supported_schema_node(
         "minLength",
         "pattern",
         "minItems",
+        "maxItems",
         "uniqueItems",
     ];
     for keyword in object.keys() {

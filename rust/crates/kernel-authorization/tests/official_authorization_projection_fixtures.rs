@@ -7,13 +7,18 @@
 
 use kernel_authorization::{
     project_child_task_delta, project_material_authorization, project_observation_evidence,
-    AuthorizationProjectionError, CanonicalProjection,
+    project_subject_projection, AuthorizationProjectionError, CanonicalProjection,
+    SubjectProjectionFactsV1,
 };
 use schema_tool::official_fixture::{
-    load_projection_fixture, HashRelation, MutationOperation, Preimage, ProjectionDomainError,
-    ProjectionExpected, ProjectionFixture, ProjectionResult, CHILD_DELTA_TAMPER_CASE_COUNT,
-    MATERIAL_TAMPER_CASE_COUNT, OBSERVATION_NOT_APPLICABLE_TAMPER_CASE_COUNT,
-    OBSERVATION_OBSERVED_TAMPER_CASE_COUNT,
+    load_approval_event_allocation_fixture, load_projection_fixture,
+    load_subject_projection_fixture, HashRelation, MutationOperation, Preimage,
+    ProjectionDomainError, ProjectionExpected, ProjectionFixture, ProjectionResult,
+    SubjectProjectionSide, APPROVAL_EVENT_ALLOCATION_TAMPER_CASE_COUNT,
+    CHILD_DELTA_TAMPER_CASE_COUNT, MATERIAL_TAMPER_CASE_COUNT,
+    OBSERVATION_NOT_APPLICABLE_TAMPER_CASE_COUNT, OBSERVATION_OBSERVED_TAMPER_CASE_COUNT,
+    SUBJECT_OPERATION_TAMPER_CASE_COUNT, SUBJECT_PLAN_REVISION_TAMPER_CASE_COUNT,
+    SUBJECT_TASK_PROPOSAL_TAMPER_CASE_COUNT,
 };
 use schema_tool::{apply_json_mutation, JsonPointer};
 use serde::de::DeserializeOwned;
@@ -24,6 +29,9 @@ use std::path::PathBuf;
 
 const CHILD_DELTA_FIXTURE: &str = "schemas/fixtures/task/child_task_delta_projection.v1.json";
 const MATERIAL_FIXTURE: &str = "schemas/fixtures/policy/material_authorization_projection.v1.json";
+const APPROVAL_EVENT_ALLOCATION_FIXTURE: &str =
+    "schemas/fixtures/policy/approval_event_allocation.v1.json";
+const SUBJECT_FIXTURE: &str = "schemas/fixtures/policy/subject_projection.v1.json";
 const OBSERVATION_NA_FIXTURE: &str =
     "schemas/fixtures/policy/observation_evidence_not_applicable.v1.json";
 const OBSERVATION_OBSERVED_FIXTURE: &str =
@@ -200,6 +208,73 @@ fn material_official_fixture_recomputes_and_enforces_tamper_matrix() {
         MATERIAL_TAMPER_CASE_COUNT,
         project_material_authorization,
     );
+}
+
+fn run_subject_side(side: SubjectProjectionSide, expected_case_count: usize) {
+    assert_eq!(side.tamper_cases.len(), expected_case_count);
+    let baseline_facts: SubjectProjectionFactsV1 =
+        serde_json::from_value(side.raw_input.clone()).expect("subject facts decode");
+    let baseline = project_subject_projection(baseline_facts).expect("subject projection");
+    assert_projection_matches(&baseline, &side.normalized_object, &side.preimage);
+    let projected_subject = match serde_json::to_value(&baseline.value).expect("projection value") {
+        Value::Object(mut object) => {
+            object.remove("schema_version");
+            Value::Object(object)
+        }
+        _ => panic!("subject projection must be object"),
+    };
+    assert_eq!(projected_subject, side.subject);
+
+    for case in side.tamper_cases {
+        let mutated = mutate(&side.raw_input, case.operation, &case.pointer, case.value);
+        let actual = execute_facts(&mutated, project_subject_projection);
+        assert_case(&baseline.sha256, case.expected, actual);
+    }
+}
+
+#[test]
+fn subject_projection_official_fixture_recomputes_all_branches_and_tampers() {
+    let fixture = load_subject_projection_fixture(repo_root().join(SUBJECT_FIXTURE))
+        .expect("load subject projection fixture");
+    run_subject_side(
+        fixture.branches.operation,
+        SUBJECT_OPERATION_TAMPER_CASE_COUNT,
+    );
+    run_subject_side(
+        fixture.branches.task_proposal,
+        SUBJECT_TASK_PROPOSAL_TAMPER_CASE_COUNT,
+    );
+    run_subject_side(
+        fixture.branches.plan_revision,
+        SUBJECT_PLAN_REVISION_TAMPER_CASE_COUNT,
+    );
+}
+
+#[test]
+fn approval_event_allocation_official_fixture_is_schema_only_and_has_no_preimage() {
+    let fixture =
+        load_approval_event_allocation_fixture(repo_root().join(APPROVAL_EVENT_ALLOCATION_FIXTURE))
+            .expect("load approval event allocation fixture");
+    assert_eq!(
+        fixture.tamper_cases.len(),
+        APPROVAL_EVENT_ALLOCATION_TAMPER_CASE_COUNT
+    );
+    kernel_contracts::validate_json(&fixture.schema_id, &fixture.valid_allocation)
+        .expect("baseline allocation Schema");
+    for case in fixture.tamper_cases {
+        let mutated = mutate(
+            &fixture.valid_allocation,
+            case.operation,
+            &case.pointer,
+            case.value,
+        );
+        assert_eq!(
+            kernel_contracts::validate_json(&fixture.schema_id, &mutated).is_ok(),
+            case.schema_valid,
+            "{}",
+            case.case_id
+        );
+    }
 }
 
 #[test]

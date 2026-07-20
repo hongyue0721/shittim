@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/subject_projection/v1",
+  "title": "SubjectProjectionV1",
+  "description": "Unique canonical preimage for Approval subject_hash. Branch fields exactly mirror ApprovalRecordV2 SubjectV2 plus schema_version.",
+  "type": "object",
+  "required": ["schema_version", "subject_kind"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "subject_kind": {
+      "type": "string",
+      "enum": ["operation", "task_proposal", "plan_revision"]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "subject_kind",
+        "task_id",
+        "task_revision",
+        "task_plan_version",
+        "action_id",
+        "action_revision",
+        "permission_decision_ref",
+        "permission_decision_revision",
+        "policy_set_revision",
+        "material_authorization_fingerprint",
+        "capability_id",
+        "operation",
+        "side_effect_class",
+        "resource_refs_hash",
+        "key_params_hash"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "subject_kind": { "type": "string", "const": "operation" },
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "task_revision": { "type": "integer", "minimum": 1 },
+        "task_plan_version": { "type": "integer", "minimum": 0 },
+        "action_id": { "$ref": "#/$defs/uuid" },
+        "action_revision": { "type": "integer", "minimum": 1 },
+        "permission_decision_ref": { "$ref": "#/$defs/uuid" },
+        "permission_decision_revision": { "type": "integer", "minimum": 1 },
+        "policy_set_revision": { "type": "integer", "minimum": 0 },
+        "material_authorization_fingerprint": { "$ref": "#/$defs/hash" },
+        "capability_id": { "type": "string", "minLength": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "side_effect_class": {
+          "$ref": "https://schemas.shittim.local/v1/common/side_effect_class.json"
+        },
+        "resource_refs_hash": { "$ref": "#/$defs/hash" },
+        "key_params_hash": { "$ref": "#/$defs/hash" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "subject_kind",
+        "candidate_task_id",
+        "candidate_revision",
+        "proposal_hash",
+        "proposer_actor_ref",
+        "task_scope_hash",
+        "delegation_ref",
+        "policy_set_revision"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "subject_kind": { "type": "string", "const": "task_proposal" },
+        "candidate_task_id": { "$ref": "#/$defs/uuid" },
+        "candidate_revision": { "type": "integer", "minimum": 1 },
+        "proposal_hash": { "$ref": "#/$defs/hash" },
+        "proposer_actor_ref": { "type": "string", "minLength": 1 },
+        "task_scope_hash": { "$ref": "#/$defs/hash" },
+        "delegation_ref": { "$ref": "#/$defs/nullable_uuid" },
+        "policy_set_revision": { "type": "integer", "minimum": 0 }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "subject_kind",
+        "task_id",
+        "task_revision",
+        "base_plan_version",
+        "proposed_plan_version",
+        "proposed_plan_hash",
+        "policy_set_revision"
+      ],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "subject_kind": { "type": "string", "const": "plan_revision" },
+        "task_id": { "$ref": "#/$defs/uuid" },
+        "task_revision": { "type": "integer", "minimum": 1 },
+        "base_plan_version": { "type": "integer", "minimum": 0 },
+        "proposed_plan_version": { "type": "integer", "minimum": 0 },
+        "proposed_plan_hash": { "$ref": "#/$defs/hash" },
+        "policy_set_revision": { "type": "integer", "minimum": 0 }
+      }
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

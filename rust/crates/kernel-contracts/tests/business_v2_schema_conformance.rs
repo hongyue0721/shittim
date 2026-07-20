@@ -284,12 +284,12 @@ where
 fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_creation_roots() {
     let catalog = catalog();
     let ids = catalog.schema_ids();
-    // Production is exactly 70 = 41 retained + 29 component-native. Synthetic probe
+    // Production is exactly 75 = 41 retained + 34 component-native. Synthetic probe
     // repos used by schema-tool tests may temporarily append extra component-native
     // entries; those must not weaken the 12-root identity assertions below.
     assert!(
-        ids.len() >= 70,
-        "embedded catalog must contain at least production 70 schemas, got {}",
+        ids.len() >= 75,
+        "embedded catalog must contain at least production 75 schemas, got {}",
         ids.len()
     );
     let retained_prefix = "https://schemas.shittim.local/v1/";
@@ -360,7 +360,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         })
         .count();
     if extra_native == 0 {
-        assert_eq!(ids.len(), 70, "pure production catalog must be exactly 70");
+        assert_eq!(ids.len(), 75, "pure production catalog must be exactly 75");
     }
 }
 

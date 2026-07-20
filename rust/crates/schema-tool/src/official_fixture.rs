@@ -26,6 +26,10 @@ pub const CHILD_DELTA_TAMPER_CASE_COUNT: usize = 16;
 pub const MATERIAL_TAMPER_CASE_COUNT: usize = 16;
 pub const OBSERVATION_NOT_APPLICABLE_TAMPER_CASE_COUNT: usize = 3;
 pub const OBSERVATION_OBSERVED_TAMPER_CASE_COUNT: usize = 15;
+pub const SUBJECT_OPERATION_TAMPER_CASE_COUNT: usize = 14;
+pub const SUBJECT_TASK_PROPOSAL_TAMPER_CASE_COUNT: usize = 7;
+pub const SUBJECT_PLAN_REVISION_TAMPER_CASE_COUNT: usize = 6;
+pub const APPROVAL_EVENT_ALLOCATION_TAMPER_CASE_COUNT: usize = 7;
 
 #[derive(Debug, Error)]
 pub enum OfficialFixtureError {
@@ -128,6 +132,120 @@ impl ProjectionFixture {
         require_object(&self.normalized_object, "projection.normalized_object")?;
         require_nonempty_cases(&self.tamper_cases, "projection")?;
         require_unique_case_ids(self.tamper_cases.iter().map(|case| case.case_id.as_str()))?;
+        for case in &self.tamper_cases {
+            case.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// Schema-only allocation fixture for Approval Event allocation.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalEventAllocationFixture {
+    pub fixture_version: u32,
+    pub schema_id: String,
+    pub valid_allocation: Value,
+    pub tamper_cases: Vec<SchemaTamperCase>,
+}
+
+impl ApprovalEventAllocationFixture {
+    pub fn validate(&self) -> Result<(), OfficialFixtureError> {
+        require_version(self.fixture_version, "approval event allocation")?;
+        require_nonempty_text(&self.schema_id, "approval event allocation.schema_id")?;
+        require_object(
+            &self.valid_allocation,
+            "approval event allocation.valid_allocation",
+        )?;
+        require_nonempty_cases(&self.tamper_cases, "approval event allocation")?;
+        require_unique_case_ids(self.tamper_cases.iter().map(|case| case.case_id.as_str()))?;
+        for case in &self.tamper_cases {
+            case.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// One schema-only allocation mutation vector.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SchemaTamperCase {
+    pub case_id: String,
+    pub operation: MutationOperation,
+    pub pointer: JsonPointer,
+    pub value: Value,
+    pub schema_valid: bool,
+}
+
+impl SchemaTamperCase {
+    fn validate(&self) -> Result<(), OfficialFixtureError> {
+        validate_case_identity(&self.case_id, &self.pointer)
+    }
+}
+
+/// Approval SubjectProjection official fixture containing all three branches.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubjectProjectionFixture {
+    pub fixture_version: u32,
+    pub schema_id: String,
+    pub branches: SubjectProjectionBranches,
+}
+
+impl SubjectProjectionFixture {
+    pub fn validate(&self) -> Result<(), OfficialFixtureError> {
+        require_version(self.fixture_version, "subject projection")?;
+        require_nonempty_text(&self.schema_id, "subject projection.schema_id")?;
+        self.branches
+            .operation
+            .validate("subject projection.operation")?;
+        self.branches
+            .task_proposal
+            .validate("subject projection.task_proposal")?;
+        self.branches
+            .plan_revision
+            .validate("subject projection.plan_revision")?;
+        require_unique_case_ids(
+            self.branches
+                .operation
+                .tamper_cases
+                .iter()
+                .chain(self.branches.task_proposal.tamper_cases.iter())
+                .chain(self.branches.plan_revision.tamper_cases.iter())
+                .map(|case| case.case_id.as_str()),
+        )
+    }
+}
+
+/// Named branches in the Approval SubjectProjection fixture.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubjectProjectionBranches {
+    pub operation: SubjectProjectionSide,
+    pub task_proposal: SubjectProjectionSide,
+    pub plan_revision: SubjectProjectionSide,
+}
+
+/// One SubjectProjection branch, preserving both the Approval subject and its projection preimage.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SubjectProjectionSide {
+    pub subject: Value,
+    pub raw_input: Value,
+    pub normalized_object: Value,
+    pub preimage: Preimage,
+    pub tamper_cases: Vec<ProjectionTamperCase>,
+}
+
+impl SubjectProjectionSide {
+    fn validate(&self, location: &str) -> Result<(), OfficialFixtureError> {
+        require_object(&self.subject, &format!("{location}.subject"))?;
+        require_object(&self.raw_input, &format!("{location}.raw_input"))?;
+        require_object(
+            &self.normalized_object,
+            &format!("{location}.normalized_object"),
+        )?;
+        require_nonempty_cases(&self.tamper_cases, location)?;
         for case in &self.tamper_cases {
             case.validate()?;
         }
@@ -506,6 +624,32 @@ pub fn load_allocation_fixture(
 ) -> Result<AllocationFixture, OfficialFixtureError> {
     let bytes = read_fixture(path)?;
     parse_allocation_fixture(&bytes)
+}
+
+pub fn load_approval_event_allocation_fixture(
+    path: impl AsRef<Path>,
+) -> Result<ApprovalEventAllocationFixture, OfficialFixtureError> {
+    let bytes = read_fixture(path)?;
+    let fixture: ApprovalEventAllocationFixture =
+        serde_json::from_slice(&bytes).map_err(|source| OfficialFixtureError::Decode {
+            fixture_kind: "approval event allocation",
+            source,
+        })?;
+    fixture.validate()?;
+    Ok(fixture)
+}
+
+pub fn load_subject_projection_fixture(
+    path: impl AsRef<Path>,
+) -> Result<SubjectProjectionFixture, OfficialFixtureError> {
+    let bytes = read_fixture(path)?;
+    let fixture: SubjectProjectionFixture =
+        serde_json::from_slice(&bytes).map_err(|source| OfficialFixtureError::Decode {
+            fixture_kind: "subject projection",
+            source,
+        })?;
+    fixture.validate()?;
+    Ok(fixture)
 }
 
 pub fn load_projection_fixture(

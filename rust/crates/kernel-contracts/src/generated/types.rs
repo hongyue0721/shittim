@@ -388,6 +388,17 @@ pub struct ActorSchemaVersion;
 impl Serialize for ActorSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for ActorSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/policy/approval_event_allocation/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalEventAllocationV1 {
+    pub causation_ref: CausationRefV2,
+    pub changed_at: String,
+    pub correlation_id: String,
+    pub dedup_key: String,
+    pub event_id: String,
+}
+
 /// Generated from `https://schemas.shittim.local/v1/policy/approval_record.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -514,6 +525,309 @@ pub struct ApprovalRecordTarget {
     pub plan_step_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+}
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "record_kind", deny_unknown_fields)]
+pub enum ApprovalRecordV2 {
+    #[serde(rename = "request")]
+    Request {
+        approval_chain_id: String,
+        created_at: String,
+        expires_at: String,
+        id: String,
+        predecessor_ref: Option<String>,
+        record: ApprovalRecordV2RequestRecord,
+        schema_version: ApprovalRecordV2RequestSchemaVersion,
+        subject: ApprovalRecordV2RequestSubject,
+    },
+    #[serde(rename = "resolution")]
+    Resolution {
+        approval_chain_id: String,
+        created_at: String,
+        expires_at: Option<String>,
+        id: String,
+        predecessor_ref: String,
+        record: ApprovalRecordV2ResolutionRecord,
+        schema_version: ApprovalRecordV2ResolutionSchemaVersion,
+        subject: ApprovalRecordV2ResolutionSubject,
+    },
+    #[serde(rename = "invalidation")]
+    Invalidation {
+        approval_chain_id: String,
+        created_at: String,
+        expires_at: NullOnly,
+        id: String,
+        predecessor_ref: String,
+        record: ApprovalRecordV2InvalidationRecord,
+        schema_version: ApprovalRecordV2InvalidationSchemaVersion,
+        subject: ApprovalRecordV2InvalidationSubject,
+    },
+}
+
+/// Generated from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRecordV2InvalidationRecord {
+    pub invalidated_at: String,
+    pub invalidated_by_actor: Option<Actor>,
+    pub invalidated_from_entry_point: EntryPoint,
+    pub invalidated_record_ref: String,
+    pub reason_code: ApprovalRecordV2InvalidationRecordReasonCode,
+    pub replacement_request_ref: Option<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApprovalRecordV2InvalidationRecordReasonCode {
+    #[serde(rename = "material_changed")]
+    MaterialChanged,
+    #[serde(rename = "subject_revision_changed")]
+    SubjectRevisionChanged,
+    #[serde(rename = "policy_requirement_changed")]
+    PolicyRequirementChanged,
+    #[serde(rename = "delegation_inactive")]
+    DelegationInactive,
+    #[serde(rename = "credential_revoked")]
+    CredentialRevoked,
+    #[serde(rename = "evidence_expired")]
+    EvidenceExpired,
+    #[serde(rename = "approval_expired")]
+    ApprovalExpired,
+    #[serde(rename = "stop_fence_activated")]
+    StopFenceActivated,
+    #[serde(rename = "manual_revocation")]
+    ManualRevocation,
+    #[serde(rename = "migration_quarantine")]
+    MigrationQuarantine,
+}
+
+impl ApprovalRecordV2InvalidationRecordReasonCode {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::MaterialChanged,
+        Self::SubjectRevisionChanged,
+        Self::PolicyRequirementChanged,
+        Self::DelegationInactive,
+        Self::CredentialRevoked,
+        Self::EvidenceExpired,
+        Self::ApprovalExpired,
+        Self::StopFenceActivated,
+        Self::ManualRevocation,
+        Self::MigrationQuarantine,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MaterialChanged => "material_changed",
+            Self::SubjectRevisionChanged => "subject_revision_changed",
+            Self::PolicyRequirementChanged => "policy_requirement_changed",
+            Self::DelegationInactive => "delegation_inactive",
+            Self::CredentialRevoked => "credential_revoked",
+            Self::EvidenceExpired => "evidence_expired",
+            Self::ApprovalExpired => "approval_expired",
+            Self::StopFenceActivated => "stop_fence_activated",
+            Self::ManualRevocation => "manual_revocation",
+            Self::MigrationQuarantine => "migration_quarantine",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ApprovalRecordV2InvalidationSchemaVersion;
+impl Serialize for ApprovalRecordV2InvalidationSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for ApprovalRecordV2InvalidationSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "subject_kind", deny_unknown_fields)]
+pub enum ApprovalRecordV2InvalidationSubject {
+    #[serde(rename = "operation")]
+    Operation {
+        action_id: String,
+        action_revision: i64,
+        capability_id: String,
+        key_params_hash: String,
+        material_authorization_fingerprint: String,
+        operation: String,
+        permission_decision_ref: String,
+        permission_decision_revision: i64,
+        policy_set_revision: i64,
+        resource_refs_hash: String,
+        side_effect_class: SideEffectClass,
+        task_id: String,
+        task_plan_version: i64,
+        task_revision: i64,
+    },
+    #[serde(rename = "task_proposal")]
+    TaskProposal {
+        candidate_revision: i64,
+        candidate_task_id: String,
+        delegation_ref: Option<String>,
+        policy_set_revision: i64,
+        proposal_hash: String,
+        proposer_actor_ref: String,
+        task_scope_hash: String,
+    },
+    #[serde(rename = "plan_revision")]
+    PlanRevision {
+        base_plan_version: i64,
+        policy_set_revision: i64,
+        proposed_plan_hash: String,
+        proposed_plan_version: i64,
+        task_id: String,
+        task_revision: i64,
+    },
+}
+
+/// Generated from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRecordV2RequestRecord {
+    pub challenge_ref: Option<String>,
+    pub confirmation_mode: ConfirmationModeV1,
+    pub reason_codes: Vec<String>,
+    pub request_expires_at: String,
+    pub request_id: String,
+    pub requested_by_actor: Actor,
+    pub requested_from_entry_point: EntryPoint,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ApprovalRecordV2RequestSchemaVersion;
+impl Serialize for ApprovalRecordV2RequestSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for ApprovalRecordV2RequestSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "subject_kind", deny_unknown_fields)]
+pub enum ApprovalRecordV2RequestSubject {
+    #[serde(rename = "operation")]
+    Operation {
+        action_id: String,
+        action_revision: i64,
+        capability_id: String,
+        key_params_hash: String,
+        material_authorization_fingerprint: String,
+        operation: String,
+        permission_decision_ref: String,
+        permission_decision_revision: i64,
+        policy_set_revision: i64,
+        resource_refs_hash: String,
+        side_effect_class: SideEffectClass,
+        task_id: String,
+        task_plan_version: i64,
+        task_revision: i64,
+    },
+    #[serde(rename = "task_proposal")]
+    TaskProposal {
+        candidate_revision: i64,
+        candidate_task_id: String,
+        delegation_ref: Option<String>,
+        policy_set_revision: i64,
+        proposal_hash: String,
+        proposer_actor_ref: String,
+        task_scope_hash: String,
+    },
+    #[serde(rename = "plan_revision")]
+    PlanRevision {
+        base_plan_version: i64,
+        policy_set_revision: i64,
+        proposed_plan_hash: String,
+        proposed_plan_version: i64,
+        task_id: String,
+        task_revision: i64,
+    },
+}
+
+/// Generated from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApprovalRecordV2ResolutionRecord {
+    pub decision: ApprovalRecordV2ResolutionRecordDecision,
+    pub evidence_refs: Vec<String>,
+    pub local_presence_evidence_ref: Option<String>,
+    pub remote_response_ref: Option<String>,
+    pub request_ref: String,
+    pub resolved_at: String,
+    pub resolved_by_actor: Actor,
+    pub resolved_from_entry_point: EntryPoint,
+    pub system_auth_evidence_ref: Option<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ApprovalRecordV2ResolutionRecordDecision {
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "denied")]
+    Denied,
+}
+
+impl ApprovalRecordV2ResolutionRecordDecision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Approved,
+        Self::Denied,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ApprovalRecordV2ResolutionSchemaVersion;
+impl Serialize for ApprovalRecordV2ResolutionSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for ApprovalRecordV2ResolutionSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/approval_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "subject_kind", deny_unknown_fields)]
+pub enum ApprovalRecordV2ResolutionSubject {
+    #[serde(rename = "operation")]
+    Operation {
+        action_id: String,
+        action_revision: i64,
+        capability_id: String,
+        key_params_hash: String,
+        material_authorization_fingerprint: String,
+        operation: String,
+        permission_decision_ref: String,
+        permission_decision_revision: i64,
+        policy_set_revision: i64,
+        resource_refs_hash: String,
+        side_effect_class: SideEffectClass,
+        task_id: String,
+        task_plan_version: i64,
+        task_revision: i64,
+    },
+    #[serde(rename = "task_proposal")]
+    TaskProposal {
+        candidate_revision: i64,
+        candidate_task_id: String,
+        delegation_ref: Option<String>,
+        policy_set_revision: i64,
+        proposal_hash: String,
+        proposer_actor_ref: String,
+        task_scope_hash: String,
+    },
+    #[serde(rename = "plan_revision")]
+    PlanRevision {
+        base_plan_version: i64,
+        policy_set_revision: i64,
+        proposed_plan_hash: String,
+        proposed_plan_version: i64,
+        task_id: String,
+        task_revision: i64,
+    },
 }
 
 /// Generated from `https://schemas.shittim.local/event/approval_state_changed_payload/v1`
@@ -2833,6 +3147,102 @@ pub struct PermissionDecisionSchemaVersion;
 impl Serialize for PermissionDecisionSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for PermissionDecisionSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/policy/permission_decision/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionDecisionV2 {
+    pub action_id: String,
+    pub approval_requirement: Option<PermissionDecisionV2ApprovalRequirement>,
+    pub binding: PermissionDecisionV2Binding,
+    pub decision: PermissionDecisionV2Decision,
+    pub decision_revision: i64,
+    pub evaluated_at: String,
+    pub expires_at: Option<String>,
+    pub id: String,
+    pub lease_ref: Option<String>,
+    pub matched_rule_ref: Option<String>,
+    pub material_authorization_fingerprint: String,
+    pub observation_evidence_fingerprint: String,
+    pub policy_set_revision: i64,
+    pub reason_codes: Vec<String>,
+    pub schema_version: PermissionDecisionV2SchemaVersion,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/permission_decision/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionDecisionV2ApprovalRequirement {
+    pub approval_chain_id: Option<String>,
+    pub confirmation_mode: ConfirmationModeV1,
+    pub reusable_resolution_ref: Option<String>,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/permission_decision/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PermissionDecisionV2Binding {
+    pub action_id: String,
+    pub action_revision: i64,
+    pub capability_id: String,
+    pub delegation_authority_ref: Option<String>,
+    pub key_params_hash: String,
+    pub operation: String,
+    pub plan_version: i64,
+    pub resource_refs: Vec<String>,
+    pub side_effect_class: SideEffectClass,
+    pub task_id: String,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/permission_decision/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PermissionDecisionV2Decision {
+    #[serde(rename = "allow")]
+    Allow,
+    #[serde(rename = "deny")]
+    Deny,
+    #[serde(rename = "require_confirmation")]
+    RequireConfirmation,
+    #[serde(rename = "require_local_confirmation")]
+    RequireLocalConfirmation,
+    #[serde(rename = "require_system_authentication")]
+    RequireSystemAuthentication,
+    #[serde(rename = "require_remote_signature")]
+    RequireRemoteSignature,
+    #[serde(rename = "require_plan_revision")]
+    RequirePlanRevision,
+}
+
+impl PermissionDecisionV2Decision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Allow,
+        Self::Deny,
+        Self::RequireConfirmation,
+        Self::RequireLocalConfirmation,
+        Self::RequireSystemAuthentication,
+        Self::RequireRemoteSignature,
+        Self::RequirePlanRevision,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+            Self::RequireConfirmation => "require_confirmation",
+            Self::RequireLocalConfirmation => "require_local_confirmation",
+            Self::RequireSystemAuthentication => "require_system_authentication",
+            Self::RequireRemoteSignature => "require_remote_signature",
+            Self::RequirePlanRevision => "require_plan_revision",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/permission_decision/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct PermissionDecisionV2SchemaVersion;
+impl Serialize for PermissionDecisionV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for PermissionDecisionV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/policy/policy_rule.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -3253,6 +3663,394 @@ pub struct PolicyRuleUpdatedBy {
     pub entry_point: EntryPoint,
 }
 
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2 {
+    pub action_match: PolicyRuleV2ActionMatch,
+    pub actor_match: PolicyRuleV2ActorMatch,
+    pub condition: PolicyRuleV2Condition,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confirmation_mode: Option<ConfirmationModeV1>,
+    pub content_origin_match: PolicyRuleV2ContentOriginMatch,
+    pub created_at: String,
+    pub created_by: PolicyRuleV2CreatedBy,
+    pub description: String,
+    pub effect: PolicyRuleV2Effect,
+    pub enabled: bool,
+    pub expires_at: Option<String>,
+    pub id: String,
+    pub name: String,
+    pub priority: i64,
+    pub resource_match: PolicyRuleV2ResourceMatch,
+    pub revision: i64,
+    pub schema_version: PolicyRuleV2SchemaVersion,
+    pub source: PolicyRuleV2Source,
+    pub updated_at: String,
+    pub updated_by: PolicyRuleV2UpdatedBy,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ActionMatch {
+    pub capability_ids: Vec<String>,
+    pub operation_patterns: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side_effect_max: Option<SideEffectClass>,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ActorMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_level_min: Option<PolicyRuleV2ActorMatchAuthLevelMin>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_point: Option<EntryPoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<PolicyRuleV2ActorMatchKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_patterns: Option<Vec<String>>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2ActorMatchAuthLevelMin {
+    #[serde(rename = "unauthenticated")]
+    Unauthenticated,
+    #[serde(rename = "asserted")]
+    Asserted,
+    #[serde(rename = "platform_verified")]
+    PlatformVerified,
+    #[serde(rename = "system_authenticated")]
+    SystemAuthenticated,
+}
+
+impl PolicyRuleV2ActorMatchAuthLevelMin {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Unauthenticated,
+        Self::Asserted,
+        Self::PlatformVerified,
+        Self::SystemAuthenticated,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unauthenticated => "unauthenticated",
+            Self::Asserted => "asserted",
+            Self::PlatformVerified => "platform_verified",
+            Self::SystemAuthenticated => "system_authenticated",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2ActorMatchKind {
+    #[serde(rename = "owner")]
+    Owner,
+    #[serde(rename = "known_user")]
+    KnownUser,
+    #[serde(rename = "guest")]
+    Guest,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "extension")]
+    Extension,
+}
+
+impl PolicyRuleV2ActorMatchKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Owner,
+        Self::KnownUser,
+        Self::Guest,
+        Self::Companion,
+        Self::System,
+        Self::Extension,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::KnownUser => "known_user",
+            Self::Guest => "guest",
+            Self::Companion => "companion",
+            Self::System => "system",
+            Self::Extension => "extension",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2Condition {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delegation_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_presence_required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_limit: Option<PolicyRuleV2ConditionRateLimit>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_window: Option<PolicyRuleV2ConditionTimeWindow>,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ConditionRateLimit {
+    pub count: i64,
+    pub key_scope: PolicyRuleV2ConditionRateLimitKeyScope,
+    pub window_seconds: i64,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2ConditionRateLimitKeyScope {
+    #[serde(rename = "rule")]
+    Rule,
+    #[serde(rename = "actor")]
+    Actor,
+    #[serde(rename = "task")]
+    Task,
+    #[serde(rename = "action")]
+    Action,
+    #[serde(rename = "resource")]
+    Resource,
+}
+
+impl PolicyRuleV2ConditionRateLimitKeyScope {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Rule,
+        Self::Actor,
+        Self::Task,
+        Self::Action,
+        Self::Resource,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rule => "rule",
+            Self::Actor => "actor",
+            Self::Task => "task",
+            Self::Action => "action",
+            Self::Resource => "resource",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ConditionTimeWindow {
+    pub local_end: String,
+    pub local_start: String,
+    pub timezone: String,
+    pub weekdays: Vec<PolicyRuleV2ConditionTimeWindowWeekdaysItem>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2ConditionTimeWindowWeekdaysItem {
+    #[serde(rename = "monday")]
+    Monday,
+    #[serde(rename = "tuesday")]
+    Tuesday,
+    #[serde(rename = "wednesday")]
+    Wednesday,
+    #[serde(rename = "thursday")]
+    Thursday,
+    #[serde(rename = "friday")]
+    Friday,
+    #[serde(rename = "saturday")]
+    Saturday,
+    #[serde(rename = "sunday")]
+    Sunday,
+}
+
+impl PolicyRuleV2ConditionTimeWindowWeekdaysItem {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Monday,
+        Self::Tuesday,
+        Self::Wednesday,
+        Self::Thursday,
+        Self::Friday,
+        Self::Saturday,
+        Self::Sunday,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Monday => "monday",
+            Self::Tuesday => "tuesday",
+            Self::Wednesday => "wednesday",
+            Self::Thursday => "thursday",
+            Self::Friday => "friday",
+            Self::Saturday => "saturday",
+            Self::Sunday => "sunday",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ContentOriginMatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kinds: Option<Vec<PolicyRuleV2ContentOriginMatchKindsItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_patterns: Option<Vec<String>>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2ContentOriginMatchKindsItem {
+    #[serde(rename = "user_input")]
+    UserInput,
+    #[serde(rename = "companion_generated")]
+    CompanionGenerated,
+    #[serde(rename = "system_generated")]
+    SystemGenerated,
+    #[serde(rename = "remote_message")]
+    RemoteMessage,
+    #[serde(rename = "web_content")]
+    WebContent,
+    #[serde(rename = "document_content")]
+    DocumentContent,
+    #[serde(rename = "model_output")]
+    ModelOutput,
+    #[serde(rename = "extension_output")]
+    ExtensionOutput,
+    #[serde(rename = "provider_output")]
+    ProviderOutput,
+    #[serde(rename = "imported_data")]
+    ImportedData,
+}
+
+impl PolicyRuleV2ContentOriginMatchKindsItem {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserInput => "user_input",
+            Self::CompanionGenerated => "companion_generated",
+            Self::SystemGenerated => "system_generated",
+            Self::RemoteMessage => "remote_message",
+            Self::WebContent => "web_content",
+            Self::DocumentContent => "document_content",
+            Self::ModelOutput => "model_output",
+            Self::ExtensionOutput => "extension_output",
+            Self::ProviderOutput => "provider_output",
+            Self::ImportedData => "imported_data",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2CreatedBy {
+    pub actor: Actor,
+    pub entry_point: EntryPoint,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2Effect {
+    #[serde(rename = "allow")]
+    Allow,
+    #[serde(rename = "confirm")]
+    Confirm,
+    #[serde(rename = "deny")]
+    Deny,
+}
+
+impl PolicyRuleV2Effect {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Allow,
+        Self::Confirm,
+        Self::Deny,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::Confirm => "confirm",
+            Self::Deny => "deny",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2ResourceMatch {
+    pub exclude_patterns: Vec<String>,
+    pub scope_patterns: Vec<String>,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct PolicyRuleV2SchemaVersion;
+impl Serialize for PolicyRuleV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for PolicyRuleV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PolicyRuleV2Source {
+    #[serde(rename = "user_defined")]
+    UserDefined,
+    #[serde(rename = "companion_generated")]
+    CompanionGenerated,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl PolicyRuleV2Source {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserDefined,
+        Self::CompanionGenerated,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserDefined => "user_defined",
+            Self::CompanionGenerated => "companion_generated",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/policy_rule/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyRuleV2UpdatedBy {
+    pub actor: Actor,
+    pub entry_point: EntryPoint,
+}
+
 /// Generated from `https://schemas.shittim.local/v1/task/recovery_attempt_ref.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -3628,6 +4426,69 @@ pub struct StopStatusResponse {
 pub struct StopStatusResponseSchemaVersion;
 impl Serialize for StopStatusResponseSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for StopStatusResponseSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/subject_projection/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "subject_kind", deny_unknown_fields)]
+pub enum SubjectProjectionV1 {
+    #[serde(rename = "operation")]
+    Operation {
+        action_id: String,
+        action_revision: i64,
+        capability_id: String,
+        key_params_hash: String,
+        material_authorization_fingerprint: String,
+        operation: String,
+        permission_decision_ref: String,
+        permission_decision_revision: i64,
+        policy_set_revision: i64,
+        resource_refs_hash: String,
+        schema_version: SubjectProjectionV1OperationSchemaVersion,
+        side_effect_class: SideEffectClass,
+        task_id: String,
+        task_plan_version: i64,
+        task_revision: i64,
+    },
+    #[serde(rename = "task_proposal")]
+    TaskProposal {
+        candidate_revision: i64,
+        candidate_task_id: String,
+        delegation_ref: Option<String>,
+        policy_set_revision: i64,
+        proposal_hash: String,
+        proposer_actor_ref: String,
+        schema_version: SubjectProjectionV1TaskProposalSchemaVersion,
+        task_scope_hash: String,
+    },
+    #[serde(rename = "plan_revision")]
+    PlanRevision {
+        base_plan_version: i64,
+        policy_set_revision: i64,
+        proposed_plan_hash: String,
+        proposed_plan_version: i64,
+        schema_version: SubjectProjectionV1PlanRevisionSchemaVersion,
+        task_id: String,
+        task_revision: i64,
+    },
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/subject_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SubjectProjectionV1OperationSchemaVersion;
+impl Serialize for SubjectProjectionV1OperationSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for SubjectProjectionV1OperationSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated integer const from `https://schemas.shittim.local/policy/subject_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SubjectProjectionV1PlanRevisionSchemaVersion;
+impl Serialize for SubjectProjectionV1PlanRevisionSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for SubjectProjectionV1PlanRevisionSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated integer const from `https://schemas.shittim.local/policy/subject_projection/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SubjectProjectionV1TaskProposalSchemaVersion;
+impl Serialize for SubjectProjectionV1TaskProposalSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for SubjectProjectionV1TaskProposalSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/kcp/system_ping_request.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -4583,6 +5444,38 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn approval_record_v2_invalidation_record_reason_code_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalRecordV2InvalidationRecordReasonCode::ALL,
+            &[
+                "material_changed",
+                "subject_revision_changed",
+                "policy_requirement_changed",
+                "delegation_inactive",
+                "credential_revoked",
+                "evidence_expired",
+                "approval_expired",
+                "stop_fence_activated",
+                "manual_revocation",
+                "migration_quarantine",
+            ],
+            ApprovalRecordV2InvalidationRecordReasonCode::as_str,
+        );
+    }
+
+    #[test]
+    fn approval_record_v2_resolution_record_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            ApprovalRecordV2ResolutionRecordDecision::ALL,
+            &[
+                "approved",
+                "denied",
+            ],
+            ApprovalRecordV2ResolutionRecordDecision::as_str,
+        );
+    }
+
+    #[test]
     fn approval_state_changed_payload_v1_change_kind_string_enum_contract() {
         assert_string_enum_contract(
             ApprovalStateChangedPayloadV1ChangeKind::ALL,
@@ -5159,6 +6052,23 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn permission_decision_v2_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            PermissionDecisionV2Decision::ALL,
+            &[
+                "allow",
+                "deny",
+                "require_confirmation",
+                "require_local_confirmation",
+                "require_system_authentication",
+                "require_remote_signature",
+                "require_plan_revision",
+            ],
+            PermissionDecisionV2Decision::as_str,
+        );
+    }
+
+    #[test]
     fn policy_rule_actor_match_auth_level_min_string_enum_contract() {
         assert_string_enum_contract(
             PolicyRuleActorMatchAuthLevelMin::ALL,
@@ -5277,6 +6187,114 @@ mod string_enum_contracts {
                 "system",
             ],
             PolicyRuleSource::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_actor_match_auth_level_min_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2ActorMatchAuthLevelMin::ALL,
+            &[
+                "unauthenticated",
+                "asserted",
+                "platform_verified",
+                "system_authenticated",
+            ],
+            PolicyRuleV2ActorMatchAuthLevelMin::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_actor_match_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2ActorMatchKind::ALL,
+            &[
+                "owner",
+                "known_user",
+                "guest",
+                "companion",
+                "system",
+                "extension",
+            ],
+            PolicyRuleV2ActorMatchKind::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_condition_rate_limit_key_scope_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2ConditionRateLimitKeyScope::ALL,
+            &[
+                "rule",
+                "actor",
+                "task",
+                "action",
+                "resource",
+            ],
+            PolicyRuleV2ConditionRateLimitKeyScope::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_condition_time_window_weekdays_item_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2ConditionTimeWindowWeekdaysItem::ALL,
+            &[
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday",
+            ],
+            PolicyRuleV2ConditionTimeWindowWeekdaysItem::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_content_origin_match_kinds_item_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2ContentOriginMatchKindsItem::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            PolicyRuleV2ContentOriginMatchKindsItem::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_effect_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2Effect::ALL,
+            &[
+                "allow",
+                "confirm",
+                "deny",
+            ],
+            PolicyRuleV2Effect::as_str,
+        );
+    }
+
+    #[test]
+    fn policy_rule_v2_source_string_enum_contract() {
+        assert_string_enum_contract(
+            PolicyRuleV2Source::ALL,
+            &[
+                "user_defined",
+                "companion_generated",
+                "system",
+            ],
+            PolicyRuleV2Source::as_str,
         );
     }
 

@@ -1,0 +1,65 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/approval_event_allocation/v1",
+  "valid_allocation": {
+    "event_id": "00000000-0000-4000-8000-000000000011",
+    "correlation_id": "corr-approval-1",
+    "dedup_key": "approval-head-5-request-6",
+    "changed_at": "2026-07-20T08:00:00Z",
+    "causation_ref": {
+      "kind": "command_request",
+      "id": "00000000-0000-4000-8000-000000000012"
+    }
+  },
+  "tamper_cases": [
+    {
+      "case_id": "missing_event_id",
+      "operation": "replace",
+      "pointer": "/event_id",
+      "value": "not-a-uuid",
+      "schema_valid": false
+    },
+    {
+      "case_id": "empty_correlation_id",
+      "operation": "replace",
+      "pointer": "/correlation_id",
+      "value": "",
+      "schema_valid": false
+    },
+    {
+      "case_id": "empty_dedup_key",
+      "operation": "replace",
+      "pointer": "/dedup_key",
+      "value": "",
+      "schema_valid": false
+    },
+    {
+      "case_id": "changed_at_offset_not_utc_z",
+      "operation": "replace",
+      "pointer": "/changed_at",
+      "value": "2026-07-20T10:00:00+02:00",
+      "schema_valid": false
+    },
+    {
+      "case_id": "changed_at_fraction_not_second_precision",
+      "operation": "replace",
+      "pointer": "/changed_at",
+      "value": "2026-07-20T08:00:00.000Z",
+      "schema_valid": false
+    },
+    {
+      "case_id": "unknown_causation_kind",
+      "operation": "replace",
+      "pointer": "/causation_ref/kind",
+      "value": "approval",
+      "schema_valid": false
+    },
+    {
+      "case_id": "valid_existing_event_causation_branch",
+      "operation": "replace",
+      "pointer": "/causation_ref/kind",
+      "value": "event",
+      "schema_valid": true
+    }
+  ]
+}
