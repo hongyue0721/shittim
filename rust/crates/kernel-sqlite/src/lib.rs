@@ -2,13 +2,16 @@
 //!
 //! This crate owns migrations, atomic Event Outbox allocation (v2-only), publisher storage
 //! operations, transaction-bound policy rate-limit consumption, strict Task/TaskScope/
-//! ContentOrigin(v2) reads, and the active root TaskCreate v2 repository. Legacy v1 TaskCreate
-//! write, AuditRecord v1 write, and Outbox v1 append were deleted under ADR-0009. It does not
-//! implement Task update/list, Action/PermissionDecision repositories, KCP, `agentd`, networking,
-//! or a Publisher loop.
+//! ContentOrigin(v2) reads, the active root TaskCreate v2 repository, and slice-4a Action /
+//! ActionTransitionIntent repositories with the `action.state_changed` producer. Legacy v1
+//! TaskCreate write, AuditRecord v1 write, and Outbox v1 append were deleted under ADR-0009.
+//! It does not implement Task update/list, PermissionDecision/Approval repositories, KCP,
+//! `agentd`, networking, or a Publisher loop.
 
 #![deny(missing_docs)]
 
+mod action;
+mod action_transition;
 mod config;
 mod error;
 mod migration;
@@ -17,6 +20,8 @@ mod rate_limit;
 mod root_task_create_v2;
 mod task;
 
+pub use action::{ActionRequestV2VerificationPolicyInput, InsertPendingActionCommand};
+pub use action_transition::{InsertIntentResult, MarkCommittedCommand, ReconcileIntentResult};
 pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
 pub use outbox::{
@@ -400,6 +405,8 @@ fn unhealthy_store_error() -> StoreError {
     )
 }
 
+#[cfg(test)]
+mod action_tests;
 #[cfg(test)]
 mod migration_tests;
 #[cfg(test)]

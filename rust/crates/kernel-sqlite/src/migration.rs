@@ -21,6 +21,11 @@ const MIGRATION_0005_ASSET_PATH: &str =
 const MIGRATION_0005_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
 const MIGRATION_0005_IMPLEMENTATION_ID: &str =
     "kernel_sqlite::migration::drop_v1_business_tables_ddl_only_v1";
+const MIGRATION_0006_ASSET_PATH: &str =
+    "rust/crates/kernel-sqlite/migrations/0006_action_and_transition.sql";
+const MIGRATION_0006_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
+const MIGRATION_0006_IMPLEMENTATION_ID: &str =
+    "kernel_sqlite::migration::action_and_transition_ddl_only_v1";
 
 #[derive(Debug, Clone, Copy)]
 struct LegacySqlMigration {
@@ -118,6 +123,18 @@ const MIGRATIONS: &[MigrationDefinition] = &[
             algorithm_id: MIGRATION_0005_ALGORITHM_ID,
             version: 1,
             implementation_id: MIGRATION_0005_IMPLEMENTATION_ID,
+        },
+        phases: DescriptorPhaseSet::SchemaOnly,
+    }),
+    MigrationDefinition::DescriptorV1(DescriptorV1Migration {
+        version: 6,
+        name: "action_and_transition",
+        asset_path: MIGRATION_0006_ASSET_PATH,
+        sql: include_bytes!("../migrations/0006_action_and_transition.sql"),
+        transform: TransformIdentity {
+            algorithm_id: MIGRATION_0006_ALGORITHM_ID,
+            version: 1,
+            implementation_id: MIGRATION_0006_IMPLEMENTATION_ID,
         },
         phases: DescriptorPhaseSet::SchemaOnly,
     }),
@@ -354,6 +371,14 @@ fn validate_descriptor_migration(migration: DescriptorV1Migration) -> Result<(),
                 && migration.transform.implementation_id == MIGRATION_0005_IMPLEMENTATION_ID
                 && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
         }
+        6 => {
+            migration.name == "action_and_transition"
+                && migration.asset_path == MIGRATION_0006_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0006_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0006_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
+        }
         _ => false,
     };
     if !accepted {
@@ -495,6 +520,10 @@ fn apply_descriptor_v1(
                 refuse_nonempty_v1_business_tables(connection)?;
                 execute_phase(connection, &phases, "schema")?;
                 validate_v1_business_tables_dropped(connection)?;
+            }
+            6 => {
+                execute_phase(connection, &phases, "schema")?;
+                validate_action_and_transition_schema(connection)?;
             }
             _ => {
                 return Err(migration_drift(
@@ -672,6 +701,32 @@ fn validate_v1_business_tables_dropped(connection: &Connection) -> Result<(), St
                 "migration 0005 did not drop all legacy v1 business tables",
             ));
         }
+    }
+    Ok(())
+}
+
+fn validate_action_and_transition_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in ["actions", "action_transition_intents"] {
+        if !table_exists(connection, table)? {
+            return Err(migration_drift(
+                "migration 0006 did not create action/transition tables",
+            ));
+        }
+    }
+    if !table_has_foreign_key(connection, "actions", "task_id", "tasks")? {
+        return Err(migration_drift(
+            "migration 0006 actions.task_id foreign key is missing",
+        ));
+    }
+    if !table_has_foreign_key(
+        connection,
+        "action_transition_intents",
+        "action_id",
+        "actions",
+    )? {
+        return Err(migration_drift(
+            "migration 0006 action_transition_intents.action_id foreign key is missing",
+        ));
     }
     Ok(())
 }

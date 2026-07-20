@@ -801,6 +801,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "domain-policy",
+ "domain-task",
  "kernel-contracts",
  "kernel-task-creation",
  "rusqlite",

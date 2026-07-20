@@ -128,7 +128,10 @@ fn decode_contract_document<T: DeserializeOwned>(
     serde_json::from_value(value).map_err(|_| stored_invalid())
 }
 
-fn get_task_shallow(connection: &Connection, id: &str) -> Result<Option<TaskSpec>, StoreError> {
+pub(crate) fn get_task_shallow(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<TaskSpec>, StoreError> {
     get_document(connection, "tasks", TASK_SCHEMA, id)
 }
 

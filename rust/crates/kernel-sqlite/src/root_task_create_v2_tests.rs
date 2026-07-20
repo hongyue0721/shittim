@@ -63,7 +63,7 @@ fn migration_0005_fresh_baseline_has_v2_tables_and_drops_v1_dead_tables() {
             row.get(0)
         })
         .expect("version");
-    assert_eq!(version, 5);
+    assert_eq!(version, 6);
     for table in [
         "content_origins_v2",
         "content_origin_v2_parent_refs",
