@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/task/task_creation_provenance/v1",
+  "title": "TaskCreationProvenanceV1",
+  "description": "Closed production provenance union for root command v2 and child action v2 task creation.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "root_command_v2",
+        "child_action_v2"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "schema_version",
+        "kind",
+        "command_request_id",
+        "entry_point",
+        "actor",
+        "receipt_ref",
+        "parent_task_id",
+        "action_id",
+        "accepted_at",
+        "materialized_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "root_command_v2"
+        },
+        "command_request_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "entry_point": {
+          "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+        },
+        "actor": {
+          "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+        },
+        "receipt_ref": {
+          "$ref": "#/$defs/uuid"
+        },
+        "parent_task_id": {
+          "type": "null"
+        },
+        "action_id": {
+          "type": "null"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "materialized_at": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "schema_version",
+        "kind",
+        "command_request_id",
+        "entry_point",
+        "actor",
+        "receipt_ref",
+        "parent_task_id",
+        "action_id",
+        "permission_decision_ref",
+        "approval_resolution_ref",
+        "verification_result_ref",
+        "proposal_hash",
+        "child_task_delta_hash",
+        "accepted_at",
+        "materialized_at"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "kind": {
+          "type": "string",
+          "const": "child_action_v2"
+        },
+        "command_request_id": {
+          "type": "null"
+        },
+        "entry_point": {
+          "type": "null"
+        },
+        "actor": {
+          "type": "null"
+        },
+        "receipt_ref": {
+          "type": "null"
+        },
+        "parent_task_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "action_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "permission_decision_ref": {
+          "$ref": "#/$defs/uuid"
+        },
+        "approval_resolution_ref": {
+          "$ref": "#/$defs/nullable_uuid"
+        },
+        "verification_result_ref": {
+          "$ref": "#/$defs/uuid"
+        },
+        "proposal_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "child_task_delta_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "materialized_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

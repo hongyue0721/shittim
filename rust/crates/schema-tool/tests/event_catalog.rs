@@ -169,7 +169,7 @@ fn production_event_authority_is_exact_and_bindings_are_single_source() {
             .cloned()
             .collect::<Vec<_>>()
     );
-    assert_eq!(registry.schema_count(), 61);
+    assert_eq!(registry.schema_count(), 65);
     assert!(registry.manifest().method_version_bindings.is_empty());
     let event = registry
         .manifest()
@@ -250,6 +250,8 @@ fn zero_event_claimants_is_legal_when_authority_absent() {
         "https://schemas.shittim.local/event/event_envelope/v2",
         "https://schemas.shittim.local/event/action_state_changed_payload/v1",
         "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
+        "https://schemas.shittim.local/audit/audit_allocation/v2",
+        "https://schemas.shittim.local/audit/audit_record/v2",
         "https://schemas.shittim.local/common/causation_ref/v2",
         "https://schemas.shittim.local/common/action_transition_ref/v1",
         "https://schemas.shittim.local/common/confirmation_mode/v1",
@@ -272,6 +274,8 @@ fn zero_event_claimants_is_legal_when_authority_absent() {
         "schemas/source/event/event_envelope.v2.json",
         "schemas/source/event/action_state_changed_payload.v1.json",
         "schemas/source/event/approval_state_changed_payload.v1.json",
+        "schemas/source/audit/audit_allocation.v2.json",
+        "schemas/source/audit/audit_record.v2.json",
         "schemas/source/common/causation_ref.v2.json",
         "schemas/source/common/action_transition_ref.v1.json",
         "schemas/source/common/confirmation_mode.v1.json",

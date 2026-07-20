@@ -7,7 +7,8 @@
       "name": "audit",
       "namespace": "https://schemas.shittim.local/audit/",
       "allowed_refs": [
-        "common"
+        "common",
+        "policy"
       ],
       "retained_ids": [
         "https://schemas.shittim.local/v1/audit/audit_record.json"
@@ -88,7 +89,8 @@
       "name": "task",
       "namespace": "https://schemas.shittim.local/task/",
       "allowed_refs": [
-        "common"
+        "common",
+        "policy"
       ],
       "retained_ids": [
         "https://schemas.shittim.local/v1/task/action_request.json",
@@ -361,6 +363,58 @@
       ],
       "schema_version_field": "schema_version",
       "component": "event"
+    },
+    {
+      "id": "https://schemas.shittim.local/audit/audit_allocation/v2",
+      "title": "AuditAllocationV2",
+      "version": 2,
+      "source": "schemas/source/audit/audit_allocation.v2.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "audit"
+    },
+    {
+      "id": "https://schemas.shittim.local/audit/audit_record/v2",
+      "title": "AuditRecordV2",
+      "version": 2,
+      "source": "schemas/source/audit/audit_record.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "audit"
+    },
+    {
+      "id": "https://schemas.shittim.local/common/content_origin/v2",
+      "title": "ContentOriginV2",
+      "version": 2,
+      "source": "schemas/source/common/content_origin.v2.json",
+      "kind": "domain_object",
+      "compatibility": "breaking-replacement",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "common"
+    },
+    {
+      "id": "https://schemas.shittim.local/task/task_creation_provenance/v1",
+      "title": "TaskCreationProvenanceV1",
+      "version": 1,
+      "source": "schemas/source/task/task_creation_provenance.v1.json",
+      "kind": "domain_object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "task"
     },
     {
       "id": "https://schemas.shittim.local/v1/audit/audit_record.json",

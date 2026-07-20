@@ -6,9 +6,12 @@
 
 /// Embedded schema documents generated from schemas/manifest.json.
 pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
+    ("https://schemas.shittim.local/audit/audit_allocation/v2", include_str!("../../../../../schemas/source/audit/audit_allocation.v2.json")),
+    ("https://schemas.shittim.local/audit/audit_record/v2", include_str!("../../../../../schemas/source/audit/audit_record.v2.json")),
     ("https://schemas.shittim.local/common/action_transition_ref/v1", include_str!("../../../../../schemas/source/common/action_transition_ref.v1.json")),
     ("https://schemas.shittim.local/common/causation_ref/v2", include_str!("../../../../../schemas/source/common/causation_ref.v2.json")),
     ("https://schemas.shittim.local/common/confirmation_mode/v1", include_str!("../../../../../schemas/source/common/confirmation_mode.v1.json")),
+    ("https://schemas.shittim.local/common/content_origin/v2", include_str!("../../../../../schemas/source/common/content_origin.v2.json")),
     ("https://schemas.shittim.local/common/input_content_origin/v1", include_str!("../../../../../schemas/source/common/input_content_origin.v1.json")),
     ("https://schemas.shittim.local/event/action_state_changed_payload/v1", include_str!("../../../../../schemas/source/event/action_state_changed_payload.v1.json")),
     ("https://schemas.shittim.local/event/approval_state_changed_payload/v1", include_str!("../../../../../schemas/source/event/approval_state_changed_payload.v1.json")),
@@ -26,6 +29,7 @@ pub const EMBEDDED_SCHEMA_DOCUMENTS: &[(&str, &str)] = &[
     ("https://schemas.shittim.local/task/normalized_root_task_create_payload/v2", include_str!("../../../../../schemas/source/task/normalized_root_task_create_payload.v2.json")),
     ("https://schemas.shittim.local/task/root_task_create_allocation/v2", include_str!("../../../../../schemas/source/task/root_task_create_allocation.v2.json")),
     ("https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1", include_str!("../../../../../schemas/source/task/root_task_create_idempotency_projection.v1.json")),
+    ("https://schemas.shittim.local/task/task_creation_provenance/v1", include_str!("../../../../../schemas/source/task/task_creation_provenance.v1.json")),
     ("https://schemas.shittim.local/v1/audit/audit_record.json", include_str!("../../../../../schemas/source/audit/audit_record.v1.json")),
     ("https://schemas.shittim.local/v1/common/action_status.json", include_str!("../../../../../schemas/source/common/action_status.v1.json")),
     ("https://schemas.shittim.local/v1/common/actor.json", include_str!("../../../../../schemas/source/common/actor.v1.json")),

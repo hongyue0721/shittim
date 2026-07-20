@@ -372,9 +372,9 @@ fn production_load_empty_bindings_and_retained_lifecycle_labels() {
     assert_eq!(counts.get("legacy-validation-only"), Some(&3));
     assert_eq!(counts.get("legacy-read-only"), Some(&1));
     assert_eq!(counts.get("v1-stable"), Some(&37));
-    assert_eq!(counts.get("new-contract"), Some(&14));
-    assert_eq!(counts.get("breaking-replacement"), Some(&6));
-    assert_eq!(registry.schema_count(), 61);
+    assert_eq!(counts.get("new-contract"), Some(&16));
+    assert_eq!(counts.get("breaking-replacement"), Some(&8));
+    assert_eq!(registry.schema_count(), 65);
     validate_production_manifest_stage(&registry).expect("stage gate");
 
     // retained ledger/source bytes unchanged relative to fixture.

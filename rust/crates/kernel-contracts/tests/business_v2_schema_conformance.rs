@@ -1,10 +1,8 @@
-//! First-batch task-creation business-v2 Schema/typed conformance.
+//! First-batch task-creation and root-persistence business-v2 Schema/typed conformance.
 //!
-//! Scope: the historical first task-creation batch of 12 component-native roots
-//! remains covered here, while production now also contains the Event v2 eight
-//! schema batch (61 total = 41 retained + 20 component-native). Official
-//! JCS/hash fixtures are a later independent commit and are intentionally not
-//! committed here.
+//! Scope: the historical first task-creation batch of 12 component-native roots,
+//! the Event v2 eight-schema batch, and the V2InitialBuildActive slice 1a four
+//! source roots (65 total = 41 retained + 24 component-native).
 
 use kernel_contracts::{
     decode_validated, validate_json, ChildTaskMaterializationAllocationV1, ChildTaskProposalV1,
@@ -285,12 +283,12 @@ where
 fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_creation_roots() {
     let catalog = catalog();
     let ids = catalog.schema_ids();
-    // Production is exactly 61 = 41 retained + 20 component-native. Synthetic probe
+    // Production is exactly 65 = 41 retained + 24 component-native. Synthetic probe
     // repos used by schema-tool tests may temporarily append extra component-native
     // entries; those must not weaken the 12-root identity assertions below.
     assert!(
-        ids.len() >= 61,
-        "embedded catalog must contain at least production 61 schemas, got {}",
+        ids.len() >= 65,
+        "embedded catalog must contain at least production 65 schemas, got {}",
         ids.len()
     );
     let retained_prefix = "https://schemas.shittim.local/v1/";
@@ -319,12 +317,15 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         12,
         "historical task-creation batch remains 12 roots"
     );
-    // Pure production catalogs must still be exact 61. Probe-only extras are allowed
+    // Pure production catalogs must still be exact 65. Probe-only extras are allowed
     // only when additional component-native ids are present beyond the production set.
     let production_native_ids: BTreeSet<&str> = [
+        "https://schemas.shittim.local/audit/audit_allocation/v2",
+        "https://schemas.shittim.local/audit/audit_record/v2",
         "https://schemas.shittim.local/common/action_transition_ref/v1",
         "https://schemas.shittim.local/common/causation_ref/v2",
         "https://schemas.shittim.local/common/confirmation_mode/v1",
+        "https://schemas.shittim.local/common/content_origin/v2",
         "https://schemas.shittim.local/common/input_content_origin/v1",
         "https://schemas.shittim.local/event/action_state_changed_payload/v1",
         "https://schemas.shittim.local/event/approval_state_changed_payload/v1",
@@ -342,6 +343,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         "https://schemas.shittim.local/task/normalized_root_task_create_payload/v2",
         "https://schemas.shittim.local/task/root_task_create_allocation/v2",
         "https://schemas.shittim.local/task/root_task_create_idempotency_projection/v1",
+        "https://schemas.shittim.local/task/task_creation_provenance/v1",
     ]
     .into_iter()
     .collect();
@@ -352,7 +354,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         })
         .count();
     if extra_native == 0 {
-        assert_eq!(ids.len(), 61, "pure production catalog must be exactly 61");
+        assert_eq!(ids.len(), 65, "pure production catalog must be exactly 65");
     }
 }
 

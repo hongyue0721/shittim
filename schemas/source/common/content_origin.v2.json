@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/common/content_origin/v2",
+  "title": "ContentOriginV2",
+  "description": "Active Kernel-owned stored content origin. InputContentOriginV1 is the distinct caller-owned input shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "kind",
+    "entry_point",
+    "source_uri",
+    "upstream_stable_id",
+    "producer_ref",
+    "received_at",
+    "carrier_ref",
+    "parent_origin_refs",
+    "kernel_receipt"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "kind": {
+      "$ref": "#/$defs/content_origin_kind"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "source_uri": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "format": "uri"
+    },
+    "upstream_stable_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "producer_ref": {
+      "$ref": "#/$defs/producer_ref"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "carrier_ref": {
+      "$ref": "#/$defs/carrier_ref"
+    },
+    "parent_origin_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid"
+      }
+    },
+    "kernel_receipt": {
+      "$ref": "#/$defs/kernel_receipt"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "content_origin_kind": {
+      "type": "string",
+      "enum": [
+        "user_input",
+        "companion_generated",
+        "system_generated",
+        "remote_message",
+        "web_content",
+        "document_content",
+        "model_output",
+        "extension_output",
+        "provider_output",
+        "imported_data"
+      ]
+    },
+    "producer_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "actor",
+            "model",
+            "extension",
+            "provider",
+            "system"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "carrier_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "command_request",
+            "task",
+            "artifact",
+            "event",
+            "action"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "kernel_receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_id",
+        "content_hash",
+        "recorded_at"
+      ],
+      "properties": {
+        "receipt_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "recorded_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/audit/audit_record/v2",
+  "title": "AuditRecordV2",
+  "description": "Active immutable local audit fact with the complete v2 attribution wire.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "schema_version",
+    "audit_type",
+    "level",
+    "actor",
+    "entry_point",
+    "occurred_at",
+    "task_id",
+    "task_creation_context",
+    "action_id",
+    "permission_decision_ref",
+    "approval_resolution_ref",
+    "recovery_attempt_ref",
+    "delegation_ref",
+    "model_call_refs",
+    "payload_manifest_refs",
+    "external_content_status",
+    "verification_result_refs",
+    "content_origin_refs",
+    "artifact_refs",
+    "resource_refs",
+    "extension_id",
+    "provider_id",
+    "causation_ref",
+    "correlation_id",
+    "rollback_capability",
+    "stop_fence_generation",
+    "policy_context",
+    "outcome",
+    "reason_codes",
+    "summary",
+    "details"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "audit_type": {
+      "type": "string",
+      "enum": [
+        "task.creation_recorded",
+        "command.accepted",
+        "permission.evaluated",
+        "kernel.invariant_blocked",
+        "event.published",
+        "recovery.recorded",
+        "config.changed",
+        "approval.requested",
+        "approval.resolved",
+        "approval.invalidated",
+        "identity.challenge_expired",
+        "identity.credential_registered",
+        "identity.credential_rotated",
+        "identity.credential_revoked",
+        "identity.local_presence_recorded",
+        "identity.system_authentication_recorded"
+      ]
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "user_activity",
+        "operational",
+        "security",
+        "debug"
+      ]
+    },
+    "actor": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+        }
+      ]
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "task_id": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "task_creation_context": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/task_creation_context"
+        }
+      ]
+    },
+    "action_id": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "permission_decision_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "approval_resolution_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "recovery_attempt_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "delegation_ref": {
+      "$ref": "#/$defs/nullable_stable_ref"
+    },
+    "model_call_refs": {
+      "$ref": "#/$defs/stable_ref_array"
+    },
+    "payload_manifest_refs": {
+      "$ref": "#/$defs/stable_ref_array"
+    },
+    "external_content_status": {
+      "type": "string",
+      "enum": [
+        "not_sent",
+        "sent",
+        "unknown"
+      ]
+    },
+    "verification_result_refs": {
+      "$ref": "#/$defs/uuid_array"
+    },
+    "content_origin_refs": {
+      "$ref": "#/$defs/uuid_array"
+    },
+    "artifact_refs": {
+      "$ref": "#/$defs/stable_ref_array"
+    },
+    "resource_refs": {
+      "$ref": "#/$defs/stable_ref_array"
+    },
+    "extension_id": {
+      "$ref": "#/$defs/nullable_stable_ref"
+    },
+    "provider_id": {
+      "$ref": "#/$defs/nullable_stable_ref"
+    },
+    "causation_ref": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "https://schemas.shittim.local/common/causation_ref/v2"
+        }
+      ]
+    },
+    "correlation_id": {
+      "$ref": "#/$defs/nullable_stable_ref"
+    },
+    "rollback_capability": {
+      "type": "string",
+      "enum": [
+        "compensatable",
+        "not_compensatable",
+        "unknown"
+      ]
+    },
+    "stop_fence_generation": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "policy_context": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/policy_context"
+        }
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "blocked",
+        "deferred",
+        "observed"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stable_ref"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/nullable_stable_ref"
+    },
+    "details": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "stable_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "nullable_stable_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullable_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "stable_ref_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/stable_ref"
+      }
+    },
+    "uuid_array": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid"
+      }
+    },
+    "task_creation_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_revision",
+        "goal",
+        "origin_ref",
+        "proposer",
+        "creation_provenance_ref",
+        "creation_kind",
+        "accepted_at",
+        "materialized_at"
+      ],
+      "properties": {
+        "task_revision": {
+          "type": "integer",
+          "const": 1
+        },
+        "goal": {
+          "$ref": "#/$defs/stable_ref"
+        },
+        "origin_ref": {
+          "$ref": "#/$defs/uuid"
+        },
+        "proposer": {
+          "type": "string",
+          "enum": [
+            "user",
+            "companion",
+            "system"
+          ]
+        },
+        "creation_provenance_ref": {
+          "$ref": "#/$defs/uuid"
+        },
+        "creation_kind": {
+          "type": "string",
+          "enum": [
+            "root_command_v2",
+            "child_action_v2"
+          ]
+        },
+        "accepted_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "materialized_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "policy_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "matched_rule_ref",
+        "policy_set_revision",
+        "permission_decision_revision",
+        "material_authorization_fingerprint",
+        "observation_evidence_fingerprint",
+        "reused_approval_resolution_ref",
+        "child_task_delta_hash",
+        "authentication_evidence_refs"
+      ],
+      "properties": {
+        "matched_rule_ref": {
+          "$ref": "#/$defs/nullable_stable_ref"
+        },
+        "policy_set_revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "permission_decision_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "material_authorization_fingerprint": {
+          "$ref": "#/$defs/hash"
+        },
+        "observation_evidence_fingerprint": {
+          "$ref": "#/$defs/hash"
+        },
+        "reused_approval_resolution_ref": {
+          "$ref": "#/$defs/nullable_uuid"
+        },
+        "child_task_delta_hash": {
+          "$ref": "#/$defs/nullable_hash"
+        },
+        "authentication_evidence_refs": {
+          "$ref": "#/$defs/stable_ref_array"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "entry_point": {
+            "const": "system_internal"
+          }
+        },
+        "required": [
+          "entry_point"
+        ]
+      },
+      "else": {
+        "properties": {
+          "actor": {
+            "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit_type": {
+            "const": "task.creation_recorded"
+          }
+        },
+        "required": [
+          "audit_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "task_id": {
+            "$ref": "#/$defs/uuid"
+          },
+          "task_creation_context": {
+            "$ref": "#/$defs/task_creation_context"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "task_creation_context": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "permission_decision_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "permission_decision_ref"
+        ]
+      },
+      "then": {
+        "properties": {
+          "policy_context": {
+            "$ref": "#/$defs/policy_context"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "external_content_status": {
+            "const": "not_sent"
+          }
+        },
+        "required": [
+          "external_content_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload_manifest_refs": {
+            "const": []
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "external_content_status": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "external_content_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

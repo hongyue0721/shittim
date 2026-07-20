@@ -500,6 +500,16 @@ impl ApprovalSubjectKindV2 {
     }
 }
 
+/// Generated from `https://schemas.shittim.local/audit/audit_allocation/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditAllocationV2 {
+    pub audit_record_id: String,
+    pub causation_ref: CausationRefV2,
+    pub correlation_id: String,
+    pub occurred_at: String,
+}
+
 /// Generated from `https://schemas.shittim.local/v1/audit/audit_record.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -766,6 +776,340 @@ impl AuditRecordTaskCreationContextProposer {
 pub struct AuditRecordTaskCreationContextTaskRevision;
 impl Serialize for AuditRecordTaskCreationContextTaskRevision { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for AuditRecordTaskCreationContextTaskRevision { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecordV2 {
+    pub action_id: Option<String>,
+    pub actor: Option<Actor>,
+    pub approval_resolution_ref: Option<String>,
+    pub artifact_refs: Vec<String>,
+    pub audit_type: AuditRecordV2AuditType,
+    pub causation_ref: Option<CausationRefV2>,
+    pub content_origin_refs: Vec<String>,
+    pub correlation_id: Option<String>,
+    pub delegation_ref: Option<String>,
+    pub details: JsonValue,
+    pub entry_point: EntryPoint,
+    pub extension_id: Option<String>,
+    pub external_content_status: AuditRecordV2ExternalContentStatus,
+    pub id: String,
+    pub level: AuditRecordV2Level,
+    pub model_call_refs: Vec<String>,
+    pub occurred_at: String,
+    pub outcome: AuditRecordV2Outcome,
+    pub payload_manifest_refs: Vec<String>,
+    pub permission_decision_ref: Option<String>,
+    pub policy_context: Option<AuditRecordV2PolicyContext>,
+    pub provider_id: Option<String>,
+    pub reason_codes: Vec<String>,
+    pub recovery_attempt_ref: Option<String>,
+    pub resource_refs: Vec<String>,
+    pub rollback_capability: AuditRecordV2RollbackCapability,
+    pub schema_version: AuditRecordV2SchemaVersion,
+    pub stop_fence_generation: Option<i64>,
+    pub summary: Option<String>,
+    pub task_creation_context: Option<AuditRecordV2TaskCreationContext>,
+    pub task_id: Option<String>,
+    pub verification_result_refs: Vec<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2AuditType {
+    #[serde(rename = "task.creation_recorded")]
+    TaskCreationRecorded,
+    #[serde(rename = "command.accepted")]
+    CommandAccepted,
+    #[serde(rename = "permission.evaluated")]
+    PermissionEvaluated,
+    #[serde(rename = "kernel.invariant_blocked")]
+    KernelInvariantBlocked,
+    #[serde(rename = "event.published")]
+    EventPublished,
+    #[serde(rename = "recovery.recorded")]
+    RecoveryRecorded,
+    #[serde(rename = "config.changed")]
+    ConfigChanged,
+    #[serde(rename = "approval.requested")]
+    ApprovalRequested,
+    #[serde(rename = "approval.resolved")]
+    ApprovalResolved,
+    #[serde(rename = "approval.invalidated")]
+    ApprovalInvalidated,
+    #[serde(rename = "identity.challenge_expired")]
+    IdentityChallengeExpired,
+    #[serde(rename = "identity.credential_registered")]
+    IdentityCredentialRegistered,
+    #[serde(rename = "identity.credential_rotated")]
+    IdentityCredentialRotated,
+    #[serde(rename = "identity.credential_revoked")]
+    IdentityCredentialRevoked,
+    #[serde(rename = "identity.local_presence_recorded")]
+    IdentityLocalPresenceRecorded,
+    #[serde(rename = "identity.system_authentication_recorded")]
+    IdentitySystemAuthenticationRecorded,
+}
+
+impl AuditRecordV2AuditType {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::TaskCreationRecorded,
+        Self::CommandAccepted,
+        Self::PermissionEvaluated,
+        Self::KernelInvariantBlocked,
+        Self::EventPublished,
+        Self::RecoveryRecorded,
+        Self::ConfigChanged,
+        Self::ApprovalRequested,
+        Self::ApprovalResolved,
+        Self::ApprovalInvalidated,
+        Self::IdentityChallengeExpired,
+        Self::IdentityCredentialRegistered,
+        Self::IdentityCredentialRotated,
+        Self::IdentityCredentialRevoked,
+        Self::IdentityLocalPresenceRecorded,
+        Self::IdentitySystemAuthenticationRecorded,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TaskCreationRecorded => "task.creation_recorded",
+            Self::CommandAccepted => "command.accepted",
+            Self::PermissionEvaluated => "permission.evaluated",
+            Self::KernelInvariantBlocked => "kernel.invariant_blocked",
+            Self::EventPublished => "event.published",
+            Self::RecoveryRecorded => "recovery.recorded",
+            Self::ConfigChanged => "config.changed",
+            Self::ApprovalRequested => "approval.requested",
+            Self::ApprovalResolved => "approval.resolved",
+            Self::ApprovalInvalidated => "approval.invalidated",
+            Self::IdentityChallengeExpired => "identity.challenge_expired",
+            Self::IdentityCredentialRegistered => "identity.credential_registered",
+            Self::IdentityCredentialRotated => "identity.credential_rotated",
+            Self::IdentityCredentialRevoked => "identity.credential_revoked",
+            Self::IdentityLocalPresenceRecorded => "identity.local_presence_recorded",
+            Self::IdentitySystemAuthenticationRecorded => "identity.system_authentication_recorded",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2ExternalContentStatus {
+    #[serde(rename = "not_sent")]
+    NotSent,
+    #[serde(rename = "sent")]
+    Sent,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl AuditRecordV2ExternalContentStatus {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::NotSent,
+        Self::Sent,
+        Self::Unknown,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotSent => "not_sent",
+            Self::Sent => "sent",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2Level {
+    #[serde(rename = "user_activity")]
+    UserActivity,
+    #[serde(rename = "operational")]
+    Operational,
+    #[serde(rename = "security")]
+    Security,
+    #[serde(rename = "debug")]
+    Debug,
+}
+
+impl AuditRecordV2Level {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserActivity,
+        Self::Operational,
+        Self::Security,
+        Self::Debug,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserActivity => "user_activity",
+            Self::Operational => "operational",
+            Self::Security => "security",
+            Self::Debug => "debug",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2Outcome {
+    #[serde(rename = "succeeded")]
+    Succeeded,
+    #[serde(rename = "failed")]
+    Failed,
+    #[serde(rename = "blocked")]
+    Blocked,
+    #[serde(rename = "deferred")]
+    Deferred,
+    #[serde(rename = "observed")]
+    Observed,
+}
+
+impl AuditRecordV2Outcome {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Succeeded,
+        Self::Failed,
+        Self::Blocked,
+        Self::Deferred,
+        Self::Observed,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Blocked => "blocked",
+            Self::Deferred => "deferred",
+            Self::Observed => "observed",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecordV2PolicyContext {
+    pub authentication_evidence_refs: Vec<String>,
+    pub child_task_delta_hash: Option<String>,
+    pub matched_rule_ref: Option<String>,
+    pub material_authorization_fingerprint: String,
+    pub observation_evidence_fingerprint: String,
+    pub permission_decision_revision: i64,
+    pub policy_set_revision: i64,
+    pub reused_approval_resolution_ref: Option<String>,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2RollbackCapability {
+    #[serde(rename = "compensatable")]
+    Compensatable,
+    #[serde(rename = "not_compensatable")]
+    NotCompensatable,
+    #[serde(rename = "unknown")]
+    Unknown,
+}
+
+impl AuditRecordV2RollbackCapability {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Compensatable,
+        Self::NotCompensatable,
+        Self::Unknown,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Compensatable => "compensatable",
+            Self::NotCompensatable => "not_compensatable",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct AuditRecordV2SchemaVersion;
+impl Serialize for AuditRecordV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for AuditRecordV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AuditRecordV2TaskCreationContext {
+    pub accepted_at: String,
+    pub creation_kind: AuditRecordV2TaskCreationContextCreationKind,
+    pub creation_provenance_ref: String,
+    pub goal: String,
+    pub materialized_at: Option<String>,
+    pub origin_ref: String,
+    pub proposer: AuditRecordV2TaskCreationContextProposer,
+    pub task_revision: AuditRecordV2TaskCreationContextTaskRevision,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2TaskCreationContextCreationKind {
+    #[serde(rename = "root_command_v2")]
+    RootCommandV2,
+    #[serde(rename = "child_action_v2")]
+    ChildActionV2,
+}
+
+impl AuditRecordV2TaskCreationContextCreationKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::RootCommandV2,
+        Self::ChildActionV2,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RootCommandV2 => "root_command_v2",
+            Self::ChildActionV2 => "child_action_v2",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AuditRecordV2TaskCreationContextProposer {
+    #[serde(rename = "user")]
+    User,
+    #[serde(rename = "companion")]
+    Companion,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl AuditRecordV2TaskCreationContextProposer {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::User,
+        Self::Companion,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Companion => "companion",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/audit/audit_record/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct AuditRecordV2TaskCreationContextTaskRevision;
+impl Serialize for AuditRecordV2TaskCreationContextTaskRevision { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for AuditRecordV2TaskCreationContextTaskRevision { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/common/causation_ref.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1077,6 +1421,182 @@ impl ContentOriginProducerRefKind {
 pub struct ContentOriginSchemaVersion;
 impl Serialize for ContentOriginSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for ContentOriginSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentOriginV2 {
+    pub carrier_ref: ContentOriginV2CarrierRef,
+    pub entry_point: EntryPoint,
+    pub id: String,
+    pub kernel_receipt: ContentOriginV2KernelReceipt,
+    pub kind: ContentOriginV2Kind,
+    pub parent_origin_refs: Vec<String>,
+    pub producer_ref: ContentOriginV2ProducerRef,
+    pub received_at: String,
+    pub schema_version: ContentOriginV2SchemaVersion,
+    pub source_uri: Option<String>,
+    pub upstream_stable_id: Option<String>,
+}
+
+/// Generated from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentOriginV2CarrierRef {
+    pub id: String,
+    pub kind: ContentOriginV2CarrierRefKind,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ContentOriginV2CarrierRefKind {
+    #[serde(rename = "command_request")]
+    CommandRequest,
+    #[serde(rename = "task")]
+    Task,
+    #[serde(rename = "artifact")]
+    Artifact,
+    #[serde(rename = "event")]
+    Event,
+    #[serde(rename = "action")]
+    Action,
+}
+
+impl ContentOriginV2CarrierRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::CommandRequest,
+        Self::Task,
+        Self::Artifact,
+        Self::Event,
+        Self::Action,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CommandRequest => "command_request",
+            Self::Task => "task",
+            Self::Artifact => "artifact",
+            Self::Event => "event",
+            Self::Action => "action",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentOriginV2KernelReceipt {
+    pub content_hash: String,
+    pub receipt_id: String,
+    pub recorded_at: String,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ContentOriginV2Kind {
+    #[serde(rename = "user_input")]
+    UserInput,
+    #[serde(rename = "companion_generated")]
+    CompanionGenerated,
+    #[serde(rename = "system_generated")]
+    SystemGenerated,
+    #[serde(rename = "remote_message")]
+    RemoteMessage,
+    #[serde(rename = "web_content")]
+    WebContent,
+    #[serde(rename = "document_content")]
+    DocumentContent,
+    #[serde(rename = "model_output")]
+    ModelOutput,
+    #[serde(rename = "extension_output")]
+    ExtensionOutput,
+    #[serde(rename = "provider_output")]
+    ProviderOutput,
+    #[serde(rename = "imported_data")]
+    ImportedData,
+}
+
+impl ContentOriginV2Kind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UserInput,
+        Self::CompanionGenerated,
+        Self::SystemGenerated,
+        Self::RemoteMessage,
+        Self::WebContent,
+        Self::DocumentContent,
+        Self::ModelOutput,
+        Self::ExtensionOutput,
+        Self::ProviderOutput,
+        Self::ImportedData,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UserInput => "user_input",
+            Self::CompanionGenerated => "companion_generated",
+            Self::SystemGenerated => "system_generated",
+            Self::RemoteMessage => "remote_message",
+            Self::WebContent => "web_content",
+            Self::DocumentContent => "document_content",
+            Self::ModelOutput => "model_output",
+            Self::ExtensionOutput => "extension_output",
+            Self::ProviderOutput => "provider_output",
+            Self::ImportedData => "imported_data",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentOriginV2ProducerRef {
+    pub id: String,
+    pub kind: ContentOriginV2ProducerRefKind,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ContentOriginV2ProducerRefKind {
+    #[serde(rename = "actor")]
+    Actor,
+    #[serde(rename = "model")]
+    Model,
+    #[serde(rename = "extension")]
+    Extension,
+    #[serde(rename = "provider")]
+    Provider,
+    #[serde(rename = "system")]
+    System,
+}
+
+impl ContentOriginV2ProducerRefKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Actor,
+        Self::Model,
+        Self::Extension,
+        Self::Provider,
+        Self::System,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Actor => "actor",
+            Self::Model => "model",
+            Self::Extension => "extension",
+            Self::Provider => "provider",
+            Self::System => "system",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/common/content_origin/v2`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ContentOriginV2SchemaVersion;
+impl Serialize for ContentOriginV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
+impl<'de> Deserialize<'de> for ContentOriginV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
 
 /// Generated string enum from `https://schemas.shittim.local/v1/common/entry_point.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -3137,6 +3657,55 @@ pub struct TaskCreatedPayloadSchemaVersion;
 impl Serialize for TaskCreatedPayloadSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for TaskCreatedPayloadSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
+/// Generated internally tagged union from `https://schemas.shittim.local/task/task_creation_provenance/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields)]
+pub enum TaskCreationProvenanceV1 {
+    #[serde(rename = "root_command_v2")]
+    RootCommandV2 {
+        accepted_at: String,
+        action_id: NullOnly,
+        actor: Actor,
+        command_request_id: String,
+        entry_point: EntryPoint,
+        id: String,
+        materialized_at: NullOnly,
+        parent_task_id: NullOnly,
+        receipt_ref: String,
+        schema_version: TaskCreationProvenanceV1RootCommandV2SchemaVersion,
+    },
+    #[serde(rename = "child_action_v2")]
+    ChildActionV2 {
+        accepted_at: String,
+        action_id: String,
+        actor: NullOnly,
+        approval_resolution_ref: Option<String>,
+        child_task_delta_hash: String,
+        command_request_id: NullOnly,
+        entry_point: NullOnly,
+        id: String,
+        materialized_at: String,
+        parent_task_id: String,
+        permission_decision_ref: String,
+        proposal_hash: String,
+        receipt_ref: NullOnly,
+        schema_version: TaskCreationProvenanceV1ChildActionV2SchemaVersion,
+        verification_result_ref: String,
+    },
+}
+
+/// Generated integer const from `https://schemas.shittim.local/task/task_creation_provenance/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TaskCreationProvenanceV1ChildActionV2SchemaVersion;
+impl Serialize for TaskCreationProvenanceV1ChildActionV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for TaskCreationProvenanceV1ChildActionV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated integer const from `https://schemas.shittim.local/task/task_creation_provenance/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct TaskCreationProvenanceV1RootCommandV2SchemaVersion;
+impl Serialize for TaskCreationProvenanceV1RootCommandV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for TaskCreationProvenanceV1RootCommandV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
 /// Generated from `https://schemas.shittim.local/v1/kcp/task_get_request.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -3833,6 +4402,112 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn audit_record_v2_audit_type_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2AuditType::ALL,
+            &[
+                "task.creation_recorded",
+                "command.accepted",
+                "permission.evaluated",
+                "kernel.invariant_blocked",
+                "event.published",
+                "recovery.recorded",
+                "config.changed",
+                "approval.requested",
+                "approval.resolved",
+                "approval.invalidated",
+                "identity.challenge_expired",
+                "identity.credential_registered",
+                "identity.credential_rotated",
+                "identity.credential_revoked",
+                "identity.local_presence_recorded",
+                "identity.system_authentication_recorded",
+            ],
+            AuditRecordV2AuditType::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_external_content_status_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2ExternalContentStatus::ALL,
+            &[
+                "not_sent",
+                "sent",
+                "unknown",
+            ],
+            AuditRecordV2ExternalContentStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_level_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2Level::ALL,
+            &[
+                "user_activity",
+                "operational",
+                "security",
+                "debug",
+            ],
+            AuditRecordV2Level::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_outcome_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2Outcome::ALL,
+            &[
+                "succeeded",
+                "failed",
+                "blocked",
+                "deferred",
+                "observed",
+            ],
+            AuditRecordV2Outcome::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_rollback_capability_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2RollbackCapability::ALL,
+            &[
+                "compensatable",
+                "not_compensatable",
+                "unknown",
+            ],
+            AuditRecordV2RollbackCapability::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_task_creation_context_creation_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2TaskCreationContextCreationKind::ALL,
+            &[
+                "root_command_v2",
+                "child_action_v2",
+            ],
+            AuditRecordV2TaskCreationContextCreationKind::as_str,
+        );
+    }
+
+    #[test]
+    fn audit_record_v2_task_creation_context_proposer_string_enum_contract() {
+        assert_string_enum_contract(
+            AuditRecordV2TaskCreationContextProposer::ALL,
+            &[
+                "user",
+                "companion",
+                "system",
+            ],
+            AuditRecordV2TaskCreationContextProposer::as_str,
+        );
+    }
+
+    #[test]
     fn causation_ref_kind_string_enum_contract() {
         assert_string_enum_contract(
             CausationRefKind::ALL,
@@ -3905,6 +4580,56 @@ mod string_enum_contracts {
                 "system",
             ],
             ContentOriginProducerRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_v2_carrier_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginV2CarrierRefKind::ALL,
+            &[
+                "command_request",
+                "task",
+                "artifact",
+                "event",
+                "action",
+            ],
+            ContentOriginV2CarrierRefKind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_v2_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginV2Kind::ALL,
+            &[
+                "user_input",
+                "companion_generated",
+                "system_generated",
+                "remote_message",
+                "web_content",
+                "document_content",
+                "model_output",
+                "extension_output",
+                "provider_output",
+                "imported_data",
+            ],
+            ContentOriginV2Kind::as_str,
+        );
+    }
+
+    #[test]
+    fn content_origin_v2_producer_ref_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            ContentOriginV2ProducerRefKind::ALL,
+            &[
+                "actor",
+                "model",
+                "extension",
+                "provider",
+                "system",
+            ],
+            ContentOriginV2ProducerRefKind::as_str,
         );
     }
 

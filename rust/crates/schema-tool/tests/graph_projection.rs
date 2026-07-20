@@ -1566,7 +1566,7 @@ fn component_namespace_rejects_spoofed_url_component_forms() {
 }
 
 #[test]
-fn production_manifest_is_exactly_61_with_41_retained_and_20_component_native_schemas() {
+fn production_manifest_is_exactly_65_with_41_retained_and_24_component_native_schemas() {
     let root = repo_root();
     let registry = SchemaRegistry::load(&root).expect("production manifest v2 loads");
     assert_eq!(registry.manifest().schema_version, 2);
@@ -1578,8 +1578,8 @@ fn production_manifest_is_exactly_61_with_41_retained_and_20_component_native_sc
     let components = registry.manifest().components.clone();
     assert_eq!(
         registry.schema_count(),
-        61,
-        "production baseline is 41 retained + 20 component-native schemas"
+        65,
+        "production baseline is 41 retained + 24 component-native schemas"
     );
 
     let retained: BTreeSet<_> = components
@@ -1609,7 +1609,7 @@ fn production_manifest_is_exactly_61_with_41_retained_and_20_component_native_sc
         }
     }
     assert_eq!(retained_count, 41);
-    assert_eq!(native_count, 20);
+    assert_eq!(native_count, 24);
 }
 
 #[test]
@@ -1707,9 +1707,9 @@ fn production_manifest_loads_with_empty_bindings_and_lifecycle_labels() {
     assert_eq!(legacy_validation, 3);
     assert_eq!(legacy_read, 1);
     assert_eq!(stable, 37);
-    assert_eq!(new_contract, 14);
-    assert_eq!(breaking, 6);
-    assert_eq!(registry.schema_count(), 61);
+    assert_eq!(new_contract, 16);
+    assert_eq!(breaking, 8);
+    assert_eq!(registry.schema_count(), 65);
     schema_tool::validate_production_manifest_stage(&registry)
         .expect("production stage gate accepts empty bindings");
 }
