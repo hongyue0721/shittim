@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-20（ADR-0009 accepted：v2 从零构建、取消 v1 数据迁移；里程碑 `V2ProductionWriteCutover` 作废，替换为 `V2InitialBuildActive`。代码/Schema 事实未变：Event v2 八 Schema/catalog/typed envelope、migration 0003 统一 Outbox shape、mixed API 与 savepoint poison 已落地；production MethodVersionBindings 仍为空；active business producer、Publisher、versioned KCP poll 仍未实现。）
+> 状态日期：2026-07-20（`V2InitialBuildActive`切片1a完成：新增ContentOriginV2、AuditRecordV2、TaskCreationProvenanceV1与Schema-validated AuditAllocationV2；manifest=65（41 retained + 24 component-native），generated Rust与conformance已落地。production MethodVersionBindings仍为空；repository/handler/producer未实现。）
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 
@@ -28,8 +28,9 @@
 
 | 切片 | 内容 | 状态 |
 |---|---|---|
-| 0 | 规范文档落锤（本切片）：ADR-0009 + IC/CORE/CONFORMANCE/PROGRESS/MATRIX/API 对齐 | **进行中（文档）** |
-| 1 | v2 Schema 批（剩余投影/Origin/Audit/Approval/PD/auth 等按合同） | 未开始 |
+| 0 | 规范文档落锤：ADR-0009 + IC/CORE/CONFORMANCE/PROGRESS/MATRIX/API 对齐 | **已完成** |
+| 1a | root创建路径持久对象Schema：ContentOriginV2、AuditRecordV2、TaskCreationProvenanceV1、AuditAllocationV2 + manifest/generated/conformance | **已完成** |
+| 1b | 其余v2 Schema批（Action/PD/Approval/auth/projection等） | 未开始 |
 | 2 | fresh SQLite 基线 + root repository | 未开始 |
 | 3 | method-aware KCP v2 preflight/dispatcher/handler + production bindings | 未开始 |
 | 4 | Action / PD / Approval / Identity repository | 未开始 |
@@ -39,13 +40,13 @@
 **已实现（代码/Schema 事实）**
 
 - 规范与工程基线：Freedom-first / Kernel Owns Reality 合同、Apache-2.0、双仓同步 library/CLI、Node/pnpm 零依赖根基座（exact Node 24.18.0 / pnpm 11.3.0）、统一门 `scripts/check-schema.sh`。
-- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=61 entries，41 retained + 20 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / RFC 8785；production `METHOD_VERSION_BINDINGS=[]`。
+- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=65 entries，41 retained + 24 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / RFC 8785；production `METHOD_VERSION_BINDINGS=[]`。
 - 纯领域：`domain-task`（Task/Action 状态图、revision/plan_version）、`domain-policy`（URI/glob/Default Allow/rate-limit draft，Stop Fence/Recovery 独立 Blocked）。
 - 持久化：`kernel-sqlite` migration 0001–0003；Audit canonical Store；legacy Task create/get（**待删除**）；版本化统一 Outbox + mixed v1/v2 append/read + 严格 stored decoder + savepoint poison（legacy append **待删除**）。
 - KCP 库级：`kernel-kcp` retained v1 Value preflight、三方法 registration/dispatcher/handler（`system.ping` / legacy `task.create` / `task.get`）与 SQLite adapter；不可连接，无 bytes/frame/server。
 - ADR-0006 首批：12 business-v2 Schema + `kernel-task-creation` pure library + official fixtures/harness + schema-tool strict pointer CLI；**未**接 repository/handler。
 - ADR-0008 前两段：Event v2 八 Schema、`EventTypeBinding`/active·legacy catalog、typed EventEnvelope v1/v2、migration 0003 descriptor v1 与 mixed Outbox API。
-- ADR-0009：文档决策落锤（本切片）；实现切片未开始。
+- V2InitialBuildActive切片1a：ContentOriginV2、AuditRecordV2、TaskCreationProvenanceV1与AuditAllocationV2 source/manifest/generated Rust/typed round-trip/conformance已落地；AuditAllocationV2因明确跨语言Schema验证边界而source化。
 
 **未实现（不得宣称完成）**
 
@@ -65,8 +66,9 @@
 
 ## 未完成 backlog
 
-- [ ] 切片 0：规范文档落锤（ADR-0009 等）
-- [ ] 切片 1：v2 Schema 批
+- [x] 切片 0：规范文档落锤（ADR-0009 等）
+- [x] 切片 1a：root创建路径持久对象Schema/manifest/generated/conformance
+- [ ] 切片 1b：其余 v2 Schema 批
 - [ ] 切片 2：fresh SQLite 基线 + root repository
 - [ ] 切片 3：method-aware KCP v2 + production bindings
 - [ ] 切片 4：Action/PD/Approval/Identity repository
@@ -93,7 +95,7 @@
 
 ## 下一步
 
-1. 完成切片 0 文档门禁后，进入切片 1 v2 Schema 批。
+1. 进入切片1b，继续完成Action/PD/Approval/auth与剩余projection Schema；切片1a不实现repository/handler/producer。
 2. 切片 2–3：fresh SQLite 基线、root v2 repository/handler、method-aware preflight 与 production bindings。
 3. 切片 4–5：Action/PD/Approval repositories 与 child materializer；接入有 owner 的 active Event producers。
 4. 切片 6：删除全部 v1 runtime 写路径，落地旧库 `reinitialize-required`，闭合 §13.7。
@@ -102,17 +104,21 @@
 
 ## 最近验证
 
-本切片（V2InitialBuildActive 文档落锤）验证命令：
+本切片（V2InitialBuildActive 1a）验证命令：
 
 ```text
 export PATH="$HOME/.local/share/pnpm:$PATH"
 export TMPDIR=/mnt/data/shittim-build-tmp
+export CARGO_TARGET_DIR=/mnt/data/shittim-cargo-target
+cargo test --manifest-path rust/Cargo.toml -p kernel-contracts
+cargo test --manifest-path rust/Cargo.toml -p schema-tool
+cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
+./scripts/check-schema.sh
 node scripts/update-file-manifest.mjs --check
-pnpm run test:docs-repository
 git diff --check
 ```
 
-历史实现切片的 full gate（`./scripts/check-schema.sh`、workspace tests）记录在对应提交的 git log；本页不重放编年史。
+上述门禁全部通过；`check-schema.sh`汇总624 passed、0 failed、1 ignored（helper entrypoint）。
 
 ## 事实来源
 

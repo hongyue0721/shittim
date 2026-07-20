@@ -1,6 +1,6 @@
 # Event Catalog
 
-> 状态徽章：**partial**（Event v2 八 Schema / catalog / typed decode 与 SQLite migration 0003 / 统一 Outbox shape **已实现**；active business producer、Publisher、versioned KCP poll **未实现**；legacy Outbox append production API 待删除）
+> 状态徽章：**partial**（Event v2 八 Schema / catalog / typed decode 与 SQLite migration 0003 / 统一 Outbox shape **已实现**；V2InitialBuildActive切片1a又落地AuditRecordV2、AuditAllocationV2与TaskCreationProvenanceV1，明确Audit/Event正交；active business producer、Publisher、versioned KCP poll **未实现**；legacy Outbox append production API 待删除）
 
 ## 唯一事实源
 
@@ -16,7 +16,7 @@
 
 ## 范围
 
-本页索引 active Event Catalog、CausationRef v2、typed envelope、版本化统一 Outbox 与 retained `event.poll` v1 不得返回 v2 的边界。不复述八 Schema 字段、claimant 谓词、binding 常量或 mixed API 形状。
+本页索引 active Event Catalog、CausationRef v2、typed envelope、版本化统一 Outbox 与 retained `event.poll` v1 不得返回 v2 的边界。不复述八 Schema 字段、claimant 谓词、binding 常量或 mixed API 形状。AuditRecordV2与AuditAllocationV2虽已进入Schema/generated链，仍不是Event或Outbox envelope；challenge expiry只写Audit且不发`approval.state_changed`。
 
 ## 导航
 

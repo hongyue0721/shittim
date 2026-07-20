@@ -1,6 +1,6 @@
 # AuditRecord版本合同
 
-> 状态：AuditRecord v1 Schema/Rust/SQLite Store与legacy task.create producer已实现；active root/child producer使用v2，当前contract-only。完整v2 wire、`audit_type`闭集、`AuditAllocationV2`与producer固定矩阵的唯一事实源为IC §6.16。
+> 状态：AuditRecord v2、AuditAllocationV2与TaskCreationProvenanceV1的source/manifest/generated Rust/conformance已实现；v1 Schema/Rust/SQLite Store与legacy task.create producer仍是待删除代码事实。v2 repository/producer仍未实现。完整wire与producer矩阵唯一事实源为IC §6.16。
 
 ## v1
 
@@ -8,7 +8,7 @@ v1仅保留Schema/fixture历史验证资产，无production read/write/migration
 
 ## v2完整wire
 
-v2不是“v1加字段”的增量对象。全部顶层required：`id,schema_version=2,audit_type,level,actor,entry_point,occurred_at,task_id,task_creation_context,action_id,permission_decision_ref,approval_resolution_ref,recovery_attempt_ref,delegation_ref,model_call_refs,payload_manifest_refs,external_content_status,verification_result_refs,content_origin_refs,artifact_refs,resource_refs,extension_id,provider_id,causation_ref,correlation_id,rollback_capability,stop_fence_generation,policy_context,outcome,reason_codes,summary,details`。完整类型/null/empty权威见IC §6.16。
+v2 source位于`schemas/source/audit/audit_record.v2.json`，manifest compatibility=`breaking-replacement`，generated root为`AuditRecordV2`。它不是“v1加字段”的增量对象。全部顶层required：`id,schema_version=2,audit_type,level,actor,entry_point,occurred_at,task_id,task_creation_context,action_id,permission_decision_ref,approval_resolution_ref,recovery_attempt_ref,delegation_ref,model_call_refs,payload_manifest_refs,external_content_status,verification_result_refs,content_origin_refs,artifact_refs,resource_refs,extension_id,provider_id,causation_ref,correlation_id,rollback_capability,stop_fence_generation,policy_context,outcome,reason_codes,summary,details`。完整类型/null/empty权威见IC §6.16。
 
 ## v2 `audit_type` 闭集（镜像 IC §6.16.0）
 
@@ -35,7 +35,7 @@ task.creation_recorded
 
 ## `AuditAllocationV2`（镜像 IC §6.16.0a）
 
-独立Audit路径（尤其challenge expiry）正式required对象：
+该对象已按IC“正式required对象”与跨语言Schema验证边界source化为`schemas/source/audit/audit_allocation.v2.json`，manifest compatibility=`new-contract`，generated root为`AuditAllocationV2`；它不是仅供Rust内部的自由typed input。
 
 ```text
 AuditAllocationV2 {
@@ -50,7 +50,7 @@ root/child/approval 可从更大bundle allocation投影同一四元组语义；c
 
 ## TaskCreationProvenanceV1
 
-真正tagged union：
+真正tagged union；source为`schemas/source/task/task_creation_provenance.v1.json`，generated Rust使用`#[serde(tag="kind")] enum TaskCreationProvenanceV1`，没有v1 optional平面struct。
 
 | kind | 权威事实 |
 |---|---|

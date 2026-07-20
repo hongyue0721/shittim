@@ -6,7 +6,7 @@
 ## 权威边界
 
 - 字段、枚举、错误与兼容规则：`specs/` 与 `schemas/source/**/*.json`（合同细节见 IC §5、§6、§13 与 [ADR-0002](../../adr/0002-schema生成与兼容策略.md)）。
-- 索引：`schemas/manifest.json`（production=61 entries；`method_version_bindings=[]`）。
+- 索引：`schemas/manifest.json`（production=65 entries；41 retained + 24 component-native；`method_version_bindings=[]`）。
 - Rust 生成物：`rust/crates/kernel-contracts/src/generated/`（禁止手改）。
 - CLI：`schema-tool`；运行时库：`kernel-contracts`。
 - 许可证：根目录 [`LICENSE`](../../LICENSE)（Apache-2.0）。
@@ -36,13 +36,25 @@ cargo run --manifest-path rust/Cargo.toml -p schema-tool -- --repo-root "$PWD" \
 |---|---|
 | Schema 源 | `schemas/source/{audit,common,task,policy,event,kcp}/` |
 | Manifest | `schemas/manifest.json` |
-| 生成类型 | `rust/crates/kernel-contracts/src/generated/types.rs` |
+| 生成类型 | `rust/crates/kernel-contracts/src/generated/types.rs`（含`ContentOriginV2`、`AuditRecordV2`、`AuditAllocationV2`、tagged `TaskCreationProvenanceV1`） |
 | Catalog | `rust/crates/kernel-contracts/src/generated/catalog.rs` |
 | Typed decode | `rust/crates/kernel-contracts/src/generated/typed.rs` + `kernel-contracts::decode_validated` |
 | JCS / fixture | `schemas/examples/jcs/`、`schemas/fixtures/**`（official task-creation wrappers **不**进 manifest） |
 | 统一门 | `scripts/check-schema.sh` |
 
+## V2InitialBuildActive切片1a
+
+切片1a新增四个component-native source root：
+
+- `common/content_origin.v2.json`：stored Origin v2，carrier闭集不含`action_transition`；
+- `audit/audit_record.v2.json`：完整v2 wire与封闭task/policy context，不从v1 optional拼装；
+- `task/task_creation_provenance.v1.json`：schema-tool原生TaggedUnion，仅`root_command_v2|child_action_v2`；
+- `audit/audit_allocation.v2.json`：IC §6.16.0a要求独立Audit路径对象被Schema验证并跨语言边界传递，因此作为`new-contract` source root，而不是只留Rust typed input。
+
+manifest DAG将`audit`、`task`的`allowed_refs`固定为`[common,policy]`；`common`无外依赖，`policy→common`，保持无环。production bindings仍为空。本切片只交付Schema/manifest/generated/conformance，不实现repository、handler或producer。
+
 ## 门禁与流水线概述
+
 
 1. **Toolchain**：`node scripts/check-node-toolchain.mjs` 硬校验 Node 24.18.0 / pnpm 11.3.0。
 2. **Generate×2 + check**：`schema-tool generate` 两次稳定；`check` 报告 drift。

@@ -29,7 +29,7 @@ Event v2第一实现段已一次性加入下表八项；不能只保留 Envelope
 | `ApprovalStateChangedPayloadV1` | event | event_payload | new-contract | `https://schemas.shittim.local/event/approval_state_changed_payload/v1` | `schemas/source/event/approval_state_changed_payload.v1.json` | `schema_version` | whole-schema root refs：`ConfirmationModeV1`、`ApprovalRecordKindV2`、`ApprovalSubjectKindV2` |
 | `EventEnvelopeV2` | event | envelope | breaking-replacement | `https://schemas.shittim.local/event/event_envelope/v2` | `schemas/source/event/event_envelope.v2.json` | `schema_version` | whole-schema root refs：`CausationRefV2`与五个正式payload |
 
-该切片落地后production manifest现为61 entries（41 retained + 20 component-native）。production `method_version_bindings`继续为空，因为Event Catalog不通过KCP MethodVersionBinding表达。该“仍为空”仅指本Event Schema/Catalog实现段；未来若升级KCP `event.poll` response以承载v2，必须在独立切片为poll新增/升级binding，不能借此句永久保持为空。
+该切片落地后production manifest为61 entries（41 retained + 20 component-native；其后切片1a增至65，见IC §13.6.3）。production `method_version_bindings`继续为空，因为Event Catalog不通过KCP MethodVersionBinding表达。该“仍为空”仅指本Event Schema/Catalog实现段；未来若升级KCP `event.poll` response以承载v2，必须在独立切片为poll新增/升级binding，不能借此句永久保持为空。
 
 `ConfirmationModeV1`归属common，而不是policy。它是PolicyRule、PermissionDecision、Approval request和公共Approval事件共同使用的跨域算法无关词表；放入policy会让所有使用者依赖Approval领域，并阻止common层对象未来安全复用。common继续不引用其它component。event的`allowed_refs`已精确扩为`["common","policy"]`以复用policy拥有的record/subject discriminator；policy仍只引用common。完整DAG为`kcp→event|task|common`、`event→policy|common`、`policy→common`、`task→common`、`audit→common`，不存在反向边或cycle。
 

@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有61个Schema（41 retained + 20 component-native）；ADR-0006首批12项与ADR-0008 Event v2八Schema/catalog/typed decode已落地，production MethodVersionBindings仍为空。SQLite migration 0003、descriptor v1、版本化统一Outbox与mixed API也已实现（legacy append待删除，ADR-0009）；active business producer、Publisher、versioned KCP poll仍未实现。ADR-0006后续repository/handler/child materializer与ADR-0007 Approval/PermissionDecision v2仍未完成；里程碑为`V2InitialBuildActive`（非cutover）。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
+已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有65个Schema（41 retained + 24 component-native）；ADR-0006首批12项、ADR-0008 Event v2八项，以及ADR-0009 `V2InitialBuildActive`切片1a四项（ContentOriginV2、AuditRecordV2、TaskCreationProvenanceV1、AuditAllocationV2）source/manifest/generated/conformance已落地，production MethodVersionBindings仍为空。SQLite migration 0003、descriptor v1、版本化统一Outbox与mixed API也已实现（legacy append待删除，ADR-0009）；active business producer、Publisher、versioned KCP poll仍未实现。ADR-0006后续repository/handler/child materializer与ADR-0007 Approval/PermissionDecision v2仍未完成；里程碑为`V2InitialBuildActive`（非cutover）。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
 
 本目录是中文导航，不是新的事实源。字段、状态机、错误和兼容规则以 `specs/` 及 `schemas/source` 为准。Core API 不暴露预埋的 Computer Use 方法；未来 Profile 的方法必须在正式 Schema、Catalog 和 Extension SDK Base 组合契约确立后再出现。`desktop-client` 是桌面客户端，不是 Computer Use。
 
@@ -18,7 +18,7 @@
 - [kernel-kcp typed application handler](kernel-kcp.md)（`system.ping`、`task.create`、`task.get`；不可连接、非 SDK）
 - [Task创建、Child materialization与repository硬合同](task-repository-contract.md)（ADR-0006首批Schema、纯library与official fixtures/harness已落地；repository/handler/child materializer未完成；legacy v1 create/get已实现但待删除；无v1数据迁移）
 - [Approval v2与PermissionDecision授权合同](approval-contract.md)（contract-only）
-- [AuditRecord版本合同](audit-record.md)（v1已实现；v2 producer contract-only）
+- [AuditRecord版本合同](audit-record.md)（v2 Schema/generated/conformance已实现；repository/producer未实现）
 - [Kernel Control Protocol](kernel-control-protocol.md)（method-aware active生命周期合同；Schema/root types已落地，runtime实现仍为retained v1库级路径）
 - 首批正式事件索引：[Event Catalog](event-catalog.md)（Event v2 Schema/catalog/typed decode、统一Outbox shape已实现；active producer/Publisher/versioned poll未实现）
 - 稳定错误索引：[Error Catalog](error-catalog.md)（method lifecycle、v2业务/身份/CAS错误）
