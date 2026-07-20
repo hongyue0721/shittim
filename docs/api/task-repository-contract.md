@@ -1,6 +1,6 @@
 # Task创建、Child materialization 与 repository 硬合同
 
-> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness **已实现**；production MethodVersionBindings 仍为空；active v2 repository/handler/materializer **未实现**；legacy TaskCreate v1 create/get 已实现但标记为 **待删除**，不得进入 future production server）
+> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness，以及切片1b ActionRequestV2/ActionTransitionIntentV1/三projection + `kernel-authorization` pure crate **已实现**；production MethodVersionBindings 仍为空；active v2 repository/handler/materializer **未实现**；legacy TaskCreate v1 create/get 已实现但标记为 **待删除**，不得进入 future production server）
 
 ## 唯一事实源
 
@@ -25,6 +25,12 @@
 - child 唯一新写入口为 `kernel.task/task.child.create`；
 - 不支持 v1 业务数据迁移；旧开发库 `reinitialize-required`；
 - production bindings + v2 dispatcher + v2 repository 是 `V2InitialBuildActive` 初始交付，不是 cutover。
+
+- `kernel-task-creation`唯一拥有root/child proposal normalize、receipt/idempotency与allocation validation；
+- `kernel-authorization`唯一拥有ChildTaskDelta、MaterialAuthorization、ObservationEvidence projection的typed facts→构造/验证/JCS/SHA-256；
+- retained `VerificationResultV1`已覆盖child materialization所需验证事实，继续复用；
+- `SubjectProjectionV1`与`ApprovalEventAllocationV1`留给切片1c；
+- 两pure crate均不读repository/SQLite、不分配ID、不写存储；authorization crate不替代`domain-policy` matcher。
 
 字段级合同、七 UUID / 十 UUID、JCS 形状与 tamper 矩阵不在本页复述。
 

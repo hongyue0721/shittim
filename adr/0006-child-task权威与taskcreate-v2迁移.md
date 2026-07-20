@@ -35,7 +35,7 @@ Action 的 `structured_arguments` 使用版本化 `ChildTaskProposalV1`，完整
 
 父关系只由 `ActionRequest.task_id` 确定。任何 arguments 内同义字段、嵌套 shadow 字段或通过开放 JSON 伪装的 parent/id/state 字段都必须在 proposal Schema/producer validation 中拒绝。
 
-root v2与child proposal的正式生产normalization owner现为纯crate `kernel-task-creation`。本阶段范围只含root/child proposal normalize、root receipt/idempotency projection与hash、child proposal/receipt hash、root/child allocation validation；`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`未来由专门authorization projection owner或独立切片实现，不得塞入task creation。依赖方向是`kernel-contracts + domain-policy -> kernel-task-creation -> kernel-sqlite（未来调用方）`；全部repository事实由caller typed input注入，crate不读repo、不分配ID、不写存储，也不依赖SQLite/KCP。URI parser/normalizer继续以`domain-policy`为当前唯一权威，task creation只编排调用、不得复制；长期抽取中立URI crate须另立ADR，当前不制造第二实现。`domain-task`继续保持纯状态机，不新增policy依赖。该crate已实现pure library但尚未接入repository/handler。
+root v2与child proposal的正式生产normalization owner现为纯crate `kernel-task-creation`；`ChildTaskDeltaProjectionV1`、`MaterialAuthorizationProjectionV1`、`ObservationEvidenceProjectionV1`的正式owner为纯crate `kernel-authorization`。两crate都只接受caller typed facts、不读repository、不分配ID、不写存储；URI parser/normalizer继续以`domain-policy`为当前唯一权威。`SubjectProjectionV1`留给切片1c。
 
 ### 3. 直接因果与版本升级
 

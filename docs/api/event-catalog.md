@@ -16,7 +16,7 @@
 
 ## 范围
 
-本页索引 active Event Catalog、CausationRef v2、typed envelope、版本化统一 Outbox 与 retained `event.poll` v1 不得返回 v2 的边界。不复述八 Schema 字段、claimant 谓词、binding 常量或 mixed API 形状。AuditRecordV2与AuditAllocationV2虽已进入Schema/generated链，仍不是Event或Outbox envelope；challenge expiry只写Audit且不发`approval.state_changed`。
+本页索引 active Event Catalog、CausationRef v2、typed envelope、版本化统一 Outbox 与 retained `event.poll` v1 不得返回 v2 的边界。不复述八 Schema 字段、claimant 谓词、binding 常量或 mixed API 形状。AuditRecordV2与AuditAllocationV2虽已进入Schema/generated链，仍不是Event或Outbox envelope；challenge expiry只写Audit且不发`approval.state_changed`。切片1b已落地`ActionTransitionIntentV1` Schema/generated type，producer仍必须等待Action repository/migration；不得因intent类型存在就宣称`action.state_changed` producer闭环。
 
 ## 导航
 
