@@ -18,6 +18,8 @@
 
 本页索引 active Event Catalog、CausationRef v2、typed envelope、版本化统一 Outbox 与 retained `event.poll` v1 不得返回 v2 的边界。不复述八 Schema 字段、claimant 谓词、binding 常量或 mixed API 形状。AuditRecordV2与AuditAllocationV2虽已进入Schema/generated链，仍不是Event或Outbox envelope；challenge expiry只写Audit且不发`approval.state_changed`。切片1b已落地`ActionTransitionIntentV1` Schema/generated type，producer仍必须等待Action repository/migration；不得因intent类型存在就宣称`action.state_changed` producer闭环。
 
+切片1c-i新增`ApprovalEventAllocationV1` Schema/generated typed对象，作为未来Approval三种CAS方法required输入；它没有实现repository消费、ID/opaque互异验证或`approval.state_changed` producer。其`causation_ref`直接复用`CausationRefV2`，`changed_at`限制为UTC秒精度。
+
 ## 导航
 
 - [kernel-sqlite API](kernel-sqlite.md)

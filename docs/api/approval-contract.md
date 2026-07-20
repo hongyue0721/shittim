@@ -1,6 +1,6 @@
 # Approval v2 与 PermissionDecision 授权合同
 
-> 状态徽章：**contract-only**（accepted；ApprovalRecord v1 按 ADR-0009 禁止 production read/write/migration，仅保留 Schema 历史验证资产；无 repository 实现）
+> 状态徽章：**schema/library partial**（切片1c-i五个授权核心Schema、generated Rust、typed conformance、SubjectProjection pure API与official fixture已实现；Approval/PD repository、current-head CAS、identity/challenge/evidence/remote signature、producer仍未实现）
 
 ## 唯一事实源
 
@@ -15,6 +15,18 @@
 | 决策背景与边界 | [ADR-0007](../../adr/0007-approval-v2不可变联合身份与失效.md) |
 | 无迁移决策 | [ADR-0009](../../adr/0009-v2从零构建并取消v1数据迁移.md) |
 | 域状态 | [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md) |
+
+## 已实现的1c-i表面
+
+- `PermissionDecisionV2`：完整stored字段、material/observation fingerprint分离、canonical confirmation mode映射与required-nullable Approval binding；
+- `PolicyRuleV2`：stored v2字段与`generic|local|system_authentication|remote_signature|plan_revision`闭集；
+- `ApprovalRecordV2`：`record_kind`外层与`subject_kind`内层真正tagged enum，禁止v1平面optional拼装；
+- `SubjectProjectionV1`：三subject branch唯一preimage；`kernel-authorization::project_subject_projection`返回typed value、JCS bytes与lowercase SHA-256；
+- `ApprovalEventAllocationV1`：`event_id/correlation_id/dedup_key/changed_at/causation_ref`封闭对象。
+
+Official fixtures：`schemas/fixtures/policy/subject_projection.v1.json`三branch各含subject、raw typed facts JSON、normalized projection、JCS UTF-8 hex、SHA-256与逐字段tamper；`schemas/fixtures/policy/approval_event_allocation.v1.json`按allocation惯例只含valid allocation与Schema tamper，不保存JCS/hash preimage。本片只证明Schema/typed shape，不宣称repository互异/causation/replay验证已实现。
+
+身份/证据家族（Credential、Remote/System Challenge、Local/System Evidence、Remote Response/Signature Preimage）明确属于1c-ii。
 
 ## 范围
 

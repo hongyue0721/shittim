@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有70个Schema（41 retained + 29 component-native）；ADR-0006首批12项、ADR-0008 Event v2八项、ADR-0009切片1a四项及切片1b五项Action/authorization Schema source/manifest/generated/conformance已落地，production MethodVersionBindings仍为空。切片1b新增`kernel-authorization` pure crate；SubjectProjection与ApprovalEventAllocation留1c。SQLite migration 0003、descriptor v1、版本化统一Outbox与mixed API也已实现（legacy append待删除，ADR-0009）；active business producer、Publisher、versioned KCP poll仍未实现。ADR-0006后续repository/handler/child materializer与ADR-0007 Approval/PermissionDecision v2仍未完成；里程碑为`V2InitialBuildActive`（非cutover）。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
+已有首批v1 JSON Schema源、manifest、Rust生成类型与校验/哈希API、纯领域状态机、SQLite基座，以及不可连接的v1 KCP preflight/dispatcher/handlers。当前manifest共有75个Schema（41 retained + 34 component-native）；ADR-0006首批12项、ADR-0008 Event v2八项、ADR-0009切片1a四项、切片1b五项及切片1c-i授权核心五项Schema source/manifest/generated/conformance已落地，production MethodVersionBindings仍为空。`kernel-authorization` pure crate现负责Delta/Material/Observation/Subject四投影，SubjectProjection含三branch official fixture；身份/证据家族留1c-ii。SQLite migration 0003、descriptor v1、版本化统一Outbox与mixed API也已实现（legacy append待删除，ADR-0009）；active business producer、Publisher、versioned KCP poll仍未实现。repository/handler/child materializer与Approval/PermissionDecision current-head CAS仍未完成；里程碑为`V2InitialBuildActive`（非cutover）。当前**没有**可连接`agentd`、稳定网络endpoint或TypeScript客户端包。
 
 本目录是中文导航，不是新的事实源。字段、状态机、错误和兼容规则以 `specs/` 及 `schemas/source` 为准。Core API 不暴露预埋的 Computer Use 方法；未来 Profile 的方法必须在正式 Schema、Catalog 和 Extension SDK Base 组合契约确立后再出现。`desktop-client` 是桌面客户端，不是 Computer Use。
 

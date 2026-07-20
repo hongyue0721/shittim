@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：contract-only；本 ADR 未修改 Schema、Rust、SQLite migration 或生成物
+- 实现状态：partial；切片1c-i已落地ApprovalRecordV2、PermissionDecisionV2、PolicyRuleV2、SubjectProjectionV1、ApprovalEventAllocationV1 source/manifest/generated/conformance及SubjectProjection pure API/fixture；identity/challenge/evidence/remote signature与repository/CAS/producer仍未实现
 - **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：文中 v1→v2 migration 生产要求、repository `legacy v1 read projection` 作为迁移配套生产义务的效力作废；Approval v2 不可变联合 / current-head CAS / fingerprint / 身份证据决策仍有效。
 
 ## 背景

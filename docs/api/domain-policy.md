@@ -34,6 +34,21 @@ match result {
 
 `owner`、本机入口、security mode、S4/S5均不产生默认权限或默认确认。PermissionDecision v2适配Default Allow：无规则命中仍生成allow decision，但不创建Approval。Child Task Action的context必须加入父子scope/capability/delegation delta；当前`PolicyEvaluationContext`尚无该v2持久shape，属于待升级接口。
 
+## SubjectProjection pure API
+
+`kernel-authorization`现提供：
+
+```rust
+use kernel_authorization::{project_subject_projection, SubjectProjectionFactsV1};
+
+let canonical = project_subject_projection(facts)?;
+// canonical.value: generated SubjectProjectionV1 tagged enum
+// canonical.jcs_utf8: exact RFC 8785 bytes
+// canonical.sha256: lowercase subject_hash
+```
+
+`SubjectProjectionFactsV1`是`Operation | TaskProposal | PlanRevision` typed enum，字段精确对应Approval SubjectV2；API验证positive revision、non-empty普通字符串与lowercase 64-hex，再构造generated enum、Schema复验、JCS/hash。它不读repository、不判断current revision、不分配ID、不执行Approval CAS。
+
 ## Invariant 优先
 
 `KernelInvariantState::StopFence` / `Recovery` 在规则解析和匹配前返回 `BlockedByKernelInvariant`：

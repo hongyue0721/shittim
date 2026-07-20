@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-20（`V2InitialBuildActive`切片1b完成：新增ActionTransitionIntentV1、ActionRequestV2、ChildTaskDeltaProjectionV1、MaterialAuthorizationProjectionV1、ObservationEvidenceProjectionV1；manifest=70（41 retained + 29 component-native），generated Rust、typed conformance、`kernel-authorization` pure crate与authorization projection official fixtures/harness/oracle已落地。production MethodVersionBindings仍为空；repository/handler/materializer/producer未实现。）
+> 状态日期：2026-07-20（`V2InitialBuildActive`切片1c-i完成：新增PermissionDecisionV2、PolicyRuleV2、ApprovalRecordV2、SubjectProjectionV1、ApprovalEventAllocationV1；manifest=75（41 retained + 34 component-native），generated Rust、双层tagged enum、typed conformance、SubjectProjection pure API与official fixtures/harness/oracle已落地。production MethodVersionBindings仍为空；身份/证据家族留1c-ii，repository/CAS/producer未实现。）
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 
@@ -30,7 +30,8 @@
 |---|---|---|
 | 0 | 规范文档落锤：ADR-0009 + IC/CORE/CONFORMANCE/PROGRESS/MATRIX/API 对齐 | **已完成** |
 | 1a | root创建路径持久对象Schema：ContentOriginV2、AuditRecordV2、TaskCreationProvenanceV1、AuditAllocationV2 + manifest/generated/conformance | **已完成** |
-| 1b | Action/child Schema：ActionTransitionIntentV1、ActionRequestV2、Delta/Material/Observation projection + `kernel-authorization` pure crate | **已完成**（SubjectProjection与ApprovalEventAllocation留1c） |
+| 1b | Action/child Schema：ActionTransitionIntentV1、ActionRequestV2、Delta/Material/Observation projection + `kernel-authorization` pure crate | **已完成** |
+| 1c-i | 授权核心五Schema：PermissionDecisionV2、PolicyRuleV2、ApprovalRecordV2、SubjectProjectionV1、ApprovalEventAllocationV1 | **已完成**（身份/证据家族留1c-ii） |
 | 2 | fresh SQLite 基线 + root repository | 未开始 |
 | 3 | method-aware KCP v2 preflight/dispatcher/handler + production bindings | 未开始 |
 | 4 | Action / PD / Approval / Identity repository | 未开始 |
@@ -40,19 +41,20 @@
 **已实现（代码/Schema 事实）**
 
 - 规范与工程基线：Freedom-first / Kernel Owns Reality 合同、Apache-2.0、双仓同步 library/CLI、Node/pnpm 零依赖根基座（exact Node 24.18.0 / pnpm 11.3.0）、统一门 `scripts/check-schema.sh`。
-- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=70 entries，41 retained + 29 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / RFC 8785；production `METHOD_VERSION_BINDINGS=[]`。
+- Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=75 entries，41 retained + 34 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / RFC 8785；production `METHOD_VERSION_BINDINGS=[]`。
 - 纯领域：`domain-task`（Task/Action 状态图、revision/plan_version）、`domain-policy`（URI/glob/Default Allow/rate-limit draft，Stop Fence/Recovery 独立 Blocked）。
 - 持久化：`kernel-sqlite` migration 0001–0003；Audit canonical Store；legacy Task create/get（**待删除**）；版本化统一 Outbox + mixed v1/v2 append/read + 严格 stored decoder + savepoint poison（legacy append **待删除**）。
 - KCP 库级：`kernel-kcp` retained v1 Value preflight、三方法 registration/dispatcher/handler（`system.ping` / legacy `task.create` / `task.get`）与 SQLite adapter；不可连接，无 bytes/frame/server。
 - ADR-0006 首批：12 business-v2 Schema + `kernel-task-creation` pure library + official fixtures/harness + schema-tool strict pointer CLI；**未**接 repository/handler。
 - ADR-0008 前两段：Event v2 八 Schema、`EventTypeBinding`/active·legacy catalog、typed EventEnvelope v1/v2、migration 0003 descriptor v1 与 mixed Outbox API。
-- V2InitialBuildActive切片1b：ActionTransitionIntentV1、ActionRequestV2与ChildTaskDelta/MaterialAuthorization/ObservationEvidence三projection source/manifest/generated Rust/typed round-trip/conformance已落地；`kernel-authorization` pure crate负责typed authoritative facts→构造/验证/JCS/SHA-256，不读repo、不分配ID、不写存储、不替代matcher。IC §5.3.1要求的四份authorization projection official fixtures（child delta、material、observation not_applicable、observation observed）与production-owner harness、schema-tool CLI oracle已落地，wrapper不进manifest。retained VerificationResultV1满足child materialization验证引用，未新造版本；SubjectProjection与ApprovalEventAllocation留1c。
+- V2InitialBuildActive切片1b：ActionTransitionIntentV1、ActionRequestV2与ChildTaskDelta/MaterialAuthorization/ObservationEvidence三projection source/manifest/generated Rust/typed round-trip/conformance已落地；`kernel-authorization` pure crate负责typed authoritative facts→构造/验证/JCS/SHA-256，不读repo、不分配ID、不写存储、不替代matcher。IC §5.3.1要求的四份authorization projection official fixtures（child delta、material、observation not_applicable、observation observed）与production-owner harness、schema-tool CLI oracle已落地，wrapper不进manifest。retained VerificationResultV1满足child materialization验证引用，未新造版本。
+- V2InitialBuildActive切片1c-i：PermissionDecisionV2、PolicyRuleV2、ApprovalRecordV2、SubjectProjectionV1、ApprovalEventAllocationV1 source/manifest/generated/typed conformance已落地；ApprovalRecord生成外层record与内层subject tagged enum。`project_subject_projection`与三branch official fixture负责typed facts→Schema复验→JCS/SHA-256；Allocation含Schema-only official fixture。repository/CAS/producer与身份/证据家族未实现。
 
 **未实现（不得宣称完成）**
 
 - `ActionTransitionIntentV1` repository、Action transition migration/producer（Schema与generated type已完成）。
 - active Action repository：`approval_chain_id`、execution generation、materialized child result、Approval v2 消费。
-- 其余 v2 对象：SubjectProjection、ApprovalEventAllocation、ApprovalRecord/PermissionDecision/PolicyRule v2、signature/credential/challenge/evidence 等。
+- Credential/Challenge/Local/System Evidence/Remote signature与response/preimage等身份家族（1c-ii）。
 - method-aware payload version preflight；active `task.create` 只接受 2；替换并删除 registered v1 create。
 - root v2 repository/handler、child Action materializer。
 - Action/PermissionDecision/Approval v2 repositories、current-head CAS、fingerprint 失效/复用、身份 challenge、plan 重评。
@@ -69,7 +71,8 @@
 - [x] 切片 0：规范文档落锤（ADR-0009 等）
 - [x] 切片 1a：root创建路径持久对象Schema/manifest/generated/conformance
 - [x] 切片 1b：Action/child五Schema + `kernel-authorization` pure crate + projection official fixtures/harness/oracle
-- [ ] 切片 1c：SubjectProjection、ApprovalEventAllocation与Approval/PD/auth剩余Schema
+- [x] 切片 1c-i：授权核心五Schema + SubjectProjection pure API/fixture
+- [ ] 切片 1c-ii：Credential/Challenge/Evidence/Remote signature家族
 - [ ] 切片 2：fresh SQLite 基线 + root repository
 - [ ] 切片 3：method-aware KCP v2 + production bindings
 - [ ] 切片 4：Action/PD/Approval/Identity repository
@@ -96,7 +99,7 @@
 
 ## 下一步
 
-1. 进入切片1c，完成SubjectProjection、ApprovalEventAllocation与Approval/PermissionDecision/auth剩余Schema；切片1b不实现repository/handler/producer。
+1. 进入切片1c-ii，完成Credential/Challenge/Evidence/Remote signature家族；1c-i仍不实现repository/CAS/producer。
 2. 切片 2–3：fresh SQLite 基线、root v2 repository/handler、method-aware preflight 与 production bindings。
 3. 切片 4–5：Action/PD/Approval repositories 与 child materializer；接入有 owner 的 active Event producers。
 4. 切片 6：删除全部 v1 runtime 写路径，落地旧库 `reinitialize-required`，闭合 §13.7。
@@ -105,13 +108,14 @@
 
 ## 最近验证
 
-本切片（V2InitialBuildActive 1a）验证命令：
+本切片（V2InitialBuildActive 1c-i）验证命令：
 
 ```text
 export PATH="$HOME/.local/share/pnpm:$PATH"
 export TMPDIR=/mnt/data/shittim-build-tmp
 export CARGO_TARGET_DIR=/mnt/data/shittim-cargo-target
 cargo test --manifest-path rust/Cargo.toml -p kernel-contracts
+cargo test --manifest-path rust/Cargo.toml -p kernel-authorization
 cargo test --manifest-path rust/Cargo.toml -p schema-tool
 cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ./scripts/check-schema.sh
@@ -119,7 +123,7 @@ node scripts/update-file-manifest.mjs --check
 git diff --check
 ```
 
-上述门禁全部通过；`check-schema.sh`汇总624 passed、0 failed、1 ignored（helper entrypoint）。
+门禁结果以本次命令实际输出为准，不在进度文档硬编码易漂移的总测试计数。
 
 ## 事实来源
 

@@ -6,7 +6,7 @@
 ## 权威边界
 
 - 字段、枚举、错误与兼容规则：`specs/` 与 `schemas/source/**/*.json`（合同细节见 IC §5、§6、§13 与 [ADR-0002](../../adr/0002-schema生成与兼容策略.md)）。
-- 索引：`schemas/manifest.json`（production=70 entries；41 retained + 29 component-native；`method_version_bindings=[]`）。
+- 索引：`schemas/manifest.json`（production=75 entries；41 retained + 34 component-native；`method_version_bindings=[]`）。
 - Rust 生成物：`rust/crates/kernel-contracts/src/generated/`（禁止手改）。
 - CLI：`schema-tool`；运行时库：`kernel-contracts`。
 - 许可证：根目录 [`LICENSE`](../../LICENSE)（Apache-2.0）。
@@ -63,7 +63,19 @@ manifest DAG将`audit`、`task`的`allowed_refs`固定为`[common,policy]`；`co
 - `policy/material_authorization_projection.v1.json`：material fingerprint唯一preimage；
 - `policy/observation_evidence_projection.v1.json`：`not_applicable|observed`真正TaggedUnion。
 
-manifest=70（41 retained + 29 component-native），DAG保持`policy→common`、`task→common,policy`无环，bindings仍空。`kernel-authorization` pure crate接受caller typed authoritative facts，负责三projection构造、规则验证、Schema再验证、JCS/SHA-256；不读SQLite/repository、不分配ID、不写存储、不替代`domain-policy` matcher。IC §5.3.1四份official projection fixtures已落地：`schemas/fixtures/task/child_task_delta_projection.v1.json`、`schemas/fixtures/policy/material_authorization_projection.v1.json`、`schemas/fixtures/policy/observation_evidence_not_applicable.v1.json`、`schemas/fixtures/policy/observation_evidence_observed.v1.json`；generic `ProjectionFixture` wrapper 由 `schema-tool::official_fixture` 解析，production harness 在 `kernel-authorization`，CLI oracle 在 `schema-tool` tests。retained `VerificationResultV1`完整满足child materialization验证记录，未新造版本；SubjectProjection与ApprovalEventAllocation留1c。
+manifest=70（41 retained + 29 component-native）是切片1b完成时基线；DAG保持`policy→common`、`task→common,policy`无环，bindings为空。`kernel-authorization` pure crate接受caller typed authoritative facts，负责三projection构造、规则验证、Schema再验证、JCS/SHA-256；不读SQLite/repository、不分配ID、不写存储、不替代`domain-policy` matcher。IC §5.3.1四份official projection fixtures已落地：`schemas/fixtures/task/child_task_delta_projection.v1.json`、`schemas/fixtures/policy/material_authorization_projection.v1.json`、`schemas/fixtures/policy/observation_evidence_not_applicable.v1.json`、`schemas/fixtures/policy/observation_evidence_observed.v1.json`；generic `ProjectionFixture` wrapper 由 `schema-tool::official_fixture` 解析，production harness 在 `kernel-authorization`，CLI oracle 在 `schema-tool` tests。retained `VerificationResultV1`完整满足child materialization验证记录，未新造版本；SubjectProjection与ApprovalEventAllocation已在1c-i落地；身份/证据家族留1c-ii。
+
+## V2InitialBuildActive切片1c-i
+
+切片1c-i新增五个policy component-native source root：
+
+- `policy/permission_decision.v2.json`：active immutable PD，material/observation fingerprint分离；
+- `policy/policy_rule.v2.json`：production rule v2与五值confirmation闭集；
+- `policy/approval_record.v2.json`：外层record + 内层subject原生TaggedUnion；
+- `policy/subject_projection.v1.json`：subject_hash唯一preimage；
+- `policy/approval_event_allocation.v1.json`：Approval head mutation的正式Event allocation。
+
+manifest=75（41 retained + 34 component-native），bindings仍空，DAG保持`policy→common`无环。`kernel-authorization`新增`project_subject_projection` typed pure API。official fixtures为`schemas/fixtures/policy/subject_projection.v1.json`与Schema-only `schemas/fixtures/policy/approval_event_allocation.v1.json`；Subject三branch共享`SubjectProjectionFixture` wrapper并由production-owner harness与CLI oracle双重验证，Allocation只验证shape/tamper且不保存JCS/hash preimage。身份/证据家族留1c-ii；repository/CAS/producer不在本切片。
 
 ## 门禁与流水线概述
 
