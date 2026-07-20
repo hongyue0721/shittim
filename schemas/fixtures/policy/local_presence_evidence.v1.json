@@ -1,0 +1,64 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/local_presence_evidence/v1",
+  "valid_object": {
+    "schema_version": 1,
+    "id": "00000000-0000-4000-8000-000000000023",
+    "session_ref": "desktop-session-1",
+    "transport_kind": "unix_peer",
+    "peer_principal_ref": "uid:1000",
+    "observed_actor": {
+      "schema_version": 1,
+      "revision": 2,
+      "id": "actor-local-1",
+      "kind": "known_user",
+      "source": "local-desktop",
+      "authentication_level": "platform_verified",
+      "confidence": 0.9
+    },
+    "entry_point": "local_desktop",
+    "challenge_ref": null,
+    "presence_kind": "interactive_session",
+    "observed_at": "2026-07-20T08:00:00Z",
+    "valid_until": "2026-07-20T08:10:00Z",
+    "verifier_kind": "kernel_transport",
+    "evidence_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "tamper_cases": [
+    {
+      "case_id": "transport_unknown",
+      "operation": "replace",
+      "pointer": "/transport_kind",
+      "value": "tcp",
+      "schema_valid": false
+    },
+    {
+      "case_id": "presence_unknown",
+      "operation": "replace",
+      "pointer": "/presence_kind",
+      "value": "presence",
+      "schema_valid": false
+    },
+    {
+      "case_id": "verifier_unknown",
+      "operation": "replace",
+      "pointer": "/verifier_kind",
+      "value": "user_asserted",
+      "schema_valid": false
+    },
+    {
+      "case_id": "subject_hash_leak",
+      "operation": "add",
+      "pointer": "/subject_hash",
+      "value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "schema_valid": false
+    },
+    {
+      "case_id": "evidence_hash_uppercase",
+      "operation": "replace",
+      "pointer": "/evidence_hash",
+      "value": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+      "schema_valid": false
+    }
+  ]
+}

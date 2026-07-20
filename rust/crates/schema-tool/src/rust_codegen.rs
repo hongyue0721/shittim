@@ -1952,6 +1952,17 @@ fn render_const_type(name: &str, schema_id: &str, value: &ConstJson) -> String {
         ConstJson::Bool { value: expected } => format!(
             "/// Generated boolean const from `{schema_id}`\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]\npub struct {name};\nimpl Serialize for {name} {{ fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {{ serializer.serialize_bool({expected}) }} }}\nimpl<'de> Deserialize<'de> for {name} {{ fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {{ let value = bool::deserialize(deserializer)?; if value == {expected} {{ Ok(Self) }} else {{ Err(D::Error::custom(format!(\"expected boolean const {expected}, got {{value}}\"))) }} }} }}\n"
         ),
+        ConstJson::StringArray { values } => {
+            let expected_list = values
+                .iter()
+                .map(|value| format!("{value:?}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            // Error path avoids embedding quotes inside a format! string literal.
+            format!(
+                "/// Generated ordered string-array const from `{schema_id}`\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]\npub struct {name};\nimpl Serialize for {name} {{ fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {{ [{expected_list}].serialize(serializer) }} }}\nimpl<'de> Deserialize<'de> for {name} {{ fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {{ let value = Vec::<String>::deserialize(deserializer)?; let expected: &[&str] = &[{expected_list}]; if value.iter().map(String::as_str).eq(expected.iter().copied()) {{ Ok(Self) }} else {{ Err(D::Error::custom(format!(\"expected string-array const {{:?}}, got {{:?}}\", expected, value))) }} }} }}\n"
+            )
+        }
         ConstJson::Null => render_null_only().replace("NullOnly", name),
     }
 }

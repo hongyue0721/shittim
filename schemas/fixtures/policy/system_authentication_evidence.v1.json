@@ -1,0 +1,56 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/system_authentication_evidence/v1",
+  "valid_object": {
+    "schema_version": 1,
+    "id": "00000000-0000-4000-8000-000000000024",
+    "mechanism": "polkit",
+    "mechanism_version": "1",
+    "platform_subject_ref": "unix-user:1000",
+    "challenge_ref": "00000000-0000-4000-8000-000000000022",
+    "subject_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "material_authorization_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "result": "verified",
+    "verified_at": "2026-07-20T08:01:00Z",
+    "valid_until": "2026-07-20T08:06:00Z",
+    "verifier_ref": "os-adapter:polkit",
+    "evidence_blob_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "tamper_cases": [
+    {
+      "case_id": "result_failed",
+      "operation": "replace",
+      "pointer": "/result",
+      "value": "failed",
+      "schema_valid": false
+    },
+    {
+      "case_id": "result_success_string",
+      "operation": "replace",
+      "pointer": "/result",
+      "value": "success",
+      "schema_valid": false
+    },
+    {
+      "case_id": "mechanism_free_string",
+      "operation": "replace",
+      "pointer": "/mechanism",
+      "value": "success",
+      "schema_valid": false
+    },
+    {
+      "case_id": "empty_mechanism_version",
+      "operation": "replace",
+      "pointer": "/mechanism_version",
+      "value": "",
+      "schema_valid": false
+    },
+    {
+      "case_id": "missing_subject_hash",
+      "operation": "remove",
+      "pointer": "/subject_hash",
+      "value": null,
+      "schema_valid": false
+    }
+  ]
+}

@@ -241,8 +241,8 @@ fn manifest_batch_is_exactly_75_and_bindings_remain_empty() {
         serde_json::from_str(include_str!("../../../../schemas/manifest.json")).expect("manifest");
     let entries = manifest["schemas"].as_array().expect("schemas");
     assert!(
-        entries.len() >= 75,
-        "production baseline plus synthetic probe roots"
+        entries.len() >= 83,
+        "production baseline (83) plus synthetic probe roots"
     );
     assert!(manifest["method_version_bindings"]
         .as_array()

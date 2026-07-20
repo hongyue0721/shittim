@@ -284,12 +284,12 @@ where
 fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_creation_roots() {
     let catalog = catalog();
     let ids = catalog.schema_ids();
-    // Production is exactly 75 = 41 retained + 34 component-native. Synthetic probe
+    // Production is exactly 83 = 41 retained + 42 component-native. Synthetic probe
     // repos used by schema-tool tests may temporarily append extra component-native
     // entries; those must not weaken the 12-root identity assertions below.
     assert!(
-        ids.len() >= 75,
-        "embedded catalog must contain at least production 75 schemas, got {}",
+        ids.len() >= 83,
+        "embedded catalog must contain at least production 83 schemas, got {}",
         ids.len()
     );
     let retained_prefix = "https://schemas.shittim.local/v1/";
@@ -318,7 +318,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         12,
         "historical task-creation batch remains 12 roots"
     );
-    // Pure production catalogs must still be exact 70. Probe-only extras are allowed
+    // Pure production catalogs must still be exact 83. Probe-only extras are allowed
     // only when additional component-native ids are present beyond the production set.
     let production_native_ids: BTreeSet<&str> = [
         "https://schemas.shittim.local/audit/audit_allocation/v2",
@@ -335,10 +335,23 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         "https://schemas.shittim.local/kcp/query_envelope/v2",
         "https://schemas.shittim.local/kcp/task_create_request/v2",
         "https://schemas.shittim.local/kcp/task_create_response/v2",
+        "https://schemas.shittim.local/policy/approval_event_allocation/v1",
+        "https://schemas.shittim.local/policy/approval_record/v2",
         "https://schemas.shittim.local/policy/approval_record_kind/v2",
         "https://schemas.shittim.local/policy/approval_subject_kind/v2",
+        "https://schemas.shittim.local/policy/credential_ref/v1",
+        "https://schemas.shittim.local/policy/local_presence_evidence/v1",
         "https://schemas.shittim.local/policy/material_authorization_projection/v1",
         "https://schemas.shittim.local/policy/observation_evidence_projection/v1",
+        "https://schemas.shittim.local/policy/permission_decision/v2",
+        "https://schemas.shittim.local/policy/policy_rule/v2",
+        "https://schemas.shittim.local/policy/remote_approval_challenge/v1",
+        "https://schemas.shittim.local/policy/remote_approval_response/v1",
+        "https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1",
+        "https://schemas.shittim.local/policy/remote_signature_algorithm/v1",
+        "https://schemas.shittim.local/policy/subject_projection/v1",
+        "https://schemas.shittim.local/policy/system_authentication_challenge/v1",
+        "https://schemas.shittim.local/policy/system_authentication_evidence/v1",
         "https://schemas.shittim.local/task/action_request/v2",
         "https://schemas.shittim.local/task/action_transition_intent/v1",
         "https://schemas.shittim.local/task/child_task_delta_projection/v1",
@@ -353,6 +366,11 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
     ]
     .into_iter()
     .collect();
+    assert_eq!(
+        production_native_ids.len(),
+        42,
+        "production component-native id set must stay exact"
+    );
     let extra_native = ids
         .iter()
         .filter(|id| {
@@ -360,7 +378,7 @@ fn embedded_catalog_contains_production_or_probe_and_historical_twelve_task_crea
         })
         .count();
     if extra_native == 0 {
-        assert_eq!(ids.len(), 75, "pure production catalog must be exactly 75");
+        assert_eq!(ids.len(), 83, "pure production catalog must be exactly 83");
     }
 }
 

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1",
+  "title": "RemoteApprovalSignaturePreimageV1",
+  "description": "Exact signed preimage for remote approval. Signature bytes are the RFC8785 JCS UTF-8 of this object itself (no outer hash, newline, or wrapper). Field declaration order does not affect JCS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "purpose",
+    "algorithm_kind",
+    "challenge_id",
+    "approval_chain_id",
+    "request_ref",
+    "audience",
+    "nonce",
+    "credential_id",
+    "credential_revision",
+    "actor_ref",
+    "task_id",
+    "subject_hash",
+    "material_authorization_fingerprint",
+    "decision",
+    "signed_at",
+    "challenge_issued_at",
+    "challenge_expires_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "purpose": {
+      "type": "string",
+      "const": "shittim.remote-approval.v1"
+    },
+    "algorithm_kind": {
+      "type": "string",
+      "const": "ed25519"
+    },
+    "challenge_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "approval_chain_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "request_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "audience": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1
+    },
+    "nonce": {
+      "$ref": "#/$defs/base64url_nonce_min_32"
+    },
+    "credential_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "credential_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "actor_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "subject_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "material_authorization_fingerprint": {
+      "$ref": "#/$defs/hash"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "denied"]
+    },
+    "signed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "challenge_issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "challenge_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url_nonce_min_32": {
+      "type": "string",
+      "description": "Challenge nonce base64url without padding; decoded length ≥ 32 bytes.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 43
+    }
+  }
+}

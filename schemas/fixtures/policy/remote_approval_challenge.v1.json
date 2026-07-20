@@ -1,0 +1,91 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/remote_approval_challenge/v1",
+  "valid_object": {
+    "schema_version": 1,
+    "challenge_id": "00000000-0000-4000-8000-000000000021",
+    "approval_chain_id": "00000000-0000-4000-8000-000000000005",
+    "request_ref": "00000000-0000-4000-8000-000000000006",
+    "audience": "https://remote.example/approval",
+    "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "nonce_encoding": "base64url_no_pad",
+    "task_id": "00000000-0000-4000-8000-000000000001",
+    "subject_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "material_authorization_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "allowed_decisions": [
+      "approved",
+      "denied"
+    ],
+    "credential_ref": {
+      "schema_version": 1,
+      "credential_id": "00000000-0000-4000-8000-000000000020",
+      "credential_revision": 1,
+      "actor_ref": "actor-local-1",
+      "issuer_ref": "issuer-kernel-1",
+      "signature_algorithm": {
+        "algorithm_kind": "ed25519",
+        "public_key_encoding": "base64url_no_pad",
+        "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      "not_before": "2026-07-20T07:00:00Z",
+      "expires_at": "2026-12-31T00:00:00Z",
+      "status": "active",
+      "replaced_by_ref": null
+    },
+    "issued_at": "2026-07-20T08:00:00Z",
+    "expires_at": "2026-07-20T08:05:00Z",
+    "state": "issued",
+    "consumed_at": null,
+    "revoked_at": null,
+    "revocation_reason": null
+  },
+  "tamper_cases": [
+    {
+      "case_id": "allowed_decisions_reversed",
+      "operation": "replace",
+      "pointer": "/allowed_decisions",
+      "value": [
+        "denied",
+        "approved"
+      ],
+      "schema_valid": false
+    },
+    {
+      "case_id": "allowed_decisions_truncated",
+      "operation": "replace",
+      "pointer": "/allowed_decisions",
+      "value": [
+        "approved"
+      ],
+      "schema_valid": false
+    },
+    {
+      "case_id": "nonce_too_short",
+      "operation": "replace",
+      "pointer": "/nonce",
+      "value": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh",
+      "schema_valid": false
+    },
+    {
+      "case_id": "nonce_encoding_wrong",
+      "operation": "replace",
+      "pointer": "/nonce_encoding",
+      "value": "base64",
+      "schema_valid": false
+    },
+    {
+      "case_id": "state_pending",
+      "operation": "replace",
+      "pointer": "/state",
+      "value": "pending",
+      "schema_valid": false
+    },
+    {
+      "case_id": "state_consumed_shape",
+      "operation": "replace",
+      "pointer": "/state",
+      "value": "consumed",
+      "schema_valid": true
+    }
+  ]
+}

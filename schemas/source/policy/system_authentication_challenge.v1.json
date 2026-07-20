@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/system_authentication_challenge/v1",
+  "title": "SystemAuthenticationChallengeV1",
+  "description": "Kernel-issued system authentication challenge for system_authentication requests. Independent of remote challenges; no Credential or audience. State transitions are issued→consumed|expired|revoked only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "challenge_id",
+    "approval_chain_id",
+    "request_ref",
+    "nonce",
+    "nonce_encoding",
+    "task_id",
+    "subject_hash",
+    "material_authorization_fingerprint",
+    "allowed_decisions",
+    "issued_at",
+    "expires_at",
+    "state",
+    "consumed_at",
+    "revoked_at",
+    "revocation_reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "challenge_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "approval_chain_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "request_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "nonce": {
+      "$ref": "#/$defs/base64url_nonce_min_32"
+    },
+    "nonce_encoding": {
+      "type": "string",
+      "const": "base64url_no_pad"
+    },
+    "task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "subject_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "material_authorization_fingerprint": {
+      "$ref": "#/$defs/hash"
+    },
+    "allowed_decisions": {
+      "type": "array",
+      "const": ["approved"],
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 1
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["issued", "consumed", "expired", "revoked"]
+    },
+    "consumed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "revoked_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "revocation_reason": {
+      "type": ["string", "null"],
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url_nonce_min_32": {
+      "type": "string",
+      "description": "CSPRNG nonce base64url without padding; decoded length must be at least 32 bytes (encoded length ≥ 43).",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 43
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/remote_signature_algorithm/v1",
+  "title": "RemoteSignatureAlgorithmV1",
+  "description": "Extensible tagged union for remote approval signature algorithms. v1 only admits the ed25519 branch; future algorithms require a new branch or object version.",
+  "type": "object",
+  "required": ["algorithm_kind"],
+  "properties": {
+    "algorithm_kind": {
+      "type": "string",
+      "enum": ["ed25519"]
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm_kind",
+        "public_key_encoding",
+        "public_key"
+      ],
+      "properties": {
+        "algorithm_kind": {
+          "type": "string",
+          "const": "ed25519"
+        },
+        "public_key_encoding": {
+          "type": "string",
+          "const": "base64url_no_pad"
+        },
+        "public_key": {
+          "$ref": "#/$defs/base64url_ed25519_public_key"
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false,
+  "$defs": {
+    "base64url_ed25519_public_key": {
+      "type": "string",
+      "description": "Ed25519 public key encoded as base64url without padding; decoded length must be exactly 32 bytes (always 43 characters).",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 43,
+      "maxLength": 43
+    }
+  }
+}

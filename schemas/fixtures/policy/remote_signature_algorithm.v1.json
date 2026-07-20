@@ -1,0 +1,39 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/remote_signature_algorithm/v1",
+  "valid_object": {
+    "algorithm_kind": "ed25519",
+    "public_key_encoding": "base64url_no_pad",
+    "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+  },
+  "tamper_cases": [
+    {
+      "case_id": "unknown_algorithm_kind",
+      "operation": "replace",
+      "pointer": "/algorithm_kind",
+      "value": "rsa_pss",
+      "schema_valid": false
+    },
+    {
+      "case_id": "wrong_public_key_encoding",
+      "operation": "replace",
+      "pointer": "/public_key_encoding",
+      "value": "hex",
+      "schema_valid": false
+    },
+    {
+      "case_id": "public_key_too_short",
+      "operation": "replace",
+      "pointer": "/public_key",
+      "value": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh",
+      "schema_valid": false
+    },
+    {
+      "case_id": "unknown_field",
+      "operation": "add",
+      "pointer": "/curve",
+      "value": "ed25519",
+      "schema_valid": false
+    }
+  ]
+}

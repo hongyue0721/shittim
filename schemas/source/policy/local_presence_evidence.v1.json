@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/local_presence_evidence/v1",
+  "title": "LocalPresenceEvidenceV1",
+  "description": "Immutable local presence evidence written only by Kernel or a trusted local-boundary producer. Does not copy subject_hash; resolution binds subject via request_ref.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "session_ref",
+    "transport_kind",
+    "peer_principal_ref",
+    "observed_actor",
+    "entry_point",
+    "challenge_ref",
+    "presence_kind",
+    "observed_at",
+    "valid_until",
+    "verifier_kind",
+    "evidence_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "session_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "transport_kind": {
+      "type": "string",
+      "enum": ["unix_peer", "windows_pipe_peer", "desktop_session"]
+    },
+    "peer_principal_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "observed_actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "entry_point": {
+      "$ref": "https://schemas.shittim.local/v1/common/entry_point.json"
+    },
+    "challenge_ref": {
+      "$ref": "#/$defs/nullable_uuid"
+    },
+    "presence_kind": {
+      "type": "string",
+      "enum": ["interactive_session", "explicit_local_confirmation"]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verifier_kind": {
+      "type": "string",
+      "enum": ["kernel_transport", "desktop_client_attestation"]
+    },
+    "evidence_hash": {
+      "$ref": "#/$defs/hash"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "nullable_uuid": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

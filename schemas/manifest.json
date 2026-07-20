@@ -1078,6 +1078,110 @@
       ],
       "schema_version_field": null,
       "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/remote_signature_algorithm/v1",
+      "title": "RemoteSignatureAlgorithmV1",
+      "version": 1,
+      "source": "schemas/source/policy/remote_signature_algorithm.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": null,
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/credential_ref/v1",
+      "title": "CredentialRefV1",
+      "version": 1,
+      "source": "schemas/source/policy/credential_ref.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/remote_approval_challenge/v1",
+      "title": "RemoteApprovalChallengeV1",
+      "version": 1,
+      "source": "schemas/source/policy/remote_approval_challenge.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/system_authentication_challenge/v1",
+      "title": "SystemAuthenticationChallengeV1",
+      "version": 1,
+      "source": "schemas/source/policy/system_authentication_challenge.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/local_presence_evidence/v1",
+      "title": "LocalPresenceEvidenceV1",
+      "version": 1,
+      "source": "schemas/source/policy/local_presence_evidence.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/system_authentication_evidence/v1",
+      "title": "SystemAuthenticationEvidenceV1",
+      "version": 1,
+      "source": "schemas/source/policy/system_authentication_evidence.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/remote_approval_response/v1",
+      "title": "RemoteApprovalResponseV1",
+      "version": 1,
+      "source": "schemas/source/policy/remote_approval_response.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
+    },
+    {
+      "id": "https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1",
+      "title": "RemoteApprovalSignaturePreimageV1",
+      "version": 1,
+      "source": "schemas/source/policy/remote_approval_signature_preimage.v1.json",
+      "kind": "object",
+      "compatibility": "new-contract",
+      "generation_targets": [
+        "rust"
+      ],
+      "schema_version_field": "schema_version",
+      "component": "policy"
     }
   ]
 }

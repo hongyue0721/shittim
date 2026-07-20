@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/system_authentication_evidence/v1",
+  "title": "SystemAuthenticationEvidenceV1",
+  "description": "Immutable system authentication evidence written only after a registered OS authority succeeds. Cancel/failure must not create this object; result is fixed to verified.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "mechanism",
+    "mechanism_version",
+    "platform_subject_ref",
+    "challenge_ref",
+    "subject_hash",
+    "material_authorization_fingerprint",
+    "result",
+    "verified_at",
+    "valid_until",
+    "verifier_ref",
+    "evidence_blob_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "mechanism": {
+      "type": "string",
+      "enum": [
+        "polkit",
+        "windows_uac",
+        "macos_authorization_services",
+        "other_versioned"
+      ]
+    },
+    "mechanism_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform_subject_ref": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "challenge_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "subject_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "material_authorization_fingerprint": {
+      "$ref": "#/$defs/hash"
+    },
+    "result": {
+      "type": "string",
+      "const": "verified"
+    },
+    "verified_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "verifier_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_blob_hash": {
+      "$ref": "#/$defs/hash"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

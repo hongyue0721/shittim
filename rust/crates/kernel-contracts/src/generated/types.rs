@@ -2108,6 +2108,56 @@ pub struct ContentOriginV2SchemaVersion;
 impl Serialize for ContentOriginV2SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(2) } }
 impl<'de> Deserialize<'de> for ContentOriginV2SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 2 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 2, got {value}"))) } } }
 
+/// Generated from `https://schemas.shittim.local/policy/credential_ref/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialRefV1 {
+    pub actor_ref: String,
+    pub credential_id: String,
+    pub credential_revision: i64,
+    pub expires_at: String,
+    pub issuer_ref: String,
+    pub not_before: String,
+    pub replaced_by_ref: Option<String>,
+    pub schema_version: CredentialRefV1SchemaVersion,
+    pub signature_algorithm: RemoteSignatureAlgorithmV1,
+    pub status: CredentialRefV1Status,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/credential_ref/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct CredentialRefV1SchemaVersion;
+impl Serialize for CredentialRefV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for CredentialRefV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/credential_ref/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CredentialRefV1Status {
+    #[serde(rename = "active")]
+    Active,
+    #[serde(rename = "revoked")]
+    Revoked,
+    #[serde(rename = "expired")]
+    Expired,
+}
+
+impl CredentialRefV1Status {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Active,
+        Self::Revoked,
+        Self::Expired,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::Revoked => "revoked",
+            Self::Expired => "expired",
+        }
+    }
+}
+
 /// Generated string enum from `https://schemas.shittim.local/v1/common/entry_point.json`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EntryPoint {
@@ -2860,6 +2910,107 @@ impl KcpResponseEnvelopeStatus {
         match self {
             Self::Ok => "ok",
             Self::Error => "error",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/local_presence_evidence/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalPresenceEvidenceV1 {
+    pub challenge_ref: Option<String>,
+    pub entry_point: EntryPoint,
+    pub evidence_hash: String,
+    pub id: String,
+    pub observed_actor: Actor,
+    pub observed_at: String,
+    pub peer_principal_ref: Option<String>,
+    pub presence_kind: LocalPresenceEvidenceV1PresenceKind,
+    pub schema_version: LocalPresenceEvidenceV1SchemaVersion,
+    pub session_ref: String,
+    pub transport_kind: LocalPresenceEvidenceV1TransportKind,
+    pub valid_until: String,
+    pub verifier_kind: LocalPresenceEvidenceV1VerifierKind,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/local_presence_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LocalPresenceEvidenceV1PresenceKind {
+    #[serde(rename = "interactive_session")]
+    InteractiveSession,
+    #[serde(rename = "explicit_local_confirmation")]
+    ExplicitLocalConfirmation,
+}
+
+impl LocalPresenceEvidenceV1PresenceKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::InteractiveSession,
+        Self::ExplicitLocalConfirmation,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InteractiveSession => "interactive_session",
+            Self::ExplicitLocalConfirmation => "explicit_local_confirmation",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/local_presence_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct LocalPresenceEvidenceV1SchemaVersion;
+impl Serialize for LocalPresenceEvidenceV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for LocalPresenceEvidenceV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/local_presence_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LocalPresenceEvidenceV1TransportKind {
+    #[serde(rename = "unix_peer")]
+    UnixPeer,
+    #[serde(rename = "windows_pipe_peer")]
+    WindowsPipePeer,
+    #[serde(rename = "desktop_session")]
+    DesktopSession,
+}
+
+impl LocalPresenceEvidenceV1TransportKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::UnixPeer,
+        Self::WindowsPipePeer,
+        Self::DesktopSession,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::UnixPeer => "unix_peer",
+            Self::WindowsPipePeer => "windows_pipe_peer",
+            Self::DesktopSession => "desktop_session",
+        }
+    }
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/local_presence_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LocalPresenceEvidenceV1VerifierKind {
+    #[serde(rename = "kernel_transport")]
+    KernelTransport,
+    #[serde(rename = "desktop_client_attestation")]
+    DesktopClientAttestation,
+}
+
+impl LocalPresenceEvidenceV1VerifierKind {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::KernelTransport,
+        Self::DesktopClientAttestation,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::KernelTransport => "kernel_transport",
+            Self::DesktopClientAttestation => "desktop_client_attestation",
         }
     }
 }
@@ -4251,6 +4402,233 @@ impl RecoveryDecisionCandidateTrigger {
     }
 }
 
+/// Generated from `https://schemas.shittim.local/policy/remote_approval_challenge/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteApprovalChallengeV1 {
+    pub allowed_decisions: RemoteApprovalChallengeV1AllowedDecisions,
+    pub approval_chain_id: String,
+    pub audience: String,
+    pub challenge_id: String,
+    pub consumed_at: Option<String>,
+    pub credential_ref: CredentialRefV1,
+    pub expires_at: String,
+    pub issued_at: String,
+    pub material_authorization_fingerprint: String,
+    pub nonce: String,
+    pub nonce_encoding: RemoteApprovalChallengeV1NonceEncoding,
+    pub request_ref: String,
+    pub revocation_reason: Option<String>,
+    pub revoked_at: Option<String>,
+    pub schema_version: RemoteApprovalChallengeV1SchemaVersion,
+    pub state: RemoteApprovalChallengeV1State,
+    pub subject_hash: String,
+    pub task_id: String,
+}
+
+/// Generated ordered string-array const from `https://schemas.shittim.local/policy/remote_approval_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RemoteApprovalChallengeV1AllowedDecisions;
+impl Serialize for RemoteApprovalChallengeV1AllowedDecisions { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { ["approved", "denied"].serialize(serializer) } }
+impl<'de> Deserialize<'de> for RemoteApprovalChallengeV1AllowedDecisions { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = Vec::<String>::deserialize(deserializer)?; let expected: &[&str] = &["approved", "denied"]; if value.iter().map(String::as_str).eq(expected.iter().copied()) { Ok(Self) } else { Err(D::Error::custom(format!("expected string-array const {:?}, got {:?}", expected, value))) } } }
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_approval_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalChallengeV1NonceEncoding {
+    #[serde(rename = "base64url_no_pad")]
+    Value,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/remote_approval_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RemoteApprovalChallengeV1SchemaVersion;
+impl Serialize for RemoteApprovalChallengeV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for RemoteApprovalChallengeV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/remote_approval_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalChallengeV1State {
+    #[serde(rename = "issued")]
+    Issued,
+    #[serde(rename = "consumed")]
+    Consumed,
+    #[serde(rename = "expired")]
+    Expired,
+    #[serde(rename = "revoked")]
+    Revoked,
+}
+
+impl RemoteApprovalChallengeV1State {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Issued,
+        Self::Consumed,
+        Self::Expired,
+        Self::Revoked,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Issued => "issued",
+            Self::Consumed => "consumed",
+            Self::Expired => "expired",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/remote_approval_response/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteApprovalResponseV1 {
+    pub actor: Actor,
+    pub algorithm_kind: RemoteApprovalResponseV1AlgorithmKind,
+    pub approval_chain_id: String,
+    pub audience: String,
+    pub challenge_id: String,
+    pub credential_ref: CredentialRefV1,
+    pub decision: RemoteApprovalResponseV1Decision,
+    pub material_authorization_fingerprint: String,
+    pub nonce: String,
+    pub request_ref: String,
+    pub schema_version: RemoteApprovalResponseV1SchemaVersion,
+    pub signature: String,
+    pub signature_encoding: RemoteApprovalResponseV1SignatureEncoding,
+    pub signed_at: String,
+    pub subject_hash: String,
+    pub task_id: String,
+}
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_approval_response/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalResponseV1AlgorithmKind {
+    #[serde(rename = "ed25519")]
+    Value,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/remote_approval_response/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalResponseV1Decision {
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "denied")]
+    Denied,
+}
+
+impl RemoteApprovalResponseV1Decision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Approved,
+        Self::Denied,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+        }
+    }
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/remote_approval_response/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RemoteApprovalResponseV1SchemaVersion;
+impl Serialize for RemoteApprovalResponseV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for RemoteApprovalResponseV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_approval_response/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalResponseV1SignatureEncoding {
+    #[serde(rename = "base64url_no_pad")]
+    Value,
+}
+
+/// Generated from `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoteApprovalSignaturePreimageV1 {
+    pub actor_ref: String,
+    pub algorithm_kind: RemoteApprovalSignaturePreimageV1AlgorithmKind,
+    pub approval_chain_id: String,
+    pub audience: String,
+    pub challenge_expires_at: String,
+    pub challenge_id: String,
+    pub challenge_issued_at: String,
+    pub credential_id: String,
+    pub credential_revision: i64,
+    pub decision: RemoteApprovalSignaturePreimageV1Decision,
+    pub material_authorization_fingerprint: String,
+    pub nonce: String,
+    pub purpose: RemoteApprovalSignaturePreimageV1Purpose,
+    pub request_ref: String,
+    pub schema_version: RemoteApprovalSignaturePreimageV1SchemaVersion,
+    pub signed_at: String,
+    pub subject_hash: String,
+    pub task_id: String,
+}
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalSignaturePreimageV1AlgorithmKind {
+    #[serde(rename = "ed25519")]
+    Value,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalSignaturePreimageV1Decision {
+    #[serde(rename = "approved")]
+    Approved,
+    #[serde(rename = "denied")]
+    Denied,
+}
+
+impl RemoteApprovalSignaturePreimageV1Decision {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Approved,
+        Self::Denied,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+        }
+    }
+}
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteApprovalSignaturePreimageV1Purpose {
+    #[serde(rename = "shittim.remote-approval.v1")]
+    Value,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct RemoteApprovalSignaturePreimageV1SchemaVersion;
+impl Serialize for RemoteApprovalSignaturePreimageV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for RemoteApprovalSignaturePreimageV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated internally tagged union from `https://schemas.shittim.local/policy/remote_signature_algorithm/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "algorithm_kind", deny_unknown_fields)]
+pub enum RemoteSignatureAlgorithmV1 {
+    #[serde(rename = "ed25519")]
+    Ed25519 {
+        public_key: String,
+        public_key_encoding: RemoteSignatureAlgorithmV1Ed25519PublicKeyEncoding,
+    },
+}
+
+/// Generated string const from `https://schemas.shittim.local/policy/remote_signature_algorithm/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RemoteSignatureAlgorithmV1Ed25519PublicKeyEncoding {
+    #[serde(rename = "base64url_no_pad")]
+    Value,
+}
+
 /// Generated from `https://schemas.shittim.local/task/root_task_create_allocation/v2`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -4489,6 +4867,143 @@ impl<'de> Deserialize<'de> for SubjectProjectionV1PlanRevisionSchemaVersion { fn
 pub struct SubjectProjectionV1TaskProposalSchemaVersion;
 impl Serialize for SubjectProjectionV1TaskProposalSchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
 impl<'de> Deserialize<'de> for SubjectProjectionV1TaskProposalSchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated from `https://schemas.shittim.local/policy/system_authentication_challenge/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SystemAuthenticationChallengeV1 {
+    pub allowed_decisions: SystemAuthenticationChallengeV1AllowedDecisions,
+    pub approval_chain_id: String,
+    pub challenge_id: String,
+    pub consumed_at: Option<String>,
+    pub expires_at: String,
+    pub issued_at: String,
+    pub material_authorization_fingerprint: String,
+    pub nonce: String,
+    pub nonce_encoding: SystemAuthenticationChallengeV1NonceEncoding,
+    pub request_ref: String,
+    pub revocation_reason: Option<String>,
+    pub revoked_at: Option<String>,
+    pub schema_version: SystemAuthenticationChallengeV1SchemaVersion,
+    pub state: SystemAuthenticationChallengeV1State,
+    pub subject_hash: String,
+    pub task_id: String,
+}
+
+/// Generated ordered string-array const from `https://schemas.shittim.local/policy/system_authentication_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SystemAuthenticationChallengeV1AllowedDecisions;
+impl Serialize for SystemAuthenticationChallengeV1AllowedDecisions { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { ["approved"].serialize(serializer) } }
+impl<'de> Deserialize<'de> for SystemAuthenticationChallengeV1AllowedDecisions { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = Vec::<String>::deserialize(deserializer)?; let expected: &[&str] = &["approved"]; if value.iter().map(String::as_str).eq(expected.iter().copied()) { Ok(Self) } else { Err(D::Error::custom(format!("expected string-array const {:?}, got {:?}", expected, value))) } } }
+
+/// Generated string const from `https://schemas.shittim.local/policy/system_authentication_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SystemAuthenticationChallengeV1NonceEncoding {
+    #[serde(rename = "base64url_no_pad")]
+    Value,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/system_authentication_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SystemAuthenticationChallengeV1SchemaVersion;
+impl Serialize for SystemAuthenticationChallengeV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for SystemAuthenticationChallengeV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
+
+/// Generated string enum from `https://schemas.shittim.local/policy/system_authentication_challenge/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SystemAuthenticationChallengeV1State {
+    #[serde(rename = "issued")]
+    Issued,
+    #[serde(rename = "consumed")]
+    Consumed,
+    #[serde(rename = "expired")]
+    Expired,
+    #[serde(rename = "revoked")]
+    Revoked,
+}
+
+impl SystemAuthenticationChallengeV1State {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Issued,
+        Self::Consumed,
+        Self::Expired,
+        Self::Revoked,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Issued => "issued",
+            Self::Consumed => "consumed",
+            Self::Expired => "expired",
+            Self::Revoked => "revoked",
+        }
+    }
+}
+
+/// Generated from `https://schemas.shittim.local/policy/system_authentication_evidence/v1`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SystemAuthenticationEvidenceV1 {
+    pub challenge_ref: String,
+    pub evidence_blob_hash: String,
+    pub id: String,
+    pub material_authorization_fingerprint: String,
+    pub mechanism: SystemAuthenticationEvidenceV1Mechanism,
+    pub mechanism_version: String,
+    pub platform_subject_ref: Option<String>,
+    pub result: SystemAuthenticationEvidenceV1Result,
+    pub schema_version: SystemAuthenticationEvidenceV1SchemaVersion,
+    pub subject_hash: String,
+    pub valid_until: String,
+    pub verified_at: String,
+    pub verifier_ref: String,
+}
+
+/// Generated string enum from `https://schemas.shittim.local/policy/system_authentication_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SystemAuthenticationEvidenceV1Mechanism {
+    #[serde(rename = "polkit")]
+    Polkit,
+    #[serde(rename = "windows_uac")]
+    WindowsUac,
+    #[serde(rename = "macos_authorization_services")]
+    MacosAuthorizationServices,
+    #[serde(rename = "other_versioned")]
+    OtherVersioned,
+}
+
+impl SystemAuthenticationEvidenceV1Mechanism {
+    /// Schema enum declaration-order closed set (null filtered at use-site Option).
+    pub const ALL: &'static [Self] = &[
+        Self::Polkit,
+        Self::WindowsUac,
+        Self::MacosAuthorizationServices,
+        Self::OtherVersioned,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Polkit => "polkit",
+            Self::WindowsUac => "windows_uac",
+            Self::MacosAuthorizationServices => "macos_authorization_services",
+            Self::OtherVersioned => "other_versioned",
+        }
+    }
+}
+
+/// Generated string const from `https://schemas.shittim.local/policy/system_authentication_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SystemAuthenticationEvidenceV1Result {
+    #[serde(rename = "verified")]
+    Value,
+}
+
+/// Generated integer const from `https://schemas.shittim.local/policy/system_authentication_evidence/v1`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SystemAuthenticationEvidenceV1SchemaVersion;
+impl Serialize for SystemAuthenticationEvidenceV1SchemaVersion { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { serializer.serialize_i64(1) } }
+impl<'de> Deserialize<'de> for SystemAuthenticationEvidenceV1SchemaVersion { fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> { let value = i64::deserialize(deserializer)?; if value == 1 { Ok(Self) } else { Err(D::Error::custom(format!("expected integer const 1, got {value}"))) } } }
 
 /// Generated from `https://schemas.shittim.local/v1/kcp/system_ping_request.json`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -5846,6 +6361,19 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn credential_ref_v1_status_string_enum_contract() {
+        assert_string_enum_contract(
+            CredentialRefV1Status::ALL,
+            &[
+                "active",
+                "revoked",
+                "expired",
+            ],
+            CredentialRefV1Status::as_str,
+        );
+    }
+
+    #[test]
     fn entry_point_string_enum_contract() {
         assert_string_enum_contract(
             EntryPoint::ALL,
@@ -6004,6 +6532,43 @@ mod string_enum_contracts {
                 "error",
             ],
             KcpResponseEnvelopeStatus::as_str,
+        );
+    }
+
+    #[test]
+    fn local_presence_evidence_v1_presence_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            LocalPresenceEvidenceV1PresenceKind::ALL,
+            &[
+                "interactive_session",
+                "explicit_local_confirmation",
+            ],
+            LocalPresenceEvidenceV1PresenceKind::as_str,
+        );
+    }
+
+    #[test]
+    fn local_presence_evidence_v1_transport_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            LocalPresenceEvidenceV1TransportKind::ALL,
+            &[
+                "unix_peer",
+                "windows_pipe_peer",
+                "desktop_session",
+            ],
+            LocalPresenceEvidenceV1TransportKind::as_str,
+        );
+    }
+
+    #[test]
+    fn local_presence_evidence_v1_verifier_kind_string_enum_contract() {
+        assert_string_enum_contract(
+            LocalPresenceEvidenceV1VerifierKind::ALL,
+            &[
+                "kernel_transport",
+                "desktop_client_attestation",
+            ],
+            LocalPresenceEvidenceV1VerifierKind::as_str,
         );
     }
 
@@ -6358,6 +6923,44 @@ mod string_enum_contracts {
     }
 
     #[test]
+    fn remote_approval_challenge_v1_state_string_enum_contract() {
+        assert_string_enum_contract(
+            RemoteApprovalChallengeV1State::ALL,
+            &[
+                "issued",
+                "consumed",
+                "expired",
+                "revoked",
+            ],
+            RemoteApprovalChallengeV1State::as_str,
+        );
+    }
+
+    #[test]
+    fn remote_approval_response_v1_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            RemoteApprovalResponseV1Decision::ALL,
+            &[
+                "approved",
+                "denied",
+            ],
+            RemoteApprovalResponseV1Decision::as_str,
+        );
+    }
+
+    #[test]
+    fn remote_approval_signature_preimage_v1_decision_string_enum_contract() {
+        assert_string_enum_contract(
+            RemoteApprovalSignaturePreimageV1Decision::ALL,
+            &[
+                "approved",
+                "denied",
+            ],
+            RemoteApprovalSignaturePreimageV1Decision::as_str,
+        );
+    }
+
+    #[test]
     fn side_effect_class_string_enum_contract() {
         assert_string_enum_contract(
             SideEffectClass::ALL,
@@ -6370,6 +6973,34 @@ mod string_enum_contracts {
                 "S5",
             ],
             SideEffectClass::as_str,
+        );
+    }
+
+    #[test]
+    fn system_authentication_challenge_v1_state_string_enum_contract() {
+        assert_string_enum_contract(
+            SystemAuthenticationChallengeV1State::ALL,
+            &[
+                "issued",
+                "consumed",
+                "expired",
+                "revoked",
+            ],
+            SystemAuthenticationChallengeV1State::as_str,
+        );
+    }
+
+    #[test]
+    fn system_authentication_evidence_v1_mechanism_string_enum_contract() {
+        assert_string_enum_contract(
+            SystemAuthenticationEvidenceV1Mechanism::ALL,
+            &[
+                "polkit",
+                "windows_uac",
+                "macos_authorization_services",
+                "other_versioned",
+            ],
+            SystemAuthenticationEvidenceV1Mechanism::as_str,
         );
     }
 

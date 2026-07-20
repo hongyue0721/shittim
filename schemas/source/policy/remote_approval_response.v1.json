@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.shittim.local/policy/remote_approval_response/v1",
+  "title": "RemoteApprovalResponseV1",
+  "description": "Signed remote approval response. Must not carry expires_at, public key, or algorithm parameters that override challenge/credential facts; algorithm_kind must match the credential branch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "challenge_id",
+    "approval_chain_id",
+    "request_ref",
+    "audience",
+    "nonce",
+    "credential_ref",
+    "actor",
+    "task_id",
+    "subject_hash",
+    "material_authorization_fingerprint",
+    "decision",
+    "signed_at",
+    "algorithm_kind",
+    "signature_encoding",
+    "signature"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "challenge_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "approval_chain_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "request_ref": {
+      "$ref": "#/$defs/uuid"
+    },
+    "audience": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1
+    },
+    "nonce": {
+      "$ref": "#/$defs/base64url_nonce_min_32"
+    },
+    "credential_ref": {
+      "$ref": "https://schemas.shittim.local/policy/credential_ref/v1"
+    },
+    "actor": {
+      "$ref": "https://schemas.shittim.local/v1/common/actor.json"
+    },
+    "task_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "subject_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "material_authorization_fingerprint": {
+      "$ref": "#/$defs/hash"
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approved", "denied"]
+    },
+    "signed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "algorithm_kind": {
+      "type": "string",
+      "const": "ed25519"
+    },
+    "signature_encoding": {
+      "type": "string",
+      "const": "base64url_no_pad"
+    },
+    "signature": {
+      "$ref": "#/$defs/base64url_ed25519_signature"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "base64url_nonce_min_32": {
+      "type": "string",
+      "description": "Challenge nonce echoed from the issued challenge; base64url without padding, decoded length ≥ 32 bytes.",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 43
+    },
+    "base64url_ed25519_signature": {
+      "type": "string",
+      "description": "Ed25519 signature encoded as base64url without padding; decoded length must be exactly 64 bytes (always 86 characters).",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "minLength": 86,
+      "maxLength": 86
+    }
+  }
+}

@@ -273,6 +273,11 @@ pub enum ConstJson {
     String {
         value: String,
     },
+    /// Ordered exact string array const (e.g. `allowed_decisions: ["approved","denied"]`).
+    /// Element order is wire-significant; duplicates are allowed only when the source const has them.
+    StringArray {
+        values: Vec<String>,
+    },
 }
 
 /// Shape of a graph node. Supports the full restricted surface so fragment and
@@ -1493,12 +1498,33 @@ fn const_json(value: &Value, type_id: &ContractTypeId) -> Result<ConstJson> {
                 ))
             })?,
         }),
-        Value::Bool(expected) => Ok(ConstJson::Bool { value: *expected }),
-        Value::Null => Ok(ConstJson::Null),
-        _ => Err(unsupported(
+        Value::Number(_) => Err(unsupported(
             "const",
             &type_id.display(),
-            "only string, integer, boolean, and null const values are supported",
+            "only exact integer const values are supported; floating-point const is rejected",
+        )),
+        Value::Bool(expected) => Ok(ConstJson::Bool { value: *expected }),
+        Value::Null => Ok(ConstJson::Null),
+        Value::Array(items) => {
+            let mut values = Vec::with_capacity(items.len());
+            for (index, item) in items.iter().enumerate() {
+                let Some(text) = item.as_str() else {
+                    return Err(unsupported(
+                        "const",
+                        &type_id.display(),
+                        &format!(
+                            "array const elements must be strings (index {index}); nested arrays/objects/numbers/bools/null are unsupported"
+                        ),
+                    ));
+                };
+                values.push(text.to_string());
+            }
+            Ok(ConstJson::StringArray { values })
+        }
+        Value::Object(_) => Err(unsupported(
+            "const",
+            &type_id.display(),
+            "object const values are not supported; only string, integer, boolean, null, and string-array const values are supported",
         )),
     }
 }
@@ -1916,6 +1942,7 @@ fn validate_supported_schema_node(
         "minimum",
         "maximum",
         "minLength",
+        "maxLength",
         "pattern",
         "minItems",
         "maxItems",
@@ -2026,17 +2053,60 @@ fn ensure_const_matches_type(schema: &Value, value: &Value, location: &str) -> R
         Some("integer") => value.as_i64().is_some() || value.as_u64().is_some(),
         Some("boolean") => value.is_boolean(),
         Some("null") => value.is_null(),
+        Some("array") => value.is_array(),
         Some(_) | None => true,
     };
-    if valid {
-        Ok(())
-    } else {
-        Err(unsupported(
+    if !valid {
+        return Err(unsupported(
             "const",
             location,
             "const value does not match declared type",
-        ))
+        ));
     }
+    // Array const is exact-value: items/prefixItems/minItems must not invent a second shape.
+    // If present, length bounds must still admit the const length; items must only restate string.
+    if value.is_array() {
+        let len = value.as_array().map(|items| items.len()).unwrap_or(0);
+        if let Some(min_items) = schema.get("minItems").and_then(Value::as_u64) {
+            if (len as u64) < min_items {
+                return Err(unsupported(
+                    "const",
+                    location,
+                    "array const length is below minItems",
+                ));
+            }
+        }
+        if let Some(max_items) = schema.get("maxItems").and_then(Value::as_u64) {
+            if (len as u64) > max_items {
+                return Err(unsupported(
+                    "const",
+                    location,
+                    "array const length exceeds maxItems",
+                ));
+            }
+        }
+        if let Some(items) = schema.get("items") {
+            // Only allow a pure string restatement so the const remains the authority.
+            let restates_string = items
+                .as_object()
+                .is_some_and(|object| object.get("type").and_then(Value::as_str) == Some("string"));
+            if !restates_string {
+                return Err(unsupported(
+                    "items",
+                    location,
+                    "array const may only restate items as {\"type\":\"string\"}; element values come from const",
+                ));
+            }
+        }
+        if schema.get("prefixItems").is_some() {
+            return Err(unsupported(
+                "prefixItems",
+                location,
+                "array const does not combine with prefixItems; use exact const for ordered closed arrays",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn unsupported(keyword: &str, location: &str, detail: &str) -> anyhow::Error {

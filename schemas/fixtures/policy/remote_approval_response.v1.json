@@ -1,0 +1,82 @@
+{
+  "fixture_version": 1,
+  "schema_id": "https://schemas.shittim.local/policy/remote_approval_response/v1",
+  "valid_object": {
+    "schema_version": 1,
+    "challenge_id": "00000000-0000-4000-8000-000000000021",
+    "approval_chain_id": "00000000-0000-4000-8000-000000000005",
+    "request_ref": "00000000-0000-4000-8000-000000000006",
+    "audience": "https://remote.example/approval",
+    "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "credential_ref": {
+      "schema_version": 1,
+      "credential_id": "00000000-0000-4000-8000-000000000020",
+      "credential_revision": 1,
+      "actor_ref": "actor-local-1",
+      "issuer_ref": "issuer-kernel-1",
+      "signature_algorithm": {
+        "algorithm_kind": "ed25519",
+        "public_key_encoding": "base64url_no_pad",
+        "public_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      "not_before": "2026-07-20T07:00:00Z",
+      "expires_at": "2026-12-31T00:00:00Z",
+      "status": "active",
+      "replaced_by_ref": null
+    },
+    "actor": {
+      "schema_version": 1,
+      "revision": 2,
+      "id": "actor-local-1",
+      "kind": "known_user",
+      "source": "local-desktop",
+      "authentication_level": "platform_verified",
+      "confidence": 0.9
+    },
+    "task_id": "00000000-0000-4000-8000-000000000001",
+    "subject_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "material_authorization_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "decision": "approved",
+    "signed_at": "2026-07-20T08:01:00Z",
+    "algorithm_kind": "ed25519",
+    "signature_encoding": "base64url_no_pad",
+    "signature": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-Pw"
+  },
+  "tamper_cases": [
+    {
+      "case_id": "signature_too_short",
+      "operation": "replace",
+      "pointer": "/signature",
+      "value": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0-P",
+      "schema_valid": false
+    },
+    {
+      "case_id": "decision_abstain",
+      "operation": "replace",
+      "pointer": "/decision",
+      "value": "abstain",
+      "schema_valid": false
+    },
+    {
+      "case_id": "algorithm_rsa",
+      "operation": "replace",
+      "pointer": "/algorithm_kind",
+      "value": "rsa",
+      "schema_valid": false
+    },
+    {
+      "case_id": "expires_at_override",
+      "operation": "add",
+      "pointer": "/expires_at",
+      "value": "2026-07-20T08:05:00Z",
+      "schema_valid": false
+    },
+    {
+      "case_id": "public_key_override",
+      "operation": "add",
+      "pointer": "/public_key",
+      "value": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "schema_valid": false
+    }
+  ]
+}
