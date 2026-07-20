@@ -199,7 +199,7 @@ UI 退出不触发上述流程。
 
 ### 8.5 EventEnvelope
 
-> active EventEnvelope v2的Schema/source/compiler/catalog/generated typed decode与SQLite migration 0003统一Outbox已经实现；active business producer、Publisher与KCP poll cutover仍未实现。exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。
+> active EventEnvelope v2的Schema/source/compiler/catalog/generated typed decode与SQLite统一Outbox shape已经实现；active business producer、Publisher与versioned KCP poll仍未实现。exact Schema/Catalog/Outbox合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2、ADR-0008与ADR-0009。
 
 所有持久化事件包装在 EventEnvelope 中。`sequence` 只表达同一聚合内的领域顺序：某聚合第一条**已提交**事件固定为 `0`，此后每条已提交事件必须严格等于上一条已提交事件的 `sequence + 1`。事务中暂时分配但最终回滚的序号不构成已提交事实、不得占号；重试事务必须基于当前最后已提交序号重新分配。`outbox_position` 是事件写入 Outbox 时由 Kernel 分配的全局单调递增投递位置，只用于发布、分页和 cursor，不代表跨聚合因果顺序。
 
@@ -250,18 +250,18 @@ Child Task 不是第四种状态机。它就是一个普通 Task，通过 `paren
 规则：
 
 - Child Task 拥有独立的 `id`、`status`、完整显式 TaskScope、权限上下文和生命周期；
-- active KCP `task.create` v2 只创建根 Task，payload 不接受 `parent_task_id`；`TaskCreateRequest v1` 只保留 legacy validation/read/migration，不进入 active dispatcher；
+- active KCP `task.create` v2 只创建根 Task，payload 不接受 `parent_task_id`；`TaskCreateRequest v1` 只保留为 legacy validation/fixture 历史资产，不进入 active dispatcher，production 请求仅得 `unsupported_schema_version`；
 - 新 Child Task 的唯一写入口是父 Task 拥有的 Kernel-local Action：`capability_id=kernel.task`、`operation=task.child.create`、`side_effect_class=S1`。父关系只由该 Action 的 `task_id` 权威确定；proposal 不得提交 child ID、parent、status、revision、plan/time 等 Kernel-owned 字段；
 - Child proposal 必须完整显式声明 Scope 与 `delegation_ref`（可为 null），不得自动继承父 Scope、自动求交或复制父 Delegation；Kernel 计算父子 resource scope、capability 与 delegation delta，并纳入 Policy evaluation context；扩大不是 Kernel hard deny，按 Freedom-first Policy 裁决，但 Delegation authority 缺失或不可验证属于事实错误；
 - `task.child.create` 是无外部副作用的 Kernel-local S1 业务事实创建，仍必须满足 current PermissionDecision/必要 Approval、Action revision、Lease、Stop Fence 与 Verification；
 - child materialization 在单一原子事务中创建 child Origin/Scope/Task/provenance/Audit/Event/Verification，原子完成 Action，并执行 canonical readback；同一 Action 全生命周期最多一个 child，失败全回滚；
 - 新 child 的 `task.created` 使用 CausationRef v2 `{kind:action,id:<创建 Action>}`，不得伪造 `action.requested` Event 充当直接原因；
-- 历史 v1 direct-child 是合法可读事实，必须标记 `legacy_direct_create_v1` provenance；不得迁移伪造过去不存在的 Action、Approval、PermissionDecision 或 Verification；
+- 不支持 v1 direct-child 数据迁移或 provenance 标记；旧开发库按 ADR-0009 / IC §13.7 拒绝启动，禁止自动清库或读后补写；
 - 父 Task 的 `plan_version` 可以引用子 Task ID 列表；
 - 取消父 Task 时子 Task 按各自当前状态执行取消语义，不做级联强制；
 - 子 Task 失败不自动导致父 Task 失败；父 Task 的 success criteria 决定是否可接受。
 
-字段、事务、重放、迁移和错误合同以 `IMPLEMENTATION_CONTRACTS.md` §5.5、§6.5.1、§6.10 与 ADR-0006 为准。
+字段、事务、重放和错误合同以 `IMPLEMENTATION_CONTRACTS.md` §5.5、§6.5.1、§6.10、ADR-0006 与 ADR-0009 为准。
 
 ### 9.3 Step
 
@@ -618,12 +618,12 @@ SQLite 事务用于：
 
 当某项业务契约要求审计时，对应 AuditRecord 必须与该业务事实以及该事务要求产生的 Outbox 记录在同一个 SQLite 事务中校验并写入。AuditRecord Schema 校验或插入失败时，业务事实和 Outbox 必须整体回滚，不得留下“业务成功但审计缺失”的提交。AuditRecord 本身不因被写入而自动创建 EventEnvelope 或进入 Outbox。
 
-`task.create` 有两个明确世代，禁止混用：
+`task.create` 的 active 世代唯一：
 
 - **active v2 root create**：单事务写入幂等记录、ContentOrigin、TaskScope、根 Task、creation provenance、Audit 与唯一 `task.created` Outbox；payload 不含 parent；
-- **legacy v1 direct create**：现有 SQLite/Rust 实现的历史合同，只用于 validation/read/migration 与既有数据恢复，禁止进入 active dispatcher或 production write。
+- 未发布 v1 direct create 代码事实只由 `IMPLEMENTATION_CONTRACTS.md` legacy 小节记录；实现切片必须删除其 production write，不得作为 validation/read/migration 运行时入口，也不得用于既有数据恢复。
 
-active v2 typed handler 的第一次 `KernelClock` 读取同时固定 `accepted_at` 并做入口 deadline 检查；ContentOrigin receipt/received、TaskScope、Task、provenance、Audit 与 Event 的创建时间均从该值投影。任何引用缺失、Schema 失败或子事实不一致均回滚；不得只提交 Task。v1 已实现 producer 的精确旧字段继续由 `IMPLEMENTATION_CONTRACTS.md` legacy 小节记录，不能被描述为 active v2 实现。
+active v2 typed handler 的第一次 `KernelClock` 读取同时固定 `accepted_at` 并做入口 deadline 检查；ContentOrigin receipt/received、TaskScope、Task、provenance、Audit 与 Event 的创建时间均从该值投影。任何引用缺失、Schema 失败或子事实不一致均回滚；不得只提交 Task。
 
 `task.child.create`是第二个固定producer，但不是KCP TaskCreate：它以父Action为唯一入口，在一个`BEGIN IMMEDIATE`中一次性物化child Origin/Scope/Task/provenance/Audit/`task.created`/Verification、更新Action completion并写正式`action.state_changed`。child事件causation为Action；Action自身状态事件使用预持久化`action_transition` anchor，禁止Action self-causation。执行前校验Action current approved/lease/Stop Fence/expected revision；同一Action全生命周期最多映射一个child。事务内canonical readback失败则全部回滚；commit后响应丢失时以同一Action/generation/idempotency读取原bundle，不得创建第二个child。
 
@@ -651,7 +651,7 @@ Intent persisted
 
 ### 17.3 Outbox 字段（post-0003）
 
-本节字段形态已由migration 0003实现；历史0001/0002数据库open时原子迁移，当前表使用`causation_json`而不再使用`causation_kind/causation_id`。
+本节字段形态以v2 fresh baseline（含migration 0003落地后的统一Outbox shape）为准；当前表使用`causation_json`而不再使用`causation_kind/causation_id`。不属于该baseline的旧开发库按ADR-0009拒绝启动，不提供业务数据迁移。
 
 - `event_id`、`type`、`schema_version`、`aggregate_type`、`aggregate_id`、`sequence`、`outbox_position`、`occurred_at`；
 - `causation_ref`持久化为canonical `causation_json`：v2 tagged union为`command_request{id}` / `event{id}` / `action{id}` / `action_transition{action_id,transition_id}`，v1历史仅前两支；不得为分支扩张一组nullable列；

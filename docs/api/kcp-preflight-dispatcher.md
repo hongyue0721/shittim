@@ -1,6 +1,6 @@
 # KCP Value preflight 与注册式 dispatcher
 
-> 状态：当前Rust已实现legacy v1不可连接边界；active合同已升级为method-aware payload version与TaskCreate v2，因此本实现不能作为未来server的active preflight，必须先升级。
+> 状态：当前Rust已实现legacy v1不可连接边界；active合同已升级为method-aware payload version与TaskCreate v2（`V2InitialBuildActive`），因此本实现不能作为未来server的active preflight，必须先升级并删除v1 create写路径。
 
 ## 范围
 
@@ -46,7 +46,7 @@ preflight_value(value)
 
 顶层 `request_id` 必须是 UUID parser 接受的 string；wire error 中逐字保留原字符串，不重新格式化。非 object、缺失/非 string/非法 UUID 都得到 `UncorrelatableRequest`。
 
-当前Rust实现把根payload version全局固定为1；这只描述legacy代码缺口，不是规范规则。active实现必须读取generated `MethodVersionBinding`：`task.create active=[2], legacy=[1]`，其余首批方法active=[1]；按family+method+version选择request及response Schema。Legacy validator必须与active preflight隔离。
+当前Rust实现把根payload version全局固定为1；这只描述legacy代码缺口，不是规范规则。active实现必须读取generated `MethodVersionBinding`：`task.create active=[2], legacy=[1]`（v1仅判定`unsupported_schema_version`），其余首批方法active=[1]；按family+method+version选择request及response Schema。v1不得进入dispatcher。
 
 preflight的`unsupported_auth_schema`只在实际执行auth判定时适用。它不能被root official fixture harness借用：root harness执行raw Envelope Schema → payload Schema → normalization/projection/hash，auth非null固定为raw schema rejection并投影为`invalid_request`、details为null，两个hash不计算。
 
@@ -81,7 +81,7 @@ response 构造复用 `kernel-kcp` crate-private 通用 validated error finalize
 - registered：`system.ping`、`task.create`、`task.get`；
 - known-unimplemented：`task.list`、`event.subscribe`、`event.poll`、`stop.activate`、`stop.status`。
 
-当前narrow把v1 `task.create`列为registered；active升级后必须改为v2 typed variant，v1不得Accepted/registered。其余registered/known集合不变，直到各方法另行升级。
+当前narrow把v1 `task.create`列为registered；active升级后必须改为v2 typed variant，v1不得Accepted/registered且handler写路径删除。其余registered/known集合不变，直到各方法另行升级。
 
 `TypedDispatcher` 只调用现有公共 `handle_system_ping`、`handle_task_create`、`handle_task_get`，不重复 Schema/protocol/auth/method/payload version/deadline 检查，不改写 `HandlerResult` 或 post-commit intents，也不创建平行端口。
 

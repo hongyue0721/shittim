@@ -1,6 +1,6 @@
 # kernel-kcp legacy v1不可连接库边界
 
-`kernel-kcp`当前实现的是**legacy v1** Rust库级KCP边界。它包含v1 Value preflight/dispatcher和`task.create v1` handler；ADR-0006后的active合同要求TaskCreate v2 root-only与method-aware version，因此当前crate在升级前不得接入未来server。
+`kernel-kcp`当前实现的是**legacy v1** Rust库级KCP边界。它包含v1 Value preflight/dispatcher和`task.create v1` handler；ADR-0006/0009后的active合同要求TaskCreate v2 root-only、method-aware version，以及删除v1 create写路径，因此当前crate在`V2InitialBuildActive`完成前不得接入未来server。
 
 - v1已解析`serde_json::Value` structured preflight；
 - v1全八方法generated typed Accepted；
@@ -11,13 +11,13 @@
 
 它不接受 bytes 或 transport frame，不提供 UTF-8/JSON parser、frame codec、Socket、Named Pipe、server 或 `agentd`。其余五个 Catalog 方法没有 handler，仍阻塞 server 启动。
 
-## Active升级要求
+## Active升级要求（V2InitialBuildActive）
 
-- generated method-version catalog；
+- generated method-version catalog与production bindings（§13.5目标表）；
 - `task.create v2` typed payload/response与handler；
-- v1 create从active Accepted/registration移除，仅migration/test可用；
+- v1 create从active Accepted/registration移除并**删除** handler/adapter/repository write，production仅`unsupported_schema_version`；
 - child Task不增加KCP方法，由Action repository/materializer实现；
-- CausationRef/EventEnvelope/ContentOrigin/Audit v2 producer接线。
+- CausationRef/EventEnvelope/ContentOrigin/Audit v2 producer接线（有业务owner；无伪造producer）。
 
 其余response门、clock/ID/backend分层可复用，不得复制第二套KCP栈。
 
@@ -41,7 +41,7 @@ let result = dispatcher.dispatch(request);
 handler/dispatcher 复用：
 
 - `KernelClock`：返回已解析的 `DateTime<Utc>`；公开 `SystemKernelClock` 使用 OS 系统时钟，并以显式 epoch 前借位、整数溢出和 chrono 可表示范围检查把异常映射为 `ClockError`，不走隐式 panic 转换；
-- `KernelIdGenerator`：legacy v1 `task.create`按purpose分配六个UUID文本和两个opaque ID；active root v2改由`RootTaskCreateAllocationV2`分配七个UUID和两个opaque ID。公开`RandomKernelIdGenerator`使用可失败的OS随机源，随机源失败映射为`IdGenerationError`而不是panic；当前UUID使用v4只是实现细节，不形成协议版本承诺，opaque ID是无caller派生信息的128-bit小写十六进制文本；
+- `KernelIdGenerator`：当前legacy v1 `task.create`按purpose分配六个UUID文本和两个opaque ID（待删除）；active root v2改由`RootTaskCreateAllocationV2`分配七个UUID和两个opaque ID。公开`RandomKernelIdGenerator`使用可失败的OS随机源，随机源失败映射为`IdGenerationError`而不是panic；当前UUID使用v4只是实现细节，不形成协议版本承诺，opaque ID是无caller派生信息的128-bit小写十六进制文本；
 - `TaskApplicationBackend`：只暴露 create/get 与闭集 `BackendError`。
 
 `TypedDispatcher` 借用这三个端口，并按 variant 只把所需能力传给对应 public handler。它不创建平行接口、不重复 deadline 或 Schema 检查，也不改写 `HandlerResult`。

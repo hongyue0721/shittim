@@ -1,6 +1,6 @@
 # Approval v2 与 PermissionDecision 授权合同
 
-> 状态徽章：**contract-only**（accepted；legacy v1 仅供读取/迁移；无 repository 实现）
+> 状态徽章：**contract-only**（accepted；ApprovalRecord v1 按 ADR-0009 禁止 production read/write/migration，仅保留 Schema 历史验证资产；无 repository 实现）
 
 ## 唯一事实源
 
@@ -13,6 +13,7 @@
 | ApprovalRecord v2 联合身份 / CAS / material·observation | [`IMPLEMENTATION_CONTRACTS.md` §6.10](../../specs/IMPLEMENTATION_CONTRACTS.md#610-approvalrecord-v2) |
 | Event allocation / repository 闭集 / 唯一键 / 恢复硬门 | [`IMPLEMENTATION_CONTRACTS.md` §6.10.6](../../specs/IMPLEMENTATION_CONTRACTS.md#6106-approval-event-allocationrepository闭集唯一键与恢复硬门) |
 | 决策背景与边界 | [ADR-0007](../../adr/0007-approval-v2不可变联合身份与失效.md) |
+| 无迁移决策 | [ADR-0009](../../adr/0009-v2从零构建并取消v1数据迁移.md) |
 | 域状态 | [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md) |
 
 ## 范围

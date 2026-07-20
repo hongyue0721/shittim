@@ -1,6 +1,6 @@
 # Event Catalog
 
-> 状态徽章：**partial**（Event v2 八 Schema / catalog / typed decode 与 SQLite migration 0003 / mixed Outbox API **已实现**；active business producer、Publisher、KCP poll mixed cutover **未实现**）
+> 状态徽章：**partial**（Event v2 八 Schema / catalog / typed decode 与 SQLite migration 0003 / 统一 Outbox shape **已实现**；active business producer、Publisher、versioned KCP poll **未实现**；legacy Outbox append production API 待删除）
 
 ## 唯一事实源
 
@@ -10,7 +10,7 @@
 | Action transition authority / `ActionTransitionIntentV1` 边界 | [`IMPLEMENTATION_CONTRACTS.md` §6.14](../../specs/IMPLEMENTATION_CONTRACTS.md#614-action-transition-authority) |
 | CausationRef / EventEnvelope 版本 | [`IMPLEMENTATION_CONTRACTS.md` §6.15](../../specs/IMPLEMENTATION_CONTRACTS.md#615-causationref-与-eventenvelope版本) |
 | Event v2 八 Schema 精确 ID/source/DAG | [`IMPLEMENTATION_CONTRACTS.md` §13.6.2](../../specs/IMPLEMENTATION_CONTRACTS.md#1362-event-v2-八schema实现合同schemacompilergenerated已落地) |
-| 决策与 Outbox/poll 边界 | [ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md) |
+| 决策与 Outbox/poll 边界 | [ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)（部分被 [ADR-0009](../../adr/0009-v2从零构建并取消v1数据迁移.md) supersede） |
 | Outbox 事务语义 | [`CORE_ARCHITECTURE.md` §17](../../specs/CORE_ARCHITECTURE.md#17-事务边界与-sqlite-outbox) |
 | 域状态 | [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md) |
 

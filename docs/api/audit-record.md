@@ -4,7 +4,7 @@
 
 ## v1
 
-v1保持历史读取。全部字段required，无关联事实用null/空数组；`approval_record_ref`与CausationRef v1只属于legacy shape。v1 `audit_type`闭集仅七类：`task.creation_recorded`、`command.accepted`、`permission.evaluated`、`kernel.invariant_blocked`、`event.published`、`recovery.recorded`、`config.changed`。现有SQLite证明canonical immutable Store和legacy task.create同事务producer，不证明v2。
+v1仅保留Schema/fixture历史验证资产，无production read/write/migration。全部字段required，无关联事实用null/空数组；`approval_record_ref`与CausationRef v1只属于legacy shape。v1 `audit_type`闭集仅七类：`task.creation_recorded`、`command.accepted`、`permission.evaluated`、`kernel.invariant_blocked`、`event.published`、`recovery.recorded`、`config.changed`。现有SQLite证明canonical immutable Store和legacy task.create同事务producer，不证明v2。
 
 ## v2完整wire
 
@@ -54,10 +54,8 @@ root/child/approval 可从更大bundle allocation投影同一四元组语义；c
 
 | kind | 权威事实 |
 |---|---|
-| `root_command_v2` | command request、actor/entry、receipt；parent/action/legacy ref为null |
+| `root_command_v2` | command request、actor/entry、receipt；parent/action为null |
 | `child_action_v2` | parent Task、Action、PD、可空Approval resolution、Verification、proposal/delta hash |
-| `legacy_direct_create_v1` | legacy source与可知的command/parent；Action/PD/Approval/Verification固定null |
-| `imported_legacy` | import batch、可空external stable ref、import time；不伪造本地command/action |
 
 ## Producer固定表（总览镜像；逐字段矩阵见 IC §6.16.2）
 
@@ -71,7 +69,6 @@ root/child/approval 可从更大bundle allocation投影同一四元组语义；c
 | Challenge expiry | issued→expired CAS的`expired_at`；**独立`AuditAllocationV2`** | resolve/consume/sweeper的真实来源 | `identity.challenge_expired` / `security` / `observed` / `challenge_expired`；approval/PD refs全null | **无**`approval.state_changed` |
 | Credential register/rotate/revoke | 业务register/rotate/revoke time | 真实authority | `identity.credential_registered\|rotated\|revoked` | 默认无Approval/Task event |
 | Local presence / system authentication evidence | evidence时间 | 受信transport/OS adapter | `identity.local_presence_recorded` / `identity.system_authentication_recorded` | 默认无Approval event；resolution另走approval producer |
-| legacy migration | migration time单独记录，不改历史time | legacy/import source | 未知保持null，不补造Action/PD/Approval/Verification | 默认无business creation event |
 
 root ContentOrigin carrier为command request；child carrier为Action。root receipt hash覆盖normalized TaskCreate v2 payload；child覆盖`NormalizedChildTaskProposalV1`。parent origin refs保序保重复；receipt不含carrier、IDs、时间、provenance或物化对象。
 

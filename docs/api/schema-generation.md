@@ -1,6 +1,6 @@
 # Schema 生成与契约类型
 
-> 状态徽章：**library implemented**（manifest v2 / walker / transaction / Event·KCP authority 与 catalog 已落地；production bindings 仍为 `[]`；runtime cutover / server **未完成**）
+> 状态徽章：**library implemented**（manifest v2 / walker / transaction / Event·KCP authority 与 catalog 已落地；production bindings 仍为 `[]`；`V2InitialBuildActive` production bindings 初始交付 / server **未完成**）
 > 完成状态见 [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md)。
 
 ## 权威边界

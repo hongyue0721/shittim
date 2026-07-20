@@ -505,7 +505,8 @@ fn build_catalog_facts(
     };
 
     // Retained v1 catalogs are lifecycle-orthogonal to active V2 authority and
-    // remain available for legacy preflight until runtime cutover.
+    // remain available for legacy preflight until the v1 write path is removed under ADR-0009
+    // (V2InitialBuildActive).
     let commands = retained_envelope_discriminators_in_set(
         registry,
         schema_set,

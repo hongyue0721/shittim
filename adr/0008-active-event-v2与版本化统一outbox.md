@@ -4,6 +4,7 @@
 - 日期：2026-07-19
 - 实现状态徽章：**partial** — 唯一进度源：[`docs/IMPLEMENTATION_MATRIX.md`](../docs/IMPLEMENTATION_MATRIX.md) · [`docs/PROGRESS.md`](../docs/PROGRESS.md)
 - 合同开放问题：0；本ADR所列Event v2/Outbox docs决策已全部拍板，剩余项都是实现工作而非合同待定项
+- **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：§7 migration 0003 mixed transform 的“兼容既有 v1 Outbox 生产库”目的，以及 §8 `PendingLegacyEventV1` / `append_legacy_event_v1` / `StoredEventEnvelope::LegacyV1` 作为 production store 长期 API 与 cutover write gate 叙事的生产效力作废；Event v2 八 Schema、Catalog 权威、active Outbox 写入语义、poll v1 不得返回 v2 仍有效。
 
 ## 背景
 
@@ -229,7 +230,7 @@ impl SqliteStore {
 
 `PendingLegacyEventV1`逐字段维持现有`PendingEvent`合同：legacy caller仍显式给出type/aggregate与JSON payload，但append必须用retained v1 Schema+typed decode验证其type→aggregate→payload映射；`event_id`继续由Schema验证UUID。`PendingActiveEventV2`不得接受caller可写`event_type`或`aggregate_type`：store从`EventEnvelopeV2Payload` variant经`EVENT_ACTIVE_BINDINGS`唯一派生二者。`EventAggregateId`拒绝自由String：`TaskCreated/TaskStateChanged`只匹配`Task(Uuid)`，`ActionStateChanged`只匹配`Action(Uuid)`，`ApprovalStateChanged`只匹配`ApprovalChain(Uuid)`，`StopFenceActivated`只匹配`StopFenceGlobal`；前三类还必须核对enum内UUID等于payload对应task/action/approval_chain ID。任一variant/aggregate ID不匹配在sequence/position分配前失败。`correlation_id`与`dedup_key`必须非空；`event_id`由上层allocation传入，store不生成。两个pending struct都不暴露caller可写`schema_version/sequence/outbox_position`；payload自身版本只来自generated payload variant。
 
-私有`append_versioned_event`是唯一共享内核，不导出；它从legacy validated事实或active binding事实构造内部规范化输入，再负责exact prevalidation、SAVEPOINT、sequence/position分配、insert、最终Envelope重建与版本对应的Schema/typed decode。现有`PendingEvent`/`append_event`在0003 API切片中重命名，不保留deprecated alias；legacy入口仅供现有未发布compatibility producer并受最终cutover write gate关闭。不得通过Schema失败后fallback另一版本。mixed read固定返回上述variant；Publisher按同一position流处理v1/v2。`mark_delivered`在同一写事务先验证目标row仍可按其版本完整读取，再做第一次时间不可覆盖的conditional update；corrupt row不能被mark后隐藏。两种append失败都由局部SAVEPOINT回滚，外层事务即使继续commit也不占sequence/position、不留partial row。
+私有`append_versioned_event`是唯一共享内核，不导出；它从legacy validated事实或active binding事实构造内部规范化输入，再负责exact prevalidation、SAVEPOINT、sequence/position分配、insert、最终Envelope重建与版本对应的Schema/typed decode。现有`PendingEvent`/`append_event`在0003 API切片中重命名，不保留deprecated alias；legacy入口仅供现有未发布compatibility producer（历史：write gate 与 mixed API 生产目的已被 ADR-0009 supersede，后续切片将删除 legacy append 并改为 v2-only Outbox API）。不得通过Schema失败后fallback另一版本。mixed read固定返回上述variant；Publisher按同一position流处理v1/v2。`mark_delivered`在同一写事务先验证目标row仍可按其版本完整读取，再做第一次时间不可覆盖的conditional update；corrupt row不能被mark后隐藏。两种append失败都由局部SAVEPOINT回滚，外层事务即使继续commit也不占sequence/position、不留partial row。
 
 ## 拒绝的替代方案
 
@@ -246,4 +247,4 @@ impl SqliteStore {
 1. 先实现八Schema、manifest DAG、exact claimant、active/legacy catalog常量和v1/v2 typed decode；production bindings仍空。
 2. 再实现migration 0003与统一Outbox mixed read/write；此时仍不实现active业务producer。
 3. 后续root v2、child、Action transition、Approval repository只能消费上述active入口；不得各自创建临时Event存储。
-4. Conformance必须覆盖Schema正反例、claimant/mapping drift、mixed migration、JCS、sequence/position、SAVEPOINT、corruption、rollback/backup与legacy write gate。
+4. Conformance必须覆盖Schema正反例、claimant/mapping drift、mixed migration、JCS、sequence/position、SAVEPOINT、corruption、rollback/backup与legacy write gate（legacy write gate 为当前代码现状回归；其生产目的已被 ADR-0009 supersede，最终清理切片删除 legacy append 后该项随之失效）。

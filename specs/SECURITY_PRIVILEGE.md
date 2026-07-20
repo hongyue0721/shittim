@@ -41,7 +41,7 @@
 - ContentOrigin；
 - 恢复状态与 Stop Fence。
 
-规则的唯一 `effect` 为 `allow`、`confirm` 或 `deny`。active production PolicyRule v2当且仅当 `effect = confirm` 时必须携带 `confirmation_mode: generic | local | system_authentication | remote_signature | plan_revision`；`allow` 与 `deny` 携带该字段无效。PolicyRule v1按逐对象lifecycle保留旧闭集读取/迁移，不把其它v1对象整体判legacy。PermissionDecision固定映射为`require_confirmation | require_local_confirmation | require_system_authentication | require_remote_signature | require_plan_revision`；这些是执行结果，不是平行effect。`remote_signature`是算法无关Policy入口，Ed25519只属于`RemoteSignatureAlgorithmV1`的首个branch。
+规则的唯一 `effect` 为 `allow`、`confirm` 或 `deny`。active production PolicyRule v2当且仅当 `effect = confirm` 时必须携带 `confirmation_mode: generic | local | system_authentication | remote_signature | plan_revision`；`allow` 与 `deny` 携带该字段无效。PolicyRule v1按逐对象lifecycle仅保留Schema/fixture历史验证资产，无production read/write/migration；不把其它v1对象整体判legacy。PermissionDecision固定映射为`require_confirmation | require_local_confirmation | require_system_authentication | require_remote_signature | require_plan_revision`；这些是执行结果，不是平行effect。`remote_signature`是算法无关Policy入口，Ed25519只属于`RemoteSignatureAlgorithmV1`的首个branch。
 
 每条规则是版本化的结构化对象，可匹配 Actor、Entry Point、ContentOrigin、Task/Action、Resource/Task Scope、Side-effect Class、Extension 来源/权限声明、Delegation、Trigger、预算、认证状态、时间和恢复状态。`authentication_level` 是有序枚举：`unauthenticated < asserted < platform_verified < system_authenticated`；它只描述已观察到的认证证据强度，**不产生默认授权、默认确认或默认拒绝**。
 

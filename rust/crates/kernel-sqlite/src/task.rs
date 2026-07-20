@@ -123,8 +123,8 @@ impl PreparedLegacyV1Create {
 impl WriteTransaction<'_> {
     /// Retained TaskCreate v1 compatibility write path.
     ///
-    /// This remains a production-supported legacy-read/compatibility path until the explicit v2
-    /// cutover. New v2 callers must use `kernel-task-creation` for pure normalization/projection
+    /// This v1 write path is scheduled for deletion under ADR-0009 (V2InitialBuildActive final
+    /// cleanup slice); it is not production-supported and no old-database migration exists. New v2 callers must use `kernel-task-creation` for pure normalization/projection
     /// semantics and must not route through this method or its legacy helpers.
     ///
     /// This method owns an internal SAVEPOINT, so an ignored error cannot leave partial facts in

@@ -29,7 +29,7 @@ SDK 类型必须从 JSON Schema 2020-12 唯一源生成，不能手写与 Kernel
 
 ## 未来 KCP SDK 边界
 
-未来客户端 SDK 只生成 active KCP method/version。`task.create` 只生成 v2 root-only payload；v1 只能放在明确命名的 legacy migration/reader 包中，不能与 active client 入口重载或自动 fallback。
+未来客户端 SDK 只生成 active KCP method/version。`task.create` 只生成 v2 root-only payload；v1 仅保留 Schema/fixture 历史验证资产，production 不设 legacy migration/reader 包（ADR-0009），不能与 active client 入口重载或自动 fallback。
 
 SDK 对 `task.create` 的 deadline 恢复必须保留同一 idempotency key 与同一业务投影；收到 `deadline_exceeded` 或 `internal_error` 时不得假定 commit 未发生。`retryable=true` 也不授权换新 key 或盲目创建第二个 Task。
 

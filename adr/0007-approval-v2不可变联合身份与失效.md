@@ -3,6 +3,7 @@
 - 状态：accepted
 - 日期：2026-07-18
 - 实现状态：contract-only；本 ADR 未修改 Schema、Rust、SQLite migration 或生成物
+- **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：文中 v1→v2 migration 生产要求、repository `legacy v1 read projection` 作为迁移配套生产义务的效力作废；Approval v2 不可变联合 / current-head CAS / fingerprint / 身份证据决策仍有效。
 
 ## 背景
 
@@ -40,7 +41,7 @@ operation | task_proposal | plan_revision
 - CAS 失败返回 `approval_head_conflict`，调用方重新读取，不得覆盖或分叉 current head；
 - 历史分支如由损坏/旧实现产生，只可作为 legacy/corrupt 诊断读取，不得选一个“看起来最新”的 head。
 
-v1 只允许 legacy read/validation/migration；production write 只能 v2。
+v1 仅保留 Schema/fixture 历史验证资产（历史：原文为 legacy read/validation/migration，已被 ADR-0009 supersede）；production write 只能 v2。
 
 ### 3. 哪些事实不创建 Approval
 
@@ -133,7 +134,7 @@ Approval repository必须提供：
 
 ## 实现影响
 
-后续必须新增 Approval v2、PermissionDecision v2与authentication evidence/challenge Schema，Approval/PermissionDecision repository、current-head CAS、Lease消费验证、KCP/API错误、migration与Conformance。现有 v1 generated type与领域代码只代表legacy合同，不因本ADR自动成为v2实现。
+后续必须新增 Approval v2、PermissionDecision v2与authentication evidence/challenge Schema，Approval/PermissionDecision repository、current-head CAS、Lease消费验证、KCP/API错误、migration与Conformance（历史：migration 要求已被 ADR-0009 supersede，无 v1 数据迁移）。现有 v1 generated type与领域代码只代表legacy合同，不因本ADR自动成为v2实现。
 
 ## 验收
 
@@ -143,4 +144,4 @@ Approval repository必须提供：
 4. material变化必失效，纯 observation刷新只有Core证明material等价后可复用旧resolution；
 5. local presence不能冒充Owner，system auth必须有OS证据，remote必须完成challenge签名验证；
 6. plan revision approved后所有相关Action重新评估；
-7. v1只能legacy read，production write拒绝。
+7. v1仅保留Schema/fixture历史验证资产，无production read（历史：原文 legacy read，已被 ADR-0009 supersede）；production write拒绝。

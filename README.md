@@ -6,7 +6,7 @@
 
 1. `AGENT.md` 是宪法：全局不变量、可信核心边界、依赖方向与编码规则。
 2. `specs/*.md` 是各领域的唯一规范事实源；同一字段、枚举、状态机不得在其他文档复制定义。
-3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。ADR-0006 的首批12项 Schema、Task creation纯library与official fixtures/harness已经实现，但repository、handler、child materializer与production cutover尚未完成；ADR-0007仍为contract-only；ADR-0008的Event v2八Schema/catalog/typed envelope以及SQLite migration 0003/descriptor v1/mixed Outbox API已经实现，active business producer、Publisher、KCP poll与runtime仍未实现。
+3. [`adr/`](adr/README.md) 记录未被规范覆盖的局部实施决策；ADR 状态为 proposed/accepted/superseded，accepted 不等于代码已经完成。ADR-0006 的首批12项 Schema、Task creation纯library与official fixtures/harness已经实现，但repository、handler、child materializer尚未完成；ADR-0007仍为contract-only；ADR-0008的Event v2八Schema/catalog/typed envelope以及SQLite migration 0003/descriptor v1/统一Outbox shape已经实现，active business producer、Publisher、versioned KCP poll与runtime仍未实现；ADR-0009将里程碑定为`V2InitialBuildActive`（从零构建、取消v1数据迁移），作废`V2ProductionWriteCutover`。
 4. 源码、Schema 与测试必须实现本规范，不能反向改变规范。
 
 `PROJECT_OVERVIEW.md` 是非规范产品概览，`FILE_MANIFEST.md` 是非规范元数据（由 `scripts/update-file-manifest.mjs` 从 Git Markdown source set 生成，禁止手改）；二者不定义行为。冲突时，以 AGENT 的硬不变量、再以对应领域 spec 为准。

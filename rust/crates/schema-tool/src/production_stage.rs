@@ -32,7 +32,7 @@ impl RegistryProfile for ProductionSchemaStage {
     fn validate(registry: &SchemaRegistry) -> Result<()> {
         if !registry.manifest().method_version_bindings.is_empty() {
             return Err(SchemaToolError::msg(
-                "production manifest stage gate: method_version_bindings must be empty until V2ProductionWriteCutover",
+                "production manifest stage gate: method_version_bindings must be empty until V2InitialBuildActive",
             )
             .into());
         }

@@ -3,7 +3,7 @@
 > 非规范元数据。列出 Git source set 中的 Markdown（tracked `git ls-files '*.md'` + 标准 ignore 下 untracked source）；不含 ignored build 产物（如 target/、node_modules/）。行数以 UTF-8 文本 `wc -l` 等价结果为准。由 `scripts/update-file-manifest.mjs` 生成，禁止手改。
 
 - `AGENT.md` — 53 lines
-- `FILE_MANIFEST.md` — 43 lines
+- `FILE_MANIFEST.md` — 44 lines
 - `PROJECT_OVERVIEW.md` — 202 lines
 - `README.md` — 41 lines
 - `adr/0001-shittim工作区与工具链.md` — 45 lines
@@ -11,16 +11,17 @@
 - `adr/0003-kcp本地传输.md` — 32 lines
 - `adr/0004-kernel-sqlite文件持久化基座.md` — 36 lines
 - `adr/0005-computer-use可选profile边界.md` — 135 lines
-- `adr/0006-child-task权威与taskcreate-v2迁移.md` — 119 lines
-- `adr/0007-approval-v2不可变联合身份与失效.md` — 146 lines
-- `adr/0008-active-event-v2与版本化统一outbox.md` — 249 lines
-- `adr/README.md` — 27 lines
+- `adr/0006-child-task权威与taskcreate-v2迁移.md` — 122 lines
+- `adr/0007-approval-v2不可变联合身份与失效.md` — 147 lines
+- `adr/0008-active-event-v2与版本化统一outbox.md` — 250 lines
+- `adr/0009-v2从零构建并取消v1数据迁移.md` — 122 lines
+- `adr/README.md` — 28 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 94 lines
+- `docs/PROGRESS.md` — 125 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 158 lines
 - `docs/api/README.md` — 41 lines
-- `docs/api/approval-contract.md` — 27 lines
-- `docs/api/audit-record.md` — 80 lines
+- `docs/api/approval-contract.md` — 28 lines
+- `docs/api/audit-record.md` — 77 lines
 - `docs/api/domain-policy.md` — 161 lines
 - `docs/api/domain-task.md` — 122 lines
 - `docs/api/error-catalog.md` — 22 lines
@@ -30,14 +31,14 @@
 - `docs/api/kernel-kcp.md` — 63 lines
 - `docs/api/kernel-sqlite.md` — 123 lines
 - `docs/api/schema-generation.md` — 61 lines
-- `docs/api/task-repository-contract.md` — 29 lines
+- `docs/api/task-repository-contract.md` — 38 lines
 - `docs/sdk/extension-sdk.md` — 71 lines
 - `specs/COMPUTER_USE.md` — 863 lines
-- `specs/CONFORMANCE.md` — 684 lines
+- `specs/CONFORMANCE.md` — 685 lines
 - `specs/CORE_ARCHITECTURE.md` — 856 lines
 - `specs/EXTENSION_SDK.md` — 682 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 2446 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 2450 lines
 - `specs/MODEL_RUNTIME.md` — 355 lines
 - `specs/REFERENCES.md` — 254 lines
 - `specs/SECURITY_PRIVILEGE.md` — 432 lines
