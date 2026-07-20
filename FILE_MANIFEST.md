@@ -16,7 +16,7 @@
 - `adr/0008-active-event-v2与版本化统一outbox.md` — 251 lines
 - `adr/README.md` — 26 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 224 lines
+- `docs/PROGRESS.md` — 209 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 147 lines
 - `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 45 lines
@@ -28,7 +28,7 @@
 - `docs/api/kcp-preflight-dispatcher.md` — 90 lines
 - `docs/api/kernel-control-protocol.md` — 90 lines
 - `docs/api/kernel-kcp.md` — 63 lines
-- `docs/api/kernel-sqlite.md` — 161 lines
+- `docs/api/kernel-sqlite.md` — 123 lines
 - `docs/api/schema-generation.md` — 187 lines
 - `docs/api/task-repository-contract.md` — 59 lines
 - `docs/sdk/README.md` — 37 lines

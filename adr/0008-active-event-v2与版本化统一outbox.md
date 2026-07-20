@@ -2,12 +2,12 @@
 
 - 状态：accepted
 - 日期：2026-07-19
-- 实现状态：第一实现段已完成（八个 Event v2 component-native Schema、manifest 61 entries、schema-tool Event claimant/catalog/bindings、generated Rust typed envelope 与 conformance）；migration 0003、mixed Outbox API、producer、Publisher、server 仍为 contract-only
+- 实现状态：第二实现段已完成（第一段八个 Event v2 Schema/catalog/typed decode；第二段migration 0003 descriptor v1、版本化统一Outbox、mixed v1/v2 public API、严格存储解码与savepoint transaction poison）；active business producer、Publisher、server与KCP poll cutover仍未实现
 - 合同开放问题：0；本ADR所列Event v2/Outbox docs决策已全部拍板，剩余项都是实现工作而非合同待定项
 
 ## 背景
 
-现有仓库历史上只有 retained `EventEnvelope v1`、`CausationRef v1`、三个事件 payload 与 SQLite v1 Outbox。Event v2第一实现段现已补齐八个Schema、compiler/catalog与generated typed decode，但SQLite仍停留在v1 Outbox。v1 causation 只能表达 `command_request | event`，因此无法诚实表达 Child Task 由 Action 直接产生，也无法在 Action 自身状态事件中避免 self-causation。Approval v2 的 current-head 变化同样尚无producer/repository实现。若在migration 0003前先接入root v2、child materializer或Approval repository，并临时扩展旧Outbox，就会形成两张表、两套position/sequence或nullable causation列不断膨胀的长期债务。
+现有仓库历史上只有 retained `EventEnvelope v1`、`CausationRef v1`、三个事件 payload 与 SQLite v1 Outbox。Event v2第一实现段补齐八个Schema、compiler/catalog与generated typed decode；第二实现段现已完成migration 0003与mixed统一Outbox。v1 causation不能表达Child Task由Action直接产生或Action自身transition causation，因此active business producer仍必须等待对应repository/transition authority，不能回退到legacy producer。
 
 本决策固定generic Core里程碑的Event v2 Schema闭包、Catalog权威和SQLite统一存储合同。第一实现段已经落地Schema/compiler/generated产物；它仍不启用production MethodVersionBinding、active producer或mixed Outbox runtime。
 
@@ -248,4 +248,4 @@ impl SqliteStore {
 3. 后续root v2、child、Action transition、Approval repository只能消费上述active入口；不得各自创建临时Event存储。
 4. Conformance必须覆盖Schema正反例、claimant/mapping drift、mixed migration、JCS、sequence/position、SAVEPOINT、corruption、rollback/backup与legacy write gate。
 
-本ADR的合同与第一实现段已经完成：当前仓库有61 Schema，Event v2八Schema、active/legacy Catalog与v1/v2 typed decode已落地；SQLite仍是legacy EventEnvelope v1 Outbox。尚无migration 0003、mixed API、active producer、Publisher、repository、handler或server。
+本ADR的合同与前两实现段已经完成：当前仓库有61 Schema，Event v2八Schema、active/legacy Catalog与v1/v2 typed decode已落地；SQLite migration 0003已用descriptor format v1把legacy Outbox原子升级为一张版本化统一表，mixed public API、严格stored decoder、delivery写前校验与savepoint transaction poison也已落地。尚无active business producer、Publisher、repository、handler、server或KCP `event.poll` mixed cutover。

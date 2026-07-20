@@ -199,7 +199,7 @@ UI 退出不触发上述流程。
 
 ### 8.5 EventEnvelope
 
-> active EventEnvelope v2的Schema/source/compiler/catalog/generated typed decode已实现；版本化统一Outbox仍只完成合同，SQLite当前仍是legacy v1。exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。
+> active EventEnvelope v2的Schema/source/compiler/catalog/generated typed decode与SQLite migration 0003统一Outbox已经实现；active business producer、Publisher与KCP poll cutover仍未实现。exact Schema/Catalog/migration合同见`IMPLEMENTATION_CONTRACTS.md` §5.6、§6.14–6.15、§13.6.2及ADR-0008。
 
 所有持久化事件包装在 EventEnvelope 中。`sequence` 只表达同一聚合内的领域顺序：某聚合第一条**已提交**事件固定为 `0`，此后每条已提交事件必须严格等于上一条已提交事件的 `sequence + 1`。事务中暂时分配但最终回滚的序号不构成已提交事实、不得占号；重试事务必须基于当前最后已提交序号重新分配。`outbox_position` 是事件写入 Outbox 时由 Kernel 分配的全局单调递增投递位置，只用于发布、分页和 cursor，不代表跨聚合因果顺序。
 
@@ -642,7 +642,7 @@ Intent persisted
 
 ### 17.2 SQLite Outbox
 
-事件发布使用一个跨Envelope版本统一的Outbox，保证业务事实与待投递记录原子提交，并提供 at-least-once 发布。当前代码仍是v1规范化列实现；后续migration 0003按ADR-0008升级同一表，禁止建立并行`outbox_v2`：
+事件发布使用一个跨Envelope版本统一的Outbox，保证业务事实与待投递记录原子提交，并提供 at-least-once 发布。migration 0003已经升级同一表，禁止建立并行`outbox_v2`：
 
 1. 在同一个 SQLite 事务中：写入业务状态变更 + 插入 EventEnvelope 到 `outbox` 表，并分配全局单调递增 `outbox_position`；
 2. 事务提交后，Event Publisher 按 `outbox_position` 升序读取未发布记录；
@@ -651,7 +651,7 @@ Intent persisted
 
 ### 17.3 Outbox 字段（post-0003）
 
-本节字段形态是migration 0003完成后的规范；当前0001/0002数据库仍保存v1 `causation_kind/causation_id`，不得把post-0003描述成现状。
+本节字段形态已由migration 0003实现；历史0001/0002数据库open时原子迁移，当前表使用`causation_json`而不再使用`causation_kind/causation_id`。
 
 - `event_id`、`type`、`schema_version`、`aggregate_type`、`aggregate_id`、`sequence`、`outbox_position`、`occurred_at`；
 - `causation_ref`持久化为canonical `causation_json`：v2 tagged union为`command_request{id}` / `event{id}` / `action{id}` / `action_transition{action_id,transition_id}`，v1历史仅前两支；不得为分支扩张一组nullable列；

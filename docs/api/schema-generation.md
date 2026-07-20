@@ -1,6 +1,6 @@
 # Schema 生成与契约类型
 
-> 状态日期：2026-07-20。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式KCP V2 Envelope authority、独立EventEnvelopeV2 claimant/catalog、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；历史task creation 12项与Event v2八项 source/entries/generated root types已落地（manifest=61）；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地；中立strict RFC6901 selection/mutation library、`validate/canonicalize --pointer`与canonical Bytes/Hex/Hash模式CLI已落地；三份official task-creation fixtures及共享wrapper/production owner/独立CLI oracle harness已落地。kernel-kcp runtime cutover、repository、handler、materializer、migration 0003与可连接server仍未完成。
+> 状态日期：2026-07-20。Manifest v2/walker/transaction基座已完成；schema-tool library已实现正式五值compatibility与kind组合门、精确production lifecycle ledger、component-native/source-title/root schema_version硬门、claimant式KCP V2 Envelope authority、独立EventEnvelopeV2 claimant/catalog、registry-level binding验证、TargetPlan-owned target-local authority/binding facts、authority/legacy正交catalog、typed request-version selector与显式Production/Synthetic registry profile。production `schemas/manifest.json` bindings仍为空；历史task creation 12项与Event v2八项 source/entries/generated root types已落地（manifest=61）；统一format assertion、neutral Alias resolution/audit、root transparent alias、通用validated decode与open-object无损typed round-trip已落地；中立strict RFC6901 selection/mutation library、`validate/canonicalize --pointer`与canonical Bytes/Hex/Hash模式CLI已落地；三份official task-creation fixtures及共享wrapper/production owner/独立CLI oracle harness已落地。kernel-kcp runtime cutover、repository、handler、materializer与可连接server仍未完成；SQLite migration 0003/mixed Outbox API已落地。
 
 ## 权威边界
 
@@ -143,7 +143,7 @@ root official fixture harness只执行`KcpCommandEnvelopeV2` raw Schema、`TaskC
 - KcpCommandEnvelopeV2/KcpQueryEnvelopeV2保持protocol 1.0，0个method payload conditional `$ref`；只禁止这两个generic typed decode及其0-ref同义wrapper；family structure authority由registry exact V2 Envelope facts唯一选择，不按ID suffix；authority常量为`KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS`/`KCP_ENVELOPE_AUTHORITY_QUERY_METHODS`/`KCP_ENVELOPE_AUTHORITY_METHODS`，binding另行选择业务payload/version；
 - production bindings继续为空；后续通用loader接受synthetic 8-method manifest，`validate_production_manifest_stage`由check/generate单独挂载production-empty gate，最终cutover才启用production。
 
-## Event v2八Schema（Schema/catalog/typed 已落地；Outbox/producer 尚未实现）
+## Event v2八Schema（Schema/catalog/typed 与 migration 0003/mixed Outbox API 已落地；active producer/Publisher 尚未实现）
 
 精确清单见IC §13.6.2与ADR-0008：common三项、policy两项、event三项。production manifest 现为 61 entries。
 
@@ -171,7 +171,7 @@ root official fixture harness只执行`KcpCommandEnvelopeV2` raw Schema、`TaskC
 - production非空MethodVersionBinding / V2ProductionWriteCutover；
 - TaskCreateRequest/Response v2 root-only runtime handler/repository（包括把已实现的`kernel-task-creation` helper接入生产路径）；
 - ChildTaskDelta/TaskCreationProvenance 及其余未列入本批12项的对象；
-- Event v2 Schema/source/compiler/catalog/generated typed decode；这些已经实现。仍未实现的是SQLite migration 0003、mixed Outbox API、active producer/Publisher/runtime，以及ContentOrigin/Audit v2；
+- Event v2 Schema/source/compiler/catalog/generated typed decode与SQLite migration 0003/mixed Outbox API；这些已经实现。仍未实现的是active producer/Publisher/runtime，以及ContentOrigin/Audit v2；
 - ApprovalRecord/PermissionDecision/auth challenge/evidence v2；
 - `agentd`、KCP bytes/frame/transport 与任何可运行服务端；
 - Task 更新/list、Action、PermissionDecision 等后续业务 repository 与 KCP handler；

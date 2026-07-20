@@ -1,6 +1,6 @@
 # Event Catalog
 
-> 状态：**Event v2 Schema/source/generated/catalog/typed decode 已实现**；SQLite migration 0003、mixed Outbox API、active producer/Publisher 仍为 contract-only。唯一事实源是[`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog)、§6.14–6.15、§13.6.2与[ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)。
+> 状态：**Event v2 Schema/source/generated/catalog/typed decode 与SQLite migration 0003/mixed Outbox API已实现**；active business producer、Publisher与KCP poll mixed cutover仍未实现。唯一事实源是[`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog)、§6.14–6.15、§13.6.2与[ADR-0008](../../adr/0008-active-event-v2与版本化统一outbox.md)。
 
 ## Schema闭包（已落地）
 
@@ -67,9 +67,9 @@ private fixed-size binding arrays分别按v2/v1 Envelope root type enum声明顺
 
 ## 统一版本化Outbox
 
-migration 0003合同固定为一张`outbox`表：v1/v2共享全局`outbox_position`与aggregate sequence。causation使用RFC 8785 canonical `causation_json`，payload使用canonical `payload_json`；不扩张nullable branch列、不保存`envelope_json`双源。现有ledger只有`version/name/checksum/applied_at`且checksum为SQL bytes；0003在同一事务先ALTER增加nullable历史/新行必填的`descriptor_hash`与`descriptor_format_version`，再执行transform。
+migration 0003已实现为一张`outbox`表：v1/v2共享全局`outbox_position`与aggregate sequence。causation使用RFC 8785 canonical `causation_json`，payload使用canonical `payload_json`；不扩张nullable branch列、不保存`envelope_json`双源。ledger已在0003同一事务从四列升级为带nullable历史/新行必填的`descriptor_hash`与`descriptor_format_version`。
 
-format-v1模板中的`algorithm_id`语义是“具体stable transform algorithm id”，不得硬编码migration-transform族名。0003 descriptor精确固定`migration_version=3`、`name=versioned_event_outbox`、唯一asset `rust/crates/kernel-sqlite/migrations/0003_versioned_event_outbox.sql`；该asset包含ledger ALTER、replacement Outbox DDL、indexes与constraints。Rust transform在同一transaction执行，三元组精确为`shittim.kernel-sqlite.outbox-v1-to-versioned-v1`/`1`/`kernel_sqlite::migration::outbox_v1_to_versioned_v1`。single descriptor hash及legacy 0001/0002兼容规则以ADR-0008 §7为权威；同version任一asset/name/transform漂移必须`migration_drift`。
+format-v1 descriptor与0003 identity按合同落地：exact version/name/single raw asset及transform三元组；single descriptor hash同时写checksum/hash，0001/0002保留legacy SQL-only checksum。transform逐legacy row exact decode、JCS causation copy、逐rowreadback、row count/sequence/position/sqlite_sequence闭包和原子table swap；corruption或DDL/descriptor drift整体rollback。
 
 公开API固定为`StoredEventEnvelope::{LegacyV1(TypedEventEnvelope),ActiveV2(TypedEventEnvelopeV2)}`与`OutboxRecord { envelope, delivered_at }`；类型owner固定`kernel-sqlite/src/outbox.rs`并由crate root re-export。写入固定为`WriteTransaction::append_legacy_event_v1(PendingLegacyEventV1)`和`append_active_event_v2(PendingActiveEventV2)`，共用私有`append_versioned_event`。legacy pending逐字段维持现有PendingEvent caller事实并做v1 mapping验证；active pending精确使用`event_id:Uuid`、`EventAggregateId::{Task,Action,ApprovalChain,StopFenceGlobal}`、`occurred_at`、generated `CausationRefV2`、nonempty correlation/dedup及generated closed `EventEnvelopeV2Payload`，不接受caller event_type/aggregate_type/schema_version/sequence/position。store从payload variant+generated binding派生type/aggregate并核对typed aggregate ID与payload ID。旧`PendingEvent/append_event`不保留alias。读取按row Envelope version选择exact Schema/typed decoder；unknown/corrupt version/type/JCS/mapping返回`stored_data_invalid`且不推进cursor。`mark_delivered`写前必须验证目标row仍可完整读取，不能用delivery mark隐藏corruption。
 
