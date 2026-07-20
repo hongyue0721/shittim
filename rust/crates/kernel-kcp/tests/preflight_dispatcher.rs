@@ -1,7 +1,7 @@
 use chrono::{DateTime, TimeZone, Utc};
 use kernel_contracts::{
-    validate_json, KcpResponseEnvelopeStatus, KCP_LEGACY_V1_COMMAND_METHODS,
-    KCP_LEGACY_V1_QUERY_METHODS,
+    validate_json, KcpResponseEnvelopeStatus, KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS,
+    KCP_ENVELOPE_AUTHORITY_QUERY_METHODS,
 };
 use kernel_kcp::{
     narrow_to_registered, preflight_value, BackendError, ClockError, HandlerResult,
@@ -22,7 +22,8 @@ assert_not_impl_any!(KnownCatalogMethodNotImplemented: Serialize);
 assert_not_impl_any!(kernel_kcp::RegisteredRequest: Serialize);
 assert_not_impl_any!(kernel_kcp::TypedCatalogRequest: Serialize);
 
-const REQUEST_ID: &str = "AaAaAaAa-aAaA-4AaA-8AaA-aAaAaAaAaAaA";
+// V2 Envelope Schema requires lowercase UUID text.
+const REQUEST_ID: &str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const RESPONSE_SCHEMA: &str = "https://schemas.shittim.local/v1/kcp/response_envelope.json";
 
 fn actor() -> Value {
@@ -80,7 +81,7 @@ fn valid_values() -> Vec<(&'static str, TypedCatalogRequestFamily, Value)> {
         (
             "task.create",
             TypedCatalogRequestFamily::Command,
-            command("task.create", task_create_payload()),
+            command("task.create", task_create_payload_v2()),
         ),
         (
             "task.get",
@@ -130,7 +131,35 @@ fn valid_values() -> Vec<(&'static str, TypedCatalogRequestFamily, Value)> {
     ]
 }
 
-fn task_create_payload() -> Value {
+fn task_create_payload_v2() -> Value {
+    json!({
+        "schema_version":2,
+        "proposer":"user",
+        "goal":"goal",
+        "constraints":[],
+        "success_criteria":["done"],
+        "risk_hint":null,
+        "capability_hints":[],
+        "task_scope":{
+            "schema_version":1,
+            "resource_patterns":[],
+            "exclusions":[],
+            "allowed_capability_hints":[],
+            "expires_at":null
+        },
+        "delegation_ref":null,
+        "origin":{
+            "schema_version":1,
+            "kind":"user_input",
+            "source_uri":null,
+            "upstream_stable_id":null,
+            "producer_ref":{"kind":"actor","id":"actor"},
+            "parent_origin_refs":[]
+        }
+    })
+}
+
+fn task_create_payload_v1() -> Value {
     json!({
         "schema_version":1,
         "proposer":"user",
@@ -183,8 +212,51 @@ fn all_eight_valid_values_are_accepted_with_exact_method_and_family() {
         assert_eq!(request.family(), family);
     }
     assert_eq!(
-        KCP_LEGACY_V1_COMMAND_METHODS.len() + KCP_LEGACY_V1_QUERY_METHODS.len(),
+        KCP_ENVELOPE_AUTHORITY_COMMAND_METHODS.len() + KCP_ENVELOPE_AUTHORITY_QUERY_METHODS.len(),
         valid_values().len()
+    );
+}
+
+#[test]
+fn method_aware_version_matrix_for_create_and_retained_v1() {
+    // Active create v2 → Accepted.
+    let PreflightResult::Accepted(create_v2) =
+        preflight_value(command("task.create", task_create_payload_v2()))
+    else {
+        panic!("create v2 accepted")
+    };
+    assert_eq!(create_v2.method(), "task.create");
+
+    // Known legacy create v1 → unsupported_schema_version (never Accepted).
+    assert_eq!(
+        response_error(command("task.create", task_create_payload_v1())).code,
+        "unsupported_schema_version"
+    );
+
+    // Unknown create version → unsupported_schema_version.
+    let mut unknown = command("task.create", task_create_payload_v2());
+    unknown["payload"]["schema_version"] = json!(3);
+    assert_eq!(response_error(unknown).code, "unsupported_schema_version");
+
+    // Remaining seven methods stay on active v1.
+    for (method, _, value) in valid_values() {
+        if method == "task.create" {
+            continue;
+        }
+        let PreflightResult::Accepted(request) = preflight_value(value) else {
+            panic!("{method} active v1 accepted")
+        };
+        assert_eq!(request.method(), method);
+    }
+
+    // system.ping v2 is unsupported.
+    assert_eq!(
+        response_error(query(
+            "system.ping",
+            json!({"schema_version":2,"echo":null})
+        ))
+        .code,
+        "unsupported_schema_version"
     );
 }
 
@@ -283,7 +355,7 @@ fn every_preflight_field_type_and_value_has_stable_classification() {
 #[test]
 fn cross_family_methods_are_unsupported_method_from_generated_catalogs() {
     assert_eq!(
-        response_error(query("task.create", task_create_payload())).code,
+        response_error(query("task.create", task_create_payload_v2())).code,
         "unsupported_method"
     );
     assert_eq!(
@@ -302,7 +374,7 @@ fn opposite_family_discriminator_is_a_full_schema_invalid_request() {
     query_value["command_type"] = json!("task.create");
     assert_eq!(response_error(query_value).code, "invalid_request");
 
-    let mut command_value = command("task.create", task_create_payload());
+    let mut command_value = command("task.create", task_create_payload_v2());
     command_value["query_type"] = json!("task.get");
     assert_eq!(response_error(command_value).code, "invalid_request");
 }
@@ -332,9 +404,14 @@ fn root_schema_version_number_rules_are_exact() {
 
 #[test]
 fn nested_versions_and_business_failures_are_invalid_request() {
-    let mut create = command("task.create", task_create_payload());
+    let mut create = command("task.create", task_create_payload_v2());
     create["payload"]["task_scope"]["schema_version"] = json!(2);
     assert_eq!(response_error(create).code, "invalid_request");
+
+    // parent_task_id is forbidden on v2 create (unknown field).
+    let mut with_parent = command("task.create", task_create_payload_v2());
+    with_parent["payload"]["parent_task_id"] = json!(null);
+    assert_eq!(response_error(with_parent).code, "invalid_request");
 
     let mut list = query(
         "task.list",
@@ -407,6 +484,9 @@ fn malformed_known_methods_fail_before_registration_and_valid_set_is_exact() {
                 assert_eq!(Some(actual), known);
                 assert!(registered.is_none());
             }
+            RegistrationResult::InternalContractViolation(violation) => {
+                panic!("unexpected internal contract violation {violation:?}")
+            }
         }
     }
 }
@@ -430,6 +510,11 @@ fn fixed_wire_error_table_and_response_schema_are_exact() {
         ),
         (
             query("system.ping", json!({"schema_version":2,"echo":null})),
+            "unsupported_schema_version",
+            "payload schema version is not supported",
+        ),
+        (
+            command("task.create", task_create_payload_v1()),
             "unsupported_schema_version",
             "payload schema version is not supported",
         ),
@@ -522,6 +607,7 @@ impl TaskApplicationBackend for CreatedBackend {
     ) -> Result<TaskCreateBackendResult, BackendError> {
         Ok(TaskCreateBackendResult::Created {
             current_task: task(&operation.task_id.to_string()),
+            creation_provenance_ref: operation.creation_provenance_id.to_string(),
             committed_event_id: operation.event_id,
         })
     }
@@ -570,7 +656,7 @@ fn dispatcher_preserves_created_intent_exactly() {
     let ids = CreateIds(Cell::new(1));
     let backend = CreatedBackend;
     let dispatcher = TypedDispatcher::new(&clock, &ids, &backend);
-    let request = match preflight_value(command("task.create", task_create_payload())) {
+    let request = match preflight_value(command("task.create", task_create_payload_v2())) {
         PreflightResult::Accepted(request) => match narrow_to_registered(request) {
             RegistrationResult::Registered(request) => request,
             _ => panic!("registered"),
@@ -585,8 +671,13 @@ fn dispatcher_preserves_created_intent_exactly() {
         response.post_commit_notification_intents,
         vec![PostCommitNotificationIntent::TaskCreatedCommitted {
             task_id: "00000000-0000-4000-8000-000000000001".into(),
-            event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000006").expect("event uuid"),
+            // Seven UUID purposes: Task, Scope, Origin, Receipt, Provenance, Audit, Event.
+            event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000007").expect("event uuid"),
         }]
+    );
+    assert_eq!(
+        response.response.payload.as_ref().unwrap()["creation_provenance_ref"],
+        "00000000-0000-4000-8000-000000000005"
     );
 }
 

@@ -1,11 +1,12 @@
-//! Adapter from the high-level Task application backend to `kernel-sqlite`.
+//! Adapter from the high-level Task application backend to active root TaskCreate v2.
 
 use crate::{BackendError, TaskApplicationBackend, TaskCreateBackendResult, TaskCreateOperation};
-use kernel_contracts::KcpCommandPayload;
+use kernel_contracts::{RootTaskCreateAllocationV2, RootTaskCreateAllocationV2SchemaVersion};
 use kernel_sqlite::{
-    CreateTaskResult, SqliteStore, StoreError, StoreErrorCode, TaskCreateAllocation,
-    TaskCreateCommand, TaskCreateEnvelopeFacts,
+    CreateRootTaskV2Result, RootTaskCreateV2Command, RootTaskCreateV2EnvelopeFacts, SqliteStore,
+    StoreError, StoreErrorCode,
 };
+use serde_json::{Map, Value};
 use uuid::Uuid;
 
 /// Task backend backed by one file-based [`SqliteStore`].
@@ -26,40 +27,43 @@ impl TaskApplicationBackend for SqliteTaskBackend<'_> {
         &self,
         operation: TaskCreateOperation,
     ) -> Result<TaskCreateBackendResult, BackendError> {
-        let request = match &operation.envelope.payload {
-            KcpCommandPayload::TaskCreate(request) => request.as_ref().clone(),
-            KcpCommandPayload::StopActivate(_) => return Err(BackendError::Internal),
-        };
         let expected_task_id = operation.task_id;
         let expected_event_id = operation.event_id;
-        let command = TaskCreateCommand {
-            envelope: TaskCreateEnvelopeFacts {
-                actor: operation.envelope.actor,
-                entry_point: operation.envelope.entry_point,
-                request_id: operation.envelope.request_id,
-                envelope_task_id: operation.envelope.task_id,
-                context: operation.envelope.context,
-                expected_revision: operation.envelope.expected_revision,
-                idempotency_key: operation.envelope.idempotency_key,
+        let expected_provenance = operation.creation_provenance_id.to_string();
+        let context = context_as_object_map(operation.context)?;
+        let command = RootTaskCreateV2Command {
+            envelope: RootTaskCreateV2EnvelopeFacts {
+                actor: operation.actor,
+                entry_point: operation.entry_point,
+                request_id: operation.request_id,
+                context,
+                idempotency_key: operation.idempotency_key,
             },
-            request,
-            allocation: TaskCreateAllocation {
+            request: operation.request,
+            allocation: RootTaskCreateAllocationV2 {
+                audit_record_id: operation.audit_id.to_string(),
+                content_origin_id: operation.content_origin_id.to_string(),
+                correlation_id: operation.correlation_id,
+                creation_provenance_id: expected_provenance.clone(),
+                kernel_receipt_id: operation.receipt_id.to_string(),
+                schema_version: RootTaskCreateAllocationV2SchemaVersion,
+                task_created_dedup_key: operation.dedup_key,
+                task_created_event_id: operation.event_id.to_string(),
                 task_id: operation.task_id.to_string(),
                 task_scope_id: operation.task_scope_id.to_string(),
-                content_origin_id: operation.content_origin_id.to_string(),
-                receipt_id: operation.receipt_id.to_string(),
-                audit_id: operation.audit_id.to_string(),
-                event_id: operation.event_id.to_string(),
-                correlation_id: operation.correlation_id,
-                dedup_key: operation.dedup_key,
-                accepted_at: operation.accepted_at,
             },
+            accepted_at: operation.accepted_at,
         };
         let result = self
             .store
-            .with_write_transaction(|transaction| transaction.create_task(command))
+            .with_write_transaction(|transaction| transaction.create_root_task_v2(command))
             .map_err(map_store_error)?;
-        bind_committed_create_result(result, expected_task_id, expected_event_id)
+        bind_committed_create_result(
+            result,
+            expected_task_id,
+            expected_event_id,
+            &expected_provenance,
+        )
     }
 
     fn get_task(&self, task_id: Uuid) -> Result<Option<kernel_contracts::TaskSpec>, BackendError> {
@@ -69,30 +73,52 @@ impl TaskApplicationBackend for SqliteTaskBackend<'_> {
     }
 }
 
+fn context_as_object_map(
+    context: Option<Value>,
+) -> Result<Option<Map<String, Value>>, BackendError> {
+    match context {
+        None => Ok(None),
+        Some(Value::Object(map)) => Ok(Some(map)),
+        Some(Value::Null) => Ok(None),
+        Some(_) => Err(BackendError::Internal),
+    }
+}
+
 fn bind_committed_create_result(
-    result: CreateTaskResult,
+    result: CreateRootTaskV2Result,
     expected_task_id: Uuid,
     expected_event_id: Uuid,
+    expected_provenance: &str,
 ) -> Result<TaskCreateBackendResult, BackendError> {
     match result {
-        CreateTaskResult::Created { task } => {
+        CreateRootTaskV2Result::Created {
+            task,
+            creation_provenance_ref,
+        } => {
             let actual_task_id = Uuid::parse_str(&task.id).map_err(|_| BackendError::Internal)?;
             if actual_task_id != expected_task_id {
                 return Err(BackendError::Internal);
             }
-            // `create_task` returns Created only after the repository appended and verified the
-            // operation Event and the surrounding `with_write_transaction` committed. The adapter
-            // can therefore return the operation Event UUID without a racy post-commit Outbox
-            // reread; integration tests bind this UUID to Event, Audit, Task, Scope, and
-            // ContentOrigin facts through the public store API.
+            if creation_provenance_ref != expected_provenance {
+                return Err(BackendError::Internal);
+            }
+            // `create_root_task_v2` returns Created only after the repository appended and
+            // verified the active Event and the surrounding write transaction committed.
             Ok(TaskCreateBackendResult::Created {
                 current_task: task,
+                creation_provenance_ref,
                 committed_event_id: expected_event_id,
             })
         }
-        CreateTaskResult::Replayed { task } => {
+        CreateRootTaskV2Result::Replayed {
+            task,
+            creation_provenance_ref,
+        } => {
             Uuid::parse_str(&task.id).map_err(|_| BackendError::Internal)?;
-            Ok(TaskCreateBackendResult::Replayed { current_task: task })
+            Ok(TaskCreateBackendResult::Replayed {
+                current_task: task,
+                creation_provenance_ref,
+            })
         }
     }
 }
@@ -106,7 +132,8 @@ fn map_store_error_code(code: StoreErrorCode) -> BackendError {
         StoreErrorCode::InvalidScopePattern => BackendError::InvalidScopePattern,
         StoreErrorCode::IdempotencyConflict => BackendError::IdempotencyConflict,
         StoreErrorCode::DelegationNotFound => BackendError::DelegationNotFound,
-        StoreErrorCode::ParentTaskNotFound => BackendError::ParentTaskNotFound,
+        // Active root create has no parent_task_id; any residual store code is internal.
+        StoreErrorCode::ParentTaskNotFound => BackendError::Internal,
         StoreErrorCode::ParentOriginNotFound => BackendError::ParentOriginNotFound,
         StoreErrorCode::SqliteBusy => BackendError::SqliteBusy,
         StoreErrorCode::SqliteFull => BackendError::SqliteFull,
@@ -146,9 +173,13 @@ mod tests {
         }))
         .expect("valid task fixture");
         let result = bind_committed_create_result(
-            CreateTaskResult::Created { task },
+            CreateRootTaskV2Result::Created {
+                task,
+                creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
+            },
             Uuid::parse_str("00000000-0000-4000-8000-000000000001").expect("expected task uuid"),
-            Uuid::parse_str("00000000-0000-4000-8000-000000000006").expect("expected event uuid"),
+            Uuid::parse_str("00000000-0000-4000-8000-000000000007").expect("expected event uuid"),
+            "00000000-0000-4000-8000-000000000005",
         );
         assert_eq!(result, Err(BackendError::Internal));
     }
@@ -168,10 +199,7 @@ mod tests {
                 StoreErrorCode::DelegationNotFound,
                 BackendError::DelegationNotFound,
             ),
-            (
-                StoreErrorCode::ParentTaskNotFound,
-                BackendError::ParentTaskNotFound,
-            ),
+            (StoreErrorCode::ParentTaskNotFound, BackendError::Internal),
             (
                 StoreErrorCode::ParentOriginNotFound,
                 BackendError::ParentOriginNotFound,

@@ -1,20 +1,17 @@
 //! Registration narrowing and the explicit three-method typed dispatcher.
 //!
-//! Production MethodVersionBindings are active as library facts (slice 3a), but this
-//! dispatcher still narrows retained v1 typed catalog requests only. Slice 3b switches
-//! registration/dispatch onto method-aware V2 bindings; do not treat non-empty
-//! `METHOD_VERSION_BINDINGS` as proof that this path is the active runtime.
+//! Active path (slice 3b): method-aware preflight selects versions via
+//! `METHOD_VERSION_BINDINGS` / `select_request_version`. `task.create` is registered only as
+//! the root-only v2 typed request; v1 create never enters this dispatcher.
 
 use crate::handlers::{
     handle_system_ping_with_validator, handle_task_create_with_validator,
     handle_task_get_with_validator,
 };
 use crate::ports::{ResponseContractValidator, SchemaResponseContractValidator};
-use crate::preflight::{TypedCatalogRequest, TypedCatalogRequestKind};
+use crate::preflight::{TaskCreateCommandRequestV2, TypedCatalogRequest, TypedCatalogRequestKind};
 use crate::{HandlerResult, KernelClock, KernelIdGenerator, TaskApplicationBackend};
-use kernel_contracts::{
-    KcpCommandPayload, KcpQueryPayload, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope,
-};
+use kernel_contracts::{KcpCommandPayload, KcpQueryPayload, TypedKcpQueryEnvelope};
 
 /// Result of narrowing a fully typed catalog request to implemented handlers.
 #[allow(clippy::large_enum_variant)]
@@ -24,6 +21,20 @@ pub enum RegistrationResult {
     Registered(RegisteredRequest),
     /// A fully valid first-batch catalog method without a registered handler.
     KnownCatalogMethodNotImplemented(KnownCatalogMethodNotImplemented),
+    /// An internal contract violation that the active method-aware preflight pipeline
+    /// must never produce.
+    ///
+    /// This local registration result intentionally does not implement `serde::Serialize`
+    /// and never masquerades as another catalog method.
+    InternalContractViolation(InternalContractViolation),
+}
+
+/// Stable identities for internal contract violations detected during narrowing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InternalContractViolation {
+    /// A typed `task.create` v1 envelope reached registration narrowing even though
+    /// active method-aware preflight never accepts it.
+    TaskCreateV1AfterActivePreflight,
 }
 
 /// First-batch methods that have Schema and generated types but no handler yet.
@@ -48,7 +59,7 @@ pub enum KnownCatalogMethodNotImplemented {
 pub enum RegisteredMethod {
     /// `system.ping`.
     SystemPing,
-    /// `task.create`.
+    /// `task.create` (active root-only v2).
     TaskCreate,
     /// `task.get`.
     TaskGet,
@@ -60,10 +71,12 @@ pub enum RegisteredMethod {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegisteredRequest(RegisteredRequestKind);
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 enum RegisteredRequestKind {
     SystemPing(TypedKcpQueryEnvelope),
-    TaskCreate(TypedKcpCommandEnvelope),
+    /// Active root-only task.create v2 — not a generic TypedKcpCommandEnvelopeV2 wrapper.
+    TaskCreate(TaskCreateCommandRequestV2),
     TaskGet(TypedKcpQueryEnvelope),
 }
 
@@ -81,17 +94,24 @@ impl RegisteredRequest {
 /// Narrows a fully typed catalog request to the three registered application handlers.
 pub fn narrow_to_registered(request: TypedCatalogRequest) -> RegistrationResult {
     match request.into_kind() {
-        TypedCatalogRequestKind::Command(envelope) => match &envelope.payload {
-            KcpCommandPayload::TaskCreate(_) => RegistrationResult::Registered(RegisteredRequest(
-                RegisteredRequestKind::TaskCreate(envelope),
-            )),
+        TypedCatalogRequestKind::TaskCreateV2(request) => RegistrationResult::Registered(
+            RegisteredRequest(RegisteredRequestKind::TaskCreate(request)),
+        ),
+        TypedCatalogRequestKind::CommandV1(envelope) => match &envelope.payload {
             KcpCommandPayload::StopActivate(_) => {
                 RegistrationResult::KnownCatalogMethodNotImplemented(
                     KnownCatalogMethodNotImplemented::StopActivate,
                 )
             }
+            // Active method-aware preflight never Accepts task.create v1. A residual typed
+            // v1 create envelope can only appear via private construction bypass; fail closed
+            // with an honest internal-contract violation instead of inventing a wire error or
+            // masquerading as another catalog method.
+            KcpCommandPayload::TaskCreate(_) => RegistrationResult::InternalContractViolation(
+                InternalContractViolation::TaskCreateV1AfterActivePreflight,
+            ),
         },
-        TypedCatalogRequestKind::Query(envelope) => match &envelope.payload {
+        TypedCatalogRequestKind::QueryV1(envelope) => match &envelope.payload {
             KcpQueryPayload::SystemPing(_) => RegistrationResult::Registered(RegisteredRequest(
                 RegisteredRequestKind::SystemPing(envelope),
             )),
@@ -153,8 +173,8 @@ where
             RegisteredRequestKind::SystemPing(envelope) => {
                 handle_system_ping_with_validator(&envelope, self.clock, validator)
             }
-            RegisteredRequestKind::TaskCreate(envelope) => handle_task_create_with_validator(
-                &envelope,
+            RegisteredRequestKind::TaskCreate(request) => handle_task_create_with_validator(
+                &request,
                 self.clock,
                 self.ids,
                 self.task_backend,
@@ -235,6 +255,51 @@ mod tests {
             self.0.set(self.0.get() + 1);
             Ok(None)
         }
+    }
+
+    #[test]
+    fn residual_v1_create_narrowing_is_internal_violation_not_stop_activate() {
+        // Active method-aware preflight never produces a typed task.create v1 envelope.
+        // If a bypassed construction reaches narrowing, it must surface as an honest
+        // internal contract violation and never masquerade as another catalog method.
+        let envelope = kernel_contracts::TypedKcpCommandEnvelope::decode_after_validation(
+            serde_json::json!({
+                "protocol_version": "1.0",
+                "message_kind": "command",
+                "request_id": "11111111-1111-4111-8111-111111111111",
+                "actor": {"schema_version":1,"revision":1,"id":"actor","kind":"known_user","source":"actor-source://local/desktop","authentication_level":"platform_verified","confidence":0.9},
+                "entry_point": "local_desktop",
+                "auth": null,
+                "task_id": null,
+                "context": null,
+                "deadline": "2026-07-18T12:00:10Z",
+                "idempotency_key": "key",
+                "expected_revision": null,
+                "command_type": "task.create",
+                "payload": {
+                    "schema_version":1,
+                    "proposer":"user",
+                    "goal":"goal",
+                    "constraints":[],
+                    "success_criteria":["done"],
+                    "risk_hint":null,
+                    "capability_hints":[],
+                    "task_scope":{"schema_version":1,"resource_patterns":[],"exclusions":[],"allowed_capability_hints":[],"expires_at":null},
+                    "delegation_ref":null,
+                    "parent_task_id":null,
+                    "origin":{"schema_version":1,"kind":"user_input","source_uri":null,"upstream_stable_id":null,"producer_ref":{"kind":"actor","id":"actor"},"parent_origin_refs":[]}
+                }
+            }),
+        )
+        .expect("typed v1 create envelope");
+        let request =
+            TypedCatalogRequest::from_kind_for_test(TypedCatalogRequestKind::CommandV1(envelope));
+        assert_eq!(
+            narrow_to_registered(request),
+            RegistrationResult::InternalContractViolation(
+                crate::InternalContractViolation::TaskCreateV1AfterActivePreflight
+            )
+        );
     }
 
     #[test]

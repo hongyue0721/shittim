@@ -126,6 +126,7 @@ mod tests {
             UuidPurpose::TaskScope,
             UuidPurpose::ContentOrigin,
             UuidPurpose::KernelReceipt,
+            UuidPurpose::CreationProvenance,
             UuidPurpose::AuditRecord,
             UuidPurpose::Event,
         ];

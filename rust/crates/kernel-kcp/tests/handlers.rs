@@ -1,15 +1,18 @@
 use chrono::{DateTime, TimeZone, Utc};
 use kernel_contracts::{
-    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, EntryPoint, KcpCommandPayload,
-    KcpError, KcpQueryPayload, KcpResponseEnvelopeStatus, NullOnly, SystemPingRequest,
-    SystemPingRequestSchemaVersion, TaskCreateRequest, TaskGetRequest, TaskGetRequestSchemaVersion,
-    TaskSpec, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope,
+    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, EntryPoint,
+    InputContentOriginV1, InputContentOriginV1Kind, InputContentOriginV1ProducerRef,
+    InputContentOriginV1ProducerRefKind, InputContentOriginV1SchemaVersion, InputTaskScopeV1,
+    InputTaskScopeV1SchemaVersion, KcpError, KcpQueryPayload, KcpResponseEnvelopeStatus,
+    NormalizedRootTaskCreatePayloadV2Proposer, NullOnly, SystemPingRequest,
+    SystemPingRequestSchemaVersion, TaskCreateRequestV2, TaskCreateRequestV2SchemaVersion,
+    TaskGetRequest, TaskGetRequestSchemaVersion, TaskSpec, TypedKcpQueryEnvelope,
 };
 use kernel_kcp::{
     handle_system_ping, handle_task_create, handle_task_get, BackendError, ClockError,
     HandlerContractFailureKind, HandlerResult, IdGenerationError, KernelClock, KernelIdGenerator,
     OpaqueIdPurpose, PostCommitNotificationIntent, TaskApplicationBackend, TaskCreateBackendResult,
-    TaskCreateOperation, UuidPurpose,
+    TaskCreateCommandRequestV2, TaskCreateOperation, UuidPurpose,
 };
 use serde_json::json;
 use std::cell::{Cell, RefCell};
@@ -114,7 +117,7 @@ fn clock(
 fn ids(log: Rc<RefCell<Vec<String>>>) -> FakeIds {
     FakeIds {
         uuids: RefCell::new(
-            (1..=6)
+            (1..=7)
                 .map(|n| Ok(format!("00000000-0000-4000-8000-{n:012}")))
                 .collect(),
         ),
@@ -183,9 +186,8 @@ fn get_envelope(deadline: &str) -> TypedKcpQueryEnvelope {
     }
 }
 
-fn create_envelope(deadline: &str) -> TypedKcpCommandEnvelope {
-    let request: TaskCreateRequest = serde_json::from_value(json!({"schema_version":1,"proposer":"user","goal":"goal","constraints":["keep"],"success_criteria":["done"],"risk_hint":null,"capability_hints":["filesystem.read"],"task_scope":{"schema_version":1,"resource_patterns":["https://example.com/a/**"],"exclusions":[],"allowed_capability_hints":["filesystem.read"],"expires_at":null},"delegation_ref":null,"parent_task_id":null,"origin":{"schema_version":1,"kind":"user_input","source_uri":"https://example.com/inbox","upstream_stable_id":null,"producer_ref":{"kind":"actor","id":"actor"},"parent_origin_refs":[]}})).unwrap();
-    TypedKcpCommandEnvelope {
+fn create_request(deadline: &str) -> TaskCreateCommandRequestV2 {
+    TaskCreateCommandRequestV2 {
         actor: actor(),
         auth: NullOnly,
         context: Some(json!({"conversation":1})),
@@ -193,12 +195,37 @@ fn create_envelope(deadline: &str) -> TypedKcpCommandEnvelope {
         entry_point: EntryPoint::LocalDesktop,
         expected_revision: None,
         idempotency_key: "key".into(),
-        message_kind: kernel_contracts::KcpCommandEnvelopeMessageKind::Value,
-        protocol_version: kernel_contracts::KcpCommandEnvelopeProtocolVersion::Value,
         request_id: "10000000-0000-4000-8000-000000000003".into(),
         task_id: None,
         command_type: "task.create".into(),
-        payload: KcpCommandPayload::TaskCreate(Box::new(request)),
+        payload: TaskCreateRequestV2 {
+            capability_hints: vec!["filesystem.read".into()],
+            constraints: vec!["keep".into()],
+            delegation_ref: None,
+            goal: "goal".into(),
+            origin: InputContentOriginV1 {
+                kind: InputContentOriginV1Kind::UserInput,
+                parent_origin_refs: vec![],
+                producer_ref: InputContentOriginV1ProducerRef {
+                    id: "actor".into(),
+                    kind: InputContentOriginV1ProducerRefKind::Actor,
+                },
+                schema_version: InputContentOriginV1SchemaVersion,
+                source_uri: Some("https://example.com/inbox".into()),
+                upstream_stable_id: None,
+            },
+            proposer: NormalizedRootTaskCreatePayloadV2Proposer::User,
+            risk_hint: None,
+            schema_version: TaskCreateRequestV2SchemaVersion,
+            success_criteria: vec!["done".into()],
+            task_scope: InputTaskScopeV1 {
+                allowed_capability_hints: vec!["filesystem.read".into()],
+                exclusions: vec![],
+                expires_at: None,
+                resource_patterns: vec!["https://example.com/a/**".into()],
+                schema_version: InputTaskScopeV1SchemaVersion,
+            },
+        },
     }
 }
 
@@ -319,7 +346,7 @@ fn first_observable_operation_is_clock_and_entry_equality_expires() {
     let log = Rc::new(RefCell::new(vec![]));
     let fake_backend = backend(log.clone());
     let result = handle_task_create(
-        &create_envelope("2026-07-18T12:00:01Z"),
+        &create_request("2026-07-18T12:00:01Z"),
         &clock(vec![Ok(instant(1))], log.clone()),
         &ids(log.clone()),
         &fake_backend,
@@ -334,14 +361,14 @@ fn invalid_deadline_and_clock_failure_prevent_ids_and_backend() {
     for values in [vec![Ok(instant(1))], vec![Err(ClockError)]] {
         let log = Rc::new(RefCell::new(vec![]));
         let fake_backend = backend(log.clone());
-        let envelope = create_envelope(if values[0].is_ok() {
+        let request = create_request(if values[0].is_ok() {
             "bad"
         } else {
             "2026-07-18T12:00:10Z"
         });
         assert_eq!(
             response_error(handle_task_create(
-                &envelope,
+                &request,
                 &clock(values, log.clone()),
                 &ids(log.clone()),
                 &fake_backend
@@ -355,16 +382,42 @@ fn invalid_deadline_and_clock_failure_prevent_ids_and_backend() {
 }
 
 #[test]
-fn create_generates_all_purposes_maps_operation_and_created_intent() {
+fn create_root_only_rejects_task_id_and_expected_revision() {
+    for mutate in [
+        |request: &mut TaskCreateCommandRequestV2| {
+            request.task_id = Some("00000000-0000-4000-8000-000000000099".into());
+        },
+        |request: &mut TaskCreateCommandRequestV2| {
+            request.expected_revision = Some(1);
+        },
+    ] {
+        let log = Rc::new(RefCell::new(vec![]));
+        let fake_backend = backend(log.clone());
+        let mut request = create_request("2026-07-18T12:00:10Z");
+        mutate(&mut request);
+        let error = response_error(handle_task_create(
+            &request,
+            &clock(vec![Ok(instant(1))], log.clone()),
+            &ids(log),
+            &fake_backend,
+        ));
+        assert_eq!(error.code, "invalid_request");
+        assert_eq!(fake_backend.create_calls.get(), 0);
+    }
+}
+
+#[test]
+fn create_generates_seven_uuid_purposes_maps_operation_and_created_intent() {
     let log = Rc::new(RefCell::new(vec![]));
     let fake_backend = backend(log.clone());
     *fake_backend.create.borrow_mut() = Some(Ok(TaskCreateBackendResult::Created {
         current_task: task("00000000-0000-4000-8000-000000000001"),
-        committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000006").unwrap(),
+        creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
+        committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000007").unwrap(),
     }));
     let fake_ids = ids(log.clone());
     let result = handle_task_create(
-        &create_envelope("2026-07-18T12:00:10Z"),
+        &create_request("2026-07-18T12:00:10Z"),
         &clock(vec![Ok(instant(1)), Ok(instant(2))], log.clone()),
         &fake_ids,
         &fake_backend,
@@ -372,31 +425,34 @@ fn create_generates_all_purposes_maps_operation_and_created_intent() {
     let HandlerResult::Response(value) = result else {
         panic!("response")
     };
+    assert_eq!(value.response.status, KcpResponseEnvelopeStatus::Ok);
+    assert_eq!(
+        value.response.payload.as_ref().unwrap()["schema_version"],
+        2
+    );
+    assert_eq!(
+        value.response.payload.as_ref().unwrap()["creation_provenance_ref"],
+        "00000000-0000-4000-8000-000000000005"
+    );
     assert_eq!(
         value.post_commit_notification_intents,
         vec![PostCommitNotificationIntent::TaskCreatedCommitted {
             task_id: "00000000-0000-4000-8000-000000000001".into(),
-            event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000006").unwrap()
+            event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000007").unwrap()
         }]
     );
     let operation = fake_backend.operation.borrow();
     let operation = operation.as_ref().unwrap();
     assert_eq!(operation.accepted_at, instant(1));
-    assert_eq!(operation.envelope.actor, actor());
-    assert_eq!(operation.envelope.entry_point, EntryPoint::LocalDesktop);
+    assert_eq!(operation.actor, actor());
+    assert_eq!(operation.entry_point, EntryPoint::LocalDesktop);
+    assert_eq!(operation.request_id, "10000000-0000-4000-8000-000000000003");
+    assert_eq!(operation.context, Some(json!({"conversation":1})));
+    assert_eq!(operation.idempotency_key, "key");
     assert_eq!(
-        operation.envelope.request_id,
-        "10000000-0000-4000-8000-000000000003"
+        operation.request.schema_version,
+        TaskCreateRequestV2SchemaVersion
     );
-    assert_eq!(operation.envelope.task_id, None);
-    assert_eq!(operation.envelope.context, Some(json!({"conversation":1})));
-    assert_eq!(operation.envelope.expected_revision, None);
-    assert_eq!(operation.envelope.idempotency_key, "key");
-    assert_eq!(operation.envelope.command_type, "task.create");
-    assert!(matches!(
-        operation.envelope.payload,
-        KcpCommandPayload::TaskCreate(_)
-    ));
     for (actual, expected) in [
         (operation.task_id, "00000000-0000-4000-8000-000000000001"),
         (
@@ -408,18 +464,36 @@ fn create_generates_all_purposes_maps_operation_and_created_intent() {
             "00000000-0000-4000-8000-000000000003",
         ),
         (operation.receipt_id, "00000000-0000-4000-8000-000000000004"),
-        (operation.audit_id, "00000000-0000-4000-8000-000000000005"),
-        (operation.event_id, "00000000-0000-4000-8000-000000000006"),
+        (
+            operation.creation_provenance_id,
+            "00000000-0000-4000-8000-000000000005",
+        ),
+        (operation.audit_id, "00000000-0000-4000-8000-000000000006"),
+        (operation.event_id, "00000000-0000-4000-8000-000000000007"),
     ] {
         assert_eq!(actual, Uuid::parse_str(expected).unwrap());
     }
     assert_eq!(operation.correlation_id, "correlation");
     assert_eq!(operation.dedup_key, "dedup");
-    assert_eq!(fake_ids.purposes.borrow().len(), 8);
+    assert_eq!(
+        *fake_ids.purposes.borrow(),
+        vec![
+            "Task".to_owned(),
+            "TaskScope".to_owned(),
+            "ContentOrigin".to_owned(),
+            "KernelReceipt".to_owned(),
+            "CreationProvenance".to_owned(),
+            "AuditRecord".to_owned(),
+            "Event".to_owned(),
+            "Correlation".to_owned(),
+            "EventDedup".to_owned(),
+        ]
+    );
     assert_eq!(
         &*log.borrow(),
         &[
             "clock",
+            "id",
             "id",
             "id",
             "id",
@@ -440,9 +514,10 @@ fn replay_has_no_intent_and_get_found_not_found_are_exactly_once() {
     let fake_backend = backend(log.clone());
     *fake_backend.create.borrow_mut() = Some(Ok(TaskCreateBackendResult::Replayed {
         current_task: task("00000000-0000-4000-8000-000000000001"),
+        creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
     }));
     let HandlerResult::Response(value) = handle_task_create(
-        &create_envelope("2026-07-18T12:00:10Z"),
+        &create_request("2026-07-18T12:00:10Z"),
         &clock(vec![Ok(instant(1)), Ok(instant(2))], log.clone()),
         &ids(log.clone()),
         &fake_backend,
@@ -450,6 +525,10 @@ fn replay_has_no_intent_and_get_found_not_found_are_exactly_once() {
         panic!("response")
     };
     assert!(value.post_commit_notification_intents.is_empty());
+    assert_eq!(
+        value.response.payload.as_ref().unwrap()["creation_provenance_ref"],
+        "00000000-0000-4000-8000-000000000005"
+    );
     for found in [Some(task("00000000-0000-4000-8000-000000000001")), None] {
         let expected_found = found.is_some();
         let log = Rc::new(RefCell::new(vec![]));
@@ -495,11 +574,11 @@ fn generation_failures_duplicates_bad_uuid_and_empty_opaque_stop_before_backend(
     let cases = [
         (vec![Ok("bad".into())], vec![Ok("c".into()), Ok("d".into())]),
         (
-            vec![Ok("00000000-0000-4000-8000-000000000001".into()); 6],
+            vec![Ok("00000000-0000-4000-8000-000000000001".into()); 7],
             vec![Ok("c".into()), Ok("d".into())],
         ),
         (
-            (1..=6)
+            (1..=7)
                 .map(|n| Ok(format!("00000000-0000-4000-8000-{n:012}")))
                 .collect(),
             vec![Ok("".into()), Ok("d".into())],
@@ -516,7 +595,7 @@ fn generation_failures_duplicates_bad_uuid_and_empty_opaque_stop_before_backend(
         };
         assert_eq!(
             response_error(handle_task_create(
-                &create_envelope("2026-07-18T12:00:10Z"),
+                &create_request("2026-07-18T12:00:10Z"),
                 &clock(vec![Ok(instant(1))], log),
                 &fake_ids,
                 &fake_backend
@@ -534,10 +613,11 @@ fn correlation_and_dedup_may_have_the_same_non_empty_value() {
     let fake_backend = backend(log.clone());
     *fake_backend.create.borrow_mut() = Some(Ok(TaskCreateBackendResult::Replayed {
         current_task: task("00000000-0000-4000-8000-000000000001"),
+        creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
     }));
     let fake_ids = FakeIds {
         uuids: RefCell::new(
-            (1..=6)
+            (1..=7)
                 .map(|n| Ok(format!("00000000-0000-4000-8000-{n:012}")))
                 .collect(),
         ),
@@ -546,7 +626,7 @@ fn correlation_and_dedup_may_have_the_same_non_empty_value() {
         log: log.clone(),
     };
     let HandlerResult::Response(response) = handle_task_create(
-        &create_envelope("2026-07-18T12:00:10Z"),
+        &create_request("2026-07-18T12:00:10Z"),
         &clock(vec![Ok(instant(1)), Ok(instant(2))], log),
         &fake_ids,
         &fake_backend,
@@ -579,12 +659,6 @@ fn stable_backend_error_mapping_has_fixed_safe_fields() {
             BackendError::DelegationNotFound,
             "delegation_not_found",
             "delegation was not found",
-            false,
-        ),
-        (
-            BackendError::ParentTaskNotFound,
-            "parent_task_not_found",
-            "parent task was not found",
             false,
         ),
         (
@@ -629,7 +703,7 @@ fn stable_backend_error_mapping_has_fixed_safe_fields() {
         let fake_backend = backend(log.clone());
         *fake_backend.create.borrow_mut() = Some(Err(backend_error));
         let error = response_error(handle_task_create(
-            &create_envelope("2026-07-18T12:00:10Z"),
+            &create_request("2026-07-18T12:00:10Z"),
             &clock(vec![Ok(instant(1)), Ok(instant(2))], log.clone()),
             &ids(log),
             &fake_backend,
@@ -648,7 +722,7 @@ fn create_backend_error_is_hidden_when_completion_deadline_expires() {
     let fake_backend = backend(log.clone());
     *fake_backend.create.borrow_mut() = Some(Err(BackendError::SqliteBusy));
     let error = response_error(handle_task_create(
-        &create_envelope("2026-07-18T12:00:10Z"),
+        &create_request("2026-07-18T12:00:10Z"),
         &clock(vec![Ok(instant(1)), Ok(instant(10))], log),
         &ids(Rc::new(RefCell::new(vec![]))),
         &fake_backend,
@@ -691,10 +765,11 @@ fn all_handlers_treat_completion_equality_as_expired() {
     let fake_backend = backend(log.clone());
     *fake_backend.create.borrow_mut() = Some(Ok(TaskCreateBackendResult::Replayed {
         current_task: task("00000000-0000-4000-8000-000000000001"),
+        creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
     }));
     assert_eq!(
         response_error(handle_task_create(
-            &create_envelope("2026-07-18T12:00:10Z"),
+            &create_request("2026-07-18T12:00:10Z"),
             &clock(vec![Ok(instant(1)), Ok(instant(10))], log.clone()),
             &ids(log),
             &fake_backend
@@ -711,10 +786,11 @@ fn created_intent_survives_completion_clock_failure_and_deadline() {
         let fake_backend = backend(log.clone());
         *fake_backend.create.borrow_mut() = Some(Ok(TaskCreateBackendResult::Created {
             current_task: task("00000000-0000-4000-8000-000000000001"),
-            committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000006").unwrap(),
+            creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
+            committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000007").unwrap(),
         }));
         let HandlerResult::Response(value) = handle_task_create(
-            &create_envelope("2026-07-18T12:00:10Z"),
+            &create_request("2026-07-18T12:00:10Z"),
             &clock(vec![Ok(instant(1)), completion], log.clone()),
             &ids(log),
             &fake_backend,
@@ -745,7 +821,7 @@ fn explicit_generation_errors_stop_before_backend() {
     };
     assert_eq!(
         response_error(handle_task_create(
-            &create_envelope("2026-07-18T12:00:10Z"),
+            &create_request("2026-07-18T12:00:10Z"),
             &clock(vec![Ok(instant(1))], log),
             &fake_ids,
             &fake_backend
@@ -766,7 +842,6 @@ fn get_only_exposes_storage_errors_and_folds_create_only_backend_categories() {
         (BackendError::InvalidScopePattern, "internal_error"),
         (BackendError::IdempotencyConflict, "internal_error"),
         (BackendError::DelegationNotFound, "internal_error"),
-        (BackendError::ParentTaskNotFound, "internal_error"),
         (BackendError::ParentOriginNotFound, "internal_error"),
         (BackendError::Internal, "internal_error"),
     ] {

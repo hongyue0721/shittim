@@ -1,14 +1,16 @@
 use chrono::{TimeZone, Utc};
 use kernel_contracts::{
-    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, AuditRecordAuditType,
-    CausationRefKind, EntryPoint, EventPayload, KcpCommandEnvelopeMessageKind,
-    KcpCommandEnvelopeProtocolVersion, KcpCommandPayload, NullOnly, TaskCreateRequest,
-    TypedKcpCommandEnvelope,
+    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, AuditRecordV2AuditType,
+    CausationRefV2, EntryPoint, EventEnvelopeV2Payload, InputContentOriginV1,
+    InputContentOriginV1Kind, InputContentOriginV1ProducerRef, InputContentOriginV1ProducerRefKind,
+    InputContentOriginV1SchemaVersion, InputTaskScopeV1, InputTaskScopeV1SchemaVersion,
+    NormalizedRootTaskCreatePayloadV2Proposer, NullOnly, TaskCreateRequestV2,
+    TaskCreateRequestV2SchemaVersion, TaskCreationProvenanceV1,
 };
 use kernel_kcp::{
     handle_task_create, handle_task_get, sqlite_adapter::SqliteTaskBackend, ClockError,
     HandlerResult, IdGenerationError, KernelClock, KernelIdGenerator, OpaqueIdPurpose,
-    PostCommitNotificationIntent, UuidPurpose,
+    PostCommitNotificationIntent, TaskCreateCommandRequestV2, UuidPurpose,
 };
 use kernel_sqlite::{OutboxCursor, PageLimit, SqliteConfig, SqliteStore, StoredEventEnvelope};
 use serde_json::json;
@@ -17,11 +19,13 @@ use std::collections::VecDeque;
 use std::time::Duration;
 use tempfile::TempDir;
 
+// Allocation order: Task, Scope, Origin, Receipt, Provenance, Audit, Event.
 const TASK_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SCOPE_ID: &str = "00000000-0000-4000-8000-000000000002";
 const ORIGIN_ID: &str = "00000000-0000-4000-8000-000000000003";
-const AUDIT_ID: &str = "00000000-0000-4000-8000-000000000005";
-const EVENT_ID: &str = "00000000-0000-4000-8000-000000000006";
+const PROVENANCE_ID: &str = "00000000-0000-4000-8000-000000000005";
+const AUDIT_ID: &str = "00000000-0000-4000-8000-000000000006";
+const EVENT_ID: &str = "00000000-0000-4000-8000-000000000007";
 const CREATE_REQUEST_ID: &str = "10000000-0000-4000-8000-000000000001";
 
 struct Clock(RefCell<VecDeque<chrono::DateTime<Utc>>>);
@@ -47,7 +51,7 @@ impl KernelIdGenerator for Ids {
 }
 
 #[test]
-fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts() {
+fn sqlite_v2_create_get_and_replay_bind_active_event_audit_and_provenance() {
     let directory = TempDir::new().unwrap();
     let store = SqliteStore::open(
         directory.path().join("kernel.db"),
@@ -56,7 +60,7 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
     .unwrap();
     let backend = SqliteTaskBackend::new(&store);
     let first = handle_task_create(
-        &create_envelope(CREATE_REQUEST_ID, "2026-07-18T12:00:10Z"),
+        &create_request(CREATE_REQUEST_ID, "2026-07-18T12:00:10Z"),
         &Clock(RefCell::new([instant(1), instant(2)].into())),
         &Ids(RefCell::new(1)),
         &backend,
@@ -64,6 +68,14 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
     let HandlerResult::Response(first) = first else {
         panic!("response")
     };
+    assert_eq!(
+        first.response.payload.as_ref().unwrap()["schema_version"],
+        2
+    );
+    assert_eq!(
+        first.response.payload.as_ref().unwrap()["creation_provenance_ref"],
+        PROVENANCE_ID
+    );
     let (intent_task_id, intent_event_id) = match &first.post_commit_notification_intents[..] {
         [PostCommitNotificationIntent::TaskCreatedCommitted { task_id, event_id }] => {
             (task_id.clone(), event_id.to_string())
@@ -77,8 +89,8 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
         .read_after(OutboxCursor::START, PageLimit::new(10).unwrap())
         .unwrap();
     assert_eq!(events.len(), 1);
-    let StoredEventEnvelope::LegacyV1(event) = &events[0].envelope else {
-        panic!("legacy task.create producer envelope expected");
+    let StoredEventEnvelope::ActiveV2(event) = &events[0].envelope else {
+        panic!("active v2 task.created envelope expected");
     };
     assert_eq!(event.event_id, intent_event_id);
     assert_eq!(event.type_, "task.created");
@@ -93,9 +105,13 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
     );
     assert_eq!(event.correlation_id, "integration-correlation");
     assert_eq!(event.dedup_key, "integration-dedup");
-    assert_eq!(event.causation_ref.kind, CausationRefKind::CommandRequest);
-    assert_eq!(event.causation_ref.id, CREATE_REQUEST_ID);
-    let EventPayload::TaskCreated(payload) = &event.payload else {
+    assert_eq!(
+        event.causation_ref,
+        CausationRefV2::CommandRequest {
+            id: CREATE_REQUEST_ID.into()
+        }
+    );
+    let EventEnvelopeV2Payload::TaskCreated(payload) = &event.payload else {
         panic!("task.created payload")
     };
     assert_eq!(payload.task_id, TASK_ID);
@@ -108,27 +124,50 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
 
     let task = store.get_task(TASK_ID).unwrap().unwrap();
     let scope = store.get_task_scope(SCOPE_ID).unwrap().unwrap();
-    let origin = store.get_content_origin(ORIGIN_ID).unwrap().unwrap();
-    let audit = store.get_audit(AUDIT_ID).unwrap().unwrap();
+    let origin = store.get_content_origin_v2(ORIGIN_ID).unwrap().unwrap();
+    let audit = store.get_audit_v2(AUDIT_ID).unwrap().unwrap();
+    let provenance = store
+        .get_task_creation_provenance(PROVENANCE_ID)
+        .unwrap()
+        .unwrap();
     assert_eq!(task.id, intent_task_id);
     assert_eq!(task.task_scope_ref, scope.id);
     assert_eq!(task.origin_ref, origin.id);
     assert_eq!(scope.task_id, task.id);
     assert_eq!(scope.source_refs, vec![origin.id.clone()]);
     assert_eq!(origin.carrier_ref.id, CREATE_REQUEST_ID);
-    assert_eq!(audit.audit_type, AuditRecordAuditType::TaskCreationRecorded);
+    assert_eq!(
+        audit.audit_type,
+        AuditRecordV2AuditType::TaskCreationRecorded
+    );
     assert_eq!(audit.task_id.as_deref(), Some(task.id.as_str()));
     assert_eq!(audit.content_origin_refs, vec![origin.id.clone()]);
     assert_eq!(
         audit.correlation_id.as_deref(),
         Some(event.correlation_id.as_str())
     );
-    let audit_causation = audit.causation_ref.as_ref().unwrap();
-    assert_eq!(audit_causation.kind, event.causation_ref.kind);
-    assert_eq!(audit_causation.id, event.causation_ref.id);
+    assert_eq!(
+        audit.causation_ref,
+        Some(CausationRefV2::CommandRequest {
+            id: CREATE_REQUEST_ID.into()
+        })
+    );
     let context = audit.task_creation_context.as_ref().unwrap();
     assert_eq!(context.origin_ref, task.origin_ref);
     assert_eq!(context.goal, task.goal);
+    assert_eq!(context.creation_provenance_ref, PROVENANCE_ID);
+    assert_eq!(context.creation_kind.as_str(), "root_command_v2");
+    match provenance {
+        TaskCreationProvenanceV1::RootCommandV2 {
+            command_request_id, ..
+        } => {
+            assert_eq!(command_request_id, CREATE_REQUEST_ID);
+        }
+        other => panic!("unexpected provenance {other:?}"),
+    }
+    // Legacy v1 origin/audit tables must not receive the active create write.
+    assert!(store.get_content_origin(ORIGIN_ID).unwrap().is_none());
+    assert!(store.get_audit(AUDIT_ID).unwrap().is_none());
 
     let get = handle_task_get(
         &get_envelope(&intent_task_id, "2026-07-18T12:00:10Z"),
@@ -140,19 +179,29 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
     };
     assert_eq!(get.response.payload.unwrap()["task"]["id"], intent_task_id);
 
+    // Active root v2 replay is keyed by (actor, entry_point, task.create, idempotency_key).
+    // Repository closed-bundle validation re-proves provenance.command_request_id against the
+    // replay Envelope.request_id, so recovery uses the original request_id with a new allocation.
     let replay = handle_task_create(
-        &create_envelope(
-            "10000000-0000-4000-8000-000000000099",
-            "2026-07-18T12:00:20Z",
-        ),
+        &create_request(CREATE_REQUEST_ID, "2026-07-18T12:00:20Z"),
         &Clock(RefCell::new([instant(5), instant(6)].into())),
         &Ids(RefCell::new(20)),
         &backend,
     );
     let HandlerResult::Response(replay) = replay else {
-        panic!("replay")
+        panic!("replay: {replay:?}")
     };
+    assert_eq!(
+        replay.response.status,
+        kernel_contracts::KcpResponseEnvelopeStatus::Ok,
+        "replay response: {:?}",
+        replay.response
+    );
     assert!(replay.post_commit_notification_intents.is_empty());
+    assert_eq!(
+        replay.response.payload.as_ref().unwrap()["creation_provenance_ref"],
+        PROVENANCE_ID
+    );
     assert_eq!(
         store
             .read_after(OutboxCursor::START, PageLimit::new(10).unwrap())
@@ -161,7 +210,7 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
         1
     );
     assert!(store
-        .get_audit("00000000-0000-4000-8000-000000000024")
+        .get_audit_v2("00000000-0000-4000-8000-000000000025")
         .unwrap()
         .is_none());
     assert!(store
@@ -173,7 +222,7 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
         .unwrap()
         .is_none());
     assert!(store
-        .get_content_origin("00000000-0000-4000-8000-000000000022")
+        .get_content_origin_v2("00000000-0000-4000-8000-000000000022")
         .unwrap()
         .is_none());
 }
@@ -196,12 +245,39 @@ fn actor() -> Actor {
     }
 }
 
-fn request() -> TaskCreateRequest {
-    serde_json::from_value(json!({"schema_version":1,"proposer":"user","goal":"integration goal","constraints":["keep"],"success_criteria":["done"],"risk_hint":null,"capability_hints":["filesystem.read"],"task_scope":{"schema_version":1,"resource_patterns":["https://example.com/a/**"],"exclusions":[],"allowed_capability_hints":["filesystem.read"],"expires_at":null},"delegation_ref":null,"parent_task_id":null,"origin":{"schema_version":1,"kind":"user_input","source_uri":"https://example.com/inbox","upstream_stable_id":null,"producer_ref":{"kind":"actor","id":"actor"},"parent_origin_refs":[]}})).unwrap()
+fn request_payload() -> TaskCreateRequestV2 {
+    TaskCreateRequestV2 {
+        capability_hints: vec!["filesystem.read".into()],
+        constraints: vec!["keep".into()],
+        delegation_ref: None,
+        goal: "integration goal".into(),
+        origin: InputContentOriginV1 {
+            kind: InputContentOriginV1Kind::UserInput,
+            parent_origin_refs: vec![],
+            producer_ref: InputContentOriginV1ProducerRef {
+                id: "actor".into(),
+                kind: InputContentOriginV1ProducerRefKind::Actor,
+            },
+            schema_version: InputContentOriginV1SchemaVersion,
+            source_uri: Some("https://example.com/inbox".into()),
+            upstream_stable_id: None,
+        },
+        proposer: NormalizedRootTaskCreatePayloadV2Proposer::User,
+        risk_hint: None,
+        schema_version: TaskCreateRequestV2SchemaVersion,
+        success_criteria: vec!["done".into()],
+        task_scope: InputTaskScopeV1 {
+            allowed_capability_hints: vec!["filesystem.read".into()],
+            exclusions: vec![],
+            expires_at: None,
+            resource_patterns: vec!["https://example.com/a/**".into()],
+            schema_version: InputTaskScopeV1SchemaVersion,
+        },
+    }
 }
 
-fn create_envelope(request_id: &str, deadline: &str) -> TypedKcpCommandEnvelope {
-    TypedKcpCommandEnvelope {
+fn create_request(request_id: &str, deadline: &str) -> TaskCreateCommandRequestV2 {
+    TaskCreateCommandRequestV2 {
         actor: actor(),
         auth: NullOnly,
         context: Some(json!({"conversation":1})),
@@ -209,12 +285,10 @@ fn create_envelope(request_id: &str, deadline: &str) -> TypedKcpCommandEnvelope 
         entry_point: EntryPoint::LocalDesktop,
         expected_revision: None,
         idempotency_key: "integration-key".into(),
-        message_kind: KcpCommandEnvelopeMessageKind::Value,
-        protocol_version: KcpCommandEnvelopeProtocolVersion::Value,
         request_id: request_id.into(),
         task_id: None,
         command_type: "task.create".into(),
-        payload: KcpCommandPayload::TaskCreate(Box::new(request())),
+        payload: request_payload(),
     }
 }
 

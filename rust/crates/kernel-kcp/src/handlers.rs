@@ -5,17 +5,18 @@ use crate::ports::{
     SchemaResponseContractValidator, TaskApplicationBackend, TaskCreateBackendResult,
     TaskCreateOperation, UuidPurpose,
 };
+use crate::preflight::TaskCreateCommandRequestV2;
 use crate::response::{
     HandledResponse, HandlerContractFailure, HandlerContractFailureKind, HandlerResult,
     PostCommitNotificationIntent,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use kernel_contracts::{
-    KcpCommandPayload, KcpError, KcpErrorSchemaVersion, KcpQueryPayload, KcpResponseEnvelope,
+    KcpError, KcpErrorSchemaVersion, KcpQueryPayload, KcpResponseEnvelope,
     KcpResponseEnvelopeMessageKind, KcpResponseEnvelopeProtocolVersion, KcpResponseEnvelopeStatus,
     SystemPingResponse, SystemPingResponseProtocolVersion, SystemPingResponseSchemaVersion,
-    TaskCreateResponse, TaskCreateResponseSchemaVersion, TaskGetResponse,
-    TaskGetResponseSchemaVersion, TypedKcpCommandEnvelope, TypedKcpQueryEnvelope,
+    TaskCreateResponseV2, TaskCreateResponseV2SchemaVersion, TaskGetResponse,
+    TaskGetResponseSchemaVersion, TypedKcpQueryEnvelope,
 };
 use serde::Serialize;
 use std::collections::HashSet;
@@ -23,8 +24,8 @@ use uuid::Uuid;
 
 const SYSTEM_PING_RESPONSE_SCHEMA: &str =
     "https://schemas.shittim.local/v1/kcp/system_ping_response.json";
-const TASK_CREATE_RESPONSE_SCHEMA: &str =
-    "https://schemas.shittim.local/v1/kcp/task_create_response.json";
+const TASK_CREATE_RESPONSE_V2_SCHEMA: &str =
+    "https://schemas.shittim.local/kcp/task_create_response/v2";
 const TASK_GET_RESPONSE_SCHEMA: &str =
     "https://schemas.shittim.local/v1/kcp/task_get_response.json";
 
@@ -92,15 +93,15 @@ pub(crate) fn handle_system_ping_with_validator(
     )
 }
 
-/// Handles a typed `task.create` command through the high-level Task backend.
+/// Handles a typed root-only `task.create` v2 command through the high-level Task backend.
 pub fn handle_task_create(
-    envelope: &TypedKcpCommandEnvelope,
+    request: &TaskCreateCommandRequestV2,
     clock: &impl KernelClock,
     ids: &impl KernelIdGenerator,
     backend: &impl TaskApplicationBackend,
 ) -> HandlerResult {
     handle_task_create_with_validator(
-        envelope,
+        request,
         clock,
         ids,
         backend,
@@ -109,7 +110,7 @@ pub fn handle_task_create(
 }
 
 pub(crate) fn handle_task_create_with_validator(
-    envelope: &TypedKcpCommandEnvelope,
+    request: &TaskCreateCommandRequestV2,
     clock: &impl KernelClock,
     ids: &impl KernelIdGenerator,
     backend: &impl TaskApplicationBackend,
@@ -117,41 +118,52 @@ pub(crate) fn handle_task_create_with_validator(
 ) -> HandlerResult {
     let accepted_at = match clock.now_utc() {
         Ok(value) => value,
-        Err(_) => {
-            return error_result(&envelope.request_id, ErrorKind::Internal, vec![], validator)
-        }
+        Err(_) => return error_result(&request.request_id, ErrorKind::Internal, vec![], validator),
     };
-    if !matches!(
-        (&envelope.command_type[..], &envelope.payload),
-        ("task.create", KcpCommandPayload::TaskCreate(_))
-    ) {
+    if request.command_type != "task.create" {
         return input_mismatch();
     }
-    let deadline = match parse_deadline(&envelope.deadline) {
+    // Root-only active create: Envelope.task_id and expected_revision must be null.
+    // Fail closed as invalid_request (not internal) so callers get a protocol-visible rejection.
+    if request.task_id.is_some() || request.expected_revision.is_some() {
+        return error_result(
+            &request.request_id,
+            ErrorKind::InvalidRequest,
+            vec![],
+            validator,
+        );
+    }
+    let deadline = match parse_deadline(&request.deadline) {
         Some(value) => value,
-        None => return error_result(&envelope.request_id, ErrorKind::Internal, vec![], validator),
+        None => return error_result(&request.request_id, ErrorKind::Internal, vec![], validator),
     };
     if accepted_at >= deadline {
         return error_result(
-            &envelope.request_id,
+            &request.request_id,
             ErrorKind::DeadlineExceeded,
             vec![],
             validator,
         );
     }
-    let allocation = match allocate_task_create(ids) {
+    let allocation = match allocate_task_create_v2(ids) {
         Some(value) => value,
-        None => return error_result(&envelope.request_id, ErrorKind::Internal, vec![], validator),
+        None => return error_result(&request.request_id, ErrorKind::Internal, vec![], validator),
     };
     let operation = TaskCreateOperation {
-        envelope: envelope.clone(),
+        actor: request.actor.clone(),
+        entry_point: request.entry_point,
+        request_id: request.request_id.clone(),
+        context: request.context.clone(),
+        idempotency_key: request.idempotency_key.clone(),
+        request: request.payload.clone(),
         accepted_at,
-        task_id: allocation[0],
-        task_scope_id: allocation[1],
-        content_origin_id: allocation[2],
-        receipt_id: allocation[3],
-        audit_id: allocation[4],
-        event_id: allocation[5],
+        task_id: allocation.task_id,
+        task_scope_id: allocation.task_scope_id,
+        content_origin_id: allocation.content_origin_id,
+        receipt_id: allocation.receipt_id,
+        creation_provenance_id: allocation.creation_provenance_id,
+        audit_id: allocation.audit_id,
+        event_id: allocation.event_id,
         correlation_id: allocation.correlation_id,
         dedup_key: allocation.dedup_key,
     };
@@ -159,54 +171,71 @@ pub(crate) fn handle_task_create_with_validator(
     let (result_kind, intents) = match backend_result {
         Ok(TaskCreateBackendResult::Created {
             current_task,
+            creation_provenance_ref,
             committed_event_id,
         }) => {
             let intent = PostCommitNotificationIntent::TaskCreatedCommitted {
                 task_id: current_task.id.clone(),
                 event_id: committed_event_id,
             };
-            (CreateCompletion::Created(current_task), vec![intent])
+            (
+                CreateCompletion::Created {
+                    task: current_task,
+                    creation_provenance_ref,
+                },
+                vec![intent],
+            )
         }
-        Ok(TaskCreateBackendResult::Replayed { current_task }) => {
-            (CreateCompletion::Replayed(current_task), vec![])
-        }
+        Ok(TaskCreateBackendResult::Replayed {
+            current_task,
+            creation_provenance_ref,
+        }) => (
+            CreateCompletion::Replayed {
+                task: current_task,
+                creation_provenance_ref,
+            },
+            vec![],
+        ),
         Err(error) => (CreateCompletion::Failed(error), vec![]),
     };
     let completed_at = match clock.now_utc() {
         Ok(value) => value,
         Err(_) => {
-            return error_result(
-                &envelope.request_id,
-                ErrorKind::Internal,
-                intents,
-                validator,
-            )
+            return error_result(&request.request_id, ErrorKind::Internal, intents, validator)
         }
     };
     if completed_at >= deadline {
         return error_result(
-            &envelope.request_id,
+            &request.request_id,
             ErrorKind::DeadlineExceeded,
             intents,
             validator,
         );
     }
     match result_kind {
-        CreateCompletion::Created(task) | CreateCompletion::Replayed(task) => {
-            let payload = TaskCreateResponse {
-                schema_version: TaskCreateResponseSchemaVersion,
+        CreateCompletion::Created {
+            task,
+            creation_provenance_ref,
+        }
+        | CreateCompletion::Replayed {
+            task,
+            creation_provenance_ref,
+        } => {
+            let payload = TaskCreateResponseV2 {
+                schema_version: TaskCreateResponseV2SchemaVersion,
                 task,
+                creation_provenance_ref,
             };
             success_result(
-                &envelope.request_id,
+                &request.request_id,
                 &payload,
-                TASK_CREATE_RESPONSE_SCHEMA,
+                TASK_CREATE_RESPONSE_V2_SCHEMA,
                 intents,
                 validator,
             )
         }
         CreateCompletion::Failed(error) => error_result(
-            &envelope.request_id,
+            &request.request_id,
             ErrorKind::CreateBackend(error),
             intents,
             validator,
@@ -301,37 +330,33 @@ pub(crate) fn handle_task_get_with_validator(
     }
 }
 
-struct CreateAllocation {
-    uuids: [Uuid; 6],
+struct CreateAllocationV2 {
+    task_id: Uuid,
+    task_scope_id: Uuid,
+    content_origin_id: Uuid,
+    receipt_id: Uuid,
+    creation_provenance_id: Uuid,
+    audit_id: Uuid,
+    event_id: Uuid,
     correlation_id: String,
     dedup_key: String,
 }
 
-impl std::ops::Index<usize> for CreateAllocation {
-    type Output = Uuid;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.uuids[index]
+fn allocate_task_create_v2(ids: &impl KernelIdGenerator) -> Option<CreateAllocationV2> {
+    let purposes = [
+        UuidPurpose::Task,
+        UuidPurpose::TaskScope,
+        UuidPurpose::ContentOrigin,
+        UuidPurpose::KernelReceipt,
+        UuidPurpose::CreationProvenance,
+        UuidPurpose::AuditRecord,
+        UuidPurpose::Event,
+    ];
+    let mut uuids = Vec::with_capacity(purposes.len());
+    for purpose in purposes {
+        let text = ids.next_uuid(purpose).ok()?;
+        uuids.push(Uuid::parse_str(&text).ok()?);
     }
-}
-
-fn allocate_task_create(ids: &impl KernelIdGenerator) -> Option<CreateAllocation> {
-    let generated = [
-        ids.next_uuid(UuidPurpose::Task).ok()?,
-        ids.next_uuid(UuidPurpose::TaskScope).ok()?,
-        ids.next_uuid(UuidPurpose::ContentOrigin).ok()?,
-        ids.next_uuid(UuidPurpose::KernelReceipt).ok()?,
-        ids.next_uuid(UuidPurpose::AuditRecord).ok()?,
-        ids.next_uuid(UuidPurpose::Event).ok()?,
-    ];
-    let uuids = [
-        Uuid::parse_str(&generated[0]).ok()?,
-        Uuid::parse_str(&generated[1]).ok()?,
-        Uuid::parse_str(&generated[2]).ok()?,
-        Uuid::parse_str(&generated[3]).ok()?,
-        Uuid::parse_str(&generated[4]).ok()?,
-        Uuid::parse_str(&generated[5]).ok()?,
-    ];
     if uuids.iter().copied().collect::<HashSet<_>>().len() != uuids.len() {
         return None;
     }
@@ -340,8 +365,14 @@ fn allocate_task_create(ids: &impl KernelIdGenerator) -> Option<CreateAllocation
     if correlation_id.is_empty() || dedup_key.is_empty() {
         return None;
     }
-    Some(CreateAllocation {
-        uuids,
+    Some(CreateAllocationV2 {
+        task_id: uuids[0],
+        task_scope_id: uuids[1],
+        content_origin_id: uuids[2],
+        receipt_id: uuids[3],
+        creation_provenance_id: uuids[4],
+        audit_id: uuids[5],
+        event_id: uuids[6],
         correlation_id,
         dedup_key,
     })
@@ -435,14 +466,21 @@ fn input_mismatch() -> HandlerResult {
 }
 
 enum CreateCompletion {
-    Created(kernel_contracts::TaskSpec),
-    Replayed(kernel_contracts::TaskSpec),
+    Created {
+        task: kernel_contracts::TaskSpec,
+        creation_provenance_ref: String,
+    },
+    Replayed {
+        task: kernel_contracts::TaskSpec,
+        creation_provenance_ref: String,
+    },
     Failed(BackendError),
 }
 
 enum ErrorKind {
     DeadlineExceeded,
     TaskNotFound,
+    InvalidRequest,
     CreateBackend(BackendError),
     GetBackend(BackendError),
     Internal,
@@ -453,6 +491,7 @@ impl ErrorKind {
         let (code, message, retryable) = match self {
             Self::DeadlineExceeded => ("deadline_exceeded", "request deadline exceeded", true),
             Self::TaskNotFound => ("task_not_found", "task was not found", false),
+            Self::InvalidRequest => ("invalid_request", "request is invalid", false),
             Self::Internal
             | Self::CreateBackend(BackendError::Internal)
             | Self::GetBackend(BackendError::Internal)
@@ -460,7 +499,6 @@ impl ErrorKind {
                 BackendError::InvalidScopePattern
                 | BackendError::IdempotencyConflict
                 | BackendError::DelegationNotFound
-                | BackendError::ParentTaskNotFound
                 | BackendError::ParentOriginNotFound,
             ) => ("internal_error", "internal kernel error", false),
             Self::CreateBackend(BackendError::InvalidScopePattern) => (
@@ -475,9 +513,6 @@ impl ErrorKind {
             ),
             Self::CreateBackend(BackendError::DelegationNotFound) => {
                 ("delegation_not_found", "delegation was not found", false)
-            }
-            Self::CreateBackend(BackendError::ParentTaskNotFound) => {
-                ("parent_task_not_found", "parent task was not found", false)
             }
             Self::CreateBackend(BackendError::ParentOriginNotFound) => (
                 "parent_origin_not_found",
@@ -524,8 +559,10 @@ mod tests {
     use chrono::TimeZone;
     use kernel_contracts::{
         Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, EntryPoint,
-        KcpCommandEnvelopeMessageKind, KcpCommandEnvelopeProtocolVersion, NullOnly,
-        TaskCreateRequest,
+        InputContentOriginV1, InputContentOriginV1Kind, InputContentOriginV1ProducerRef,
+        InputContentOriginV1ProducerRefKind, InputContentOriginV1SchemaVersion, InputTaskScopeV1,
+        InputTaskScopeV1SchemaVersion, NormalizedRootTaskCreatePayloadV2Proposer, NullOnly,
+        TaskCreateRequestV2, TaskCreateRequestV2SchemaVersion,
     };
     use serde_json::json;
     use std::cell::RefCell;
@@ -608,11 +645,12 @@ mod tests {
         for (reject_envelope, expected_contract_failure) in [(false, false), (true, true)] {
             let backend = Backend(RefCell::new(Some(TaskCreateBackendResult::Created {
                 current_task: task(),
-                committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000006")
+                creation_provenance_ref: "00000000-0000-4000-8000-000000000005".into(),
+                committed_event_id: Uuid::parse_str("00000000-0000-4000-8000-000000000007")
                     .expect("valid event uuid"),
             })));
             let result = handle_task_create_with_validator(
-                &envelope(),
+                &create_request(),
                 &Clock(RefCell::new([instant(1), instant(2)].into())),
                 &Ids(RefCell::new(1)),
                 &backend,
@@ -663,22 +701,46 @@ mod tests {
         }
     }
 
-    fn envelope() -> TypedKcpCommandEnvelope {
-        let request: TaskCreateRequest = serde_json::from_value(json!({"schema_version":1,"proposer":"user","goal":"goal","constraints":[],"success_criteria":["done"],"risk_hint":null,"capability_hints":[],"task_scope":{"schema_version":1,"resource_patterns":[],"exclusions":[],"allowed_capability_hints":[],"expires_at":null},"delegation_ref":null,"parent_task_id":null,"origin":{"schema_version":1,"kind":"user_input","source_uri":null,"upstream_stable_id":null,"producer_ref":{"kind":"actor","id":"actor"},"parent_origin_refs":[]}})).expect("valid request");
-        TypedKcpCommandEnvelope {
+    fn create_request() -> TaskCreateCommandRequestV2 {
+        TaskCreateCommandRequestV2 {
             actor: actor(),
             auth: NullOnly,
-            context: None,
+            context: Some(json!({"conversation":1})),
             deadline: "2026-07-18T12:00:10Z".into(),
             entry_point: EntryPoint::LocalDesktop,
             expected_revision: None,
             idempotency_key: "key".into(),
-            message_kind: KcpCommandEnvelopeMessageKind::Value,
-            protocol_version: KcpCommandEnvelopeProtocolVersion::Value,
             request_id: "10000000-0000-4000-8000-000000000003".into(),
             task_id: None,
             command_type: "task.create".into(),
-            payload: KcpCommandPayload::TaskCreate(Box::new(request)),
+            payload: TaskCreateRequestV2 {
+                capability_hints: vec![],
+                constraints: vec![],
+                delegation_ref: None,
+                goal: "goal".into(),
+                origin: InputContentOriginV1 {
+                    kind: InputContentOriginV1Kind::UserInput,
+                    parent_origin_refs: vec![],
+                    producer_ref: InputContentOriginV1ProducerRef {
+                        id: "actor".into(),
+                        kind: InputContentOriginV1ProducerRefKind::Actor,
+                    },
+                    schema_version: InputContentOriginV1SchemaVersion,
+                    source_uri: None,
+                    upstream_stable_id: None,
+                },
+                proposer: NormalizedRootTaskCreatePayloadV2Proposer::User,
+                risk_hint: None,
+                schema_version: TaskCreateRequestV2SchemaVersion,
+                success_criteria: vec!["done".into()],
+                task_scope: InputTaskScopeV1 {
+                    allowed_capability_hints: vec![],
+                    exclusions: vec![],
+                    expires_at: None,
+                    resource_patterns: vec![],
+                    schema_version: InputTaskScopeV1SchemaVersion,
+                },
+            },
         }
     }
 
