@@ -1,6 +1,6 @@
 # Task创建、Child materialization 与 repository 硬合同
 
-> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness，以及切片1b ActionRequestV2/ActionTransitionIntentV1/三projection + `kernel-authorization` pure crate **已实现**；production MethodVersionBindings 仍为空；active v2 repository/handler/materializer **未实现**；legacy TaskCreate v1 create/get 已实现但标记为 **待删除**，不得进入 future production server）
+> 状态徽章：**partial**（首批 12 Schema + `kernel-task-creation` pure library + official fixtures/harness，切片1b Action/child 授权 Schema + `kernel-authorization` pure crate，以及切片2 `kernel-sqlite` **active root TaskCreate v2 repository**（migration 0004）**已实现**；production MethodVersionBindings 仍为空；KCP handler/method-aware preflight/child materializer **未实现**；legacy TaskCreate v1 create/get 仍可用但标记为 **待删除**，不得进入 future production server）
 
 ## 唯一事实源
 
@@ -20,17 +20,17 @@
 
 本页导航 root TaskCreate v2、child Action materialization、allocation/projection、official fixtures 与 repository 硬门。lifecycle 摘要：
 
-- active `task.create` = v2 root-only（未实现 runtime）；
+- active `task.create` = v2 root-only；**repository 已实现**（`WriteTransaction::create_root_task_v2`），KCP handler/preflight 仍未接；
 - v1 仅 Schema/fixture 历史验证，production 请求得 `unsupported_schema_version`；v1 repository write **待删除**，不是持续维护路径；
-- child 唯一新写入口为 `kernel.task/task.child.create`；
-- 不支持 v1 业务数据迁移；旧开发库 `reinitialize-required`；
+- child 唯一新写入口为 `kernel.task/task.child.create`（materializer 未实现）；
+- 不支持 v1 业务数据迁移；旧开发库 `reinitialize-required`（切片6）；
 - production bindings + v2 dispatcher + v2 repository 是 `V2InitialBuildActive` 初始交付，不是 cutover。
 
 - `kernel-task-creation`唯一拥有root/child proposal normalize、receipt/idempotency与allocation validation；
-- `kernel-authorization`唯一拥有ChildTaskDelta、MaterialAuthorization、ObservationEvidence projection的typed facts→构造/验证/JCS/SHA-256；
+- `kernel-sqlite` root v2 repository 消费上述 pure API，不复制 hash/normalize 语义；
+- `kernel-authorization`唯一拥有ChildTaskDelta、MaterialAuthorization、ObservationEvidence/Subject projection的typed facts→构造/验证/JCS/SHA-256；
 - retained `VerificationResultV1`已覆盖child materialization所需验证事实，继续复用；
-- `SubjectProjectionV1`与`ApprovalEventAllocationV1`留给切片1c；
-- 两pure crate均不读repository/SQLite、不分配ID、不写存储；authorization crate不替代`domain-policy` matcher。
+- pure crate均不读repository/SQLite、不分配ID、不写存储；authorization crate不替代`domain-policy` matcher。
 
 字段级合同、七 UUID / 十 UUID、JCS 形状与 tamper 矩阵不在本页复述。
 
