@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-19
-- 实现状态：第二实现段已完成（第一段八个 Event v2 Schema/catalog/typed decode；第二段migration 0003 descriptor v1、版本化统一Outbox、mixed v1/v2 public API、严格存储解码与savepoint transaction poison）；active business producer、Publisher、server与KCP poll cutover仍未实现
+- 实现状态徽章：**partial** — 唯一进度源：[`docs/IMPLEMENTATION_MATRIX.md`](../docs/IMPLEMENTATION_MATRIX.md) · [`docs/PROGRESS.md`](../docs/PROGRESS.md)
 - 合同开放问题：0；本ADR所列Event v2/Outbox docs决策已全部拍板，剩余项都是实现工作而非合同待定项
 
 ## 背景
@@ -247,5 +247,3 @@ impl SqliteStore {
 2. 再实现migration 0003与统一Outbox mixed read/write；此时仍不实现active业务producer。
 3. 后续root v2、child、Action transition、Approval repository只能消费上述active入口；不得各自创建临时Event存储。
 4. Conformance必须覆盖Schema正反例、claimant/mapping drift、mixed migration、JCS、sequence/position、SAVEPOINT、corruption、rollback/backup与legacy write gate。
-
-本ADR的合同与前两实现段已经完成：当前仓库有61 Schema，Event v2八Schema、active/legacy Catalog与v1/v2 typed decode已落地；SQLite migration 0003已用descriptor format v1把legacy Outbox原子升级为一张版本化统一表，mixed public API、严格stored decoder、delivery写前校验与savepoint transaction poison也已落地。尚无active business producer、Publisher、repository、handler、server或KCP `event.poll` mixed cutover。

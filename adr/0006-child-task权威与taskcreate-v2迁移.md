@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：pure-library + official-fixtures implemented；首批相关 Schema source、manifest entries 与 generated Rust root types已落地，`expires_at` Schema硬门、canonical timestamp API、`kernel-task-creation` normalization/projection/hash/allocation helper、schema-tool strict RFC6901 pointer selection/mutation与selected validate/canonicalize CLI，以及三份official fixtures与harness均已实现（production owner + 独立CLI Schema路径 + stored preimage自一致性共享唯一JCS authority）；本 ADR仍未实现TaskCreate v2 repository/handler/materializer、production MethodVersionBindings与cutover
+- 实现状态徽章：**partial** — 唯一进度源：[`docs/IMPLEMENTATION_MATRIX.md`](../docs/IMPLEMENTATION_MATRIX.md) · [`docs/PROGRESS.md`](../docs/PROGRESS.md)
 
 ## 背景
 
@@ -117,8 +117,3 @@ KCP protocol 仍可为 `1.0`，但 payload version preflight 必须 method-aware
 4. 扩大 scope/capability 进入 Policy context而不是 hard deny，Delegation authority 缺失则明确失败；
 5. 故障注入证明 bundle 全有或全无、同 Action最多一个 child；
 6. legacy direct-child 可读且明确标记 provenance，不伪造历史事实。
-
-## 实现状态（非规范）
-
-- 首批12 Schema source/manifest/generated types 已落地（含 ChildTaskProposal/NormalizedChild/Allocation 与 TaskCreate v2 相关对象）。
-- production MethodVersionBindings仍为空；`expires_at`非零亚秒Schema硬门、canonical timestamp API、`kernel-task-creation` pure helper、schema-tool strict pointer CLI底座及三份official fixtures/harness已完成；repository/handler/materializer/cutover仍未完成。

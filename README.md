@@ -29,7 +29,7 @@
 - [`docs/REPOSITORY_MAINTENANCE.md`](docs/REPOSITORY_MAINTENANCE.md)：主仓与纯文档镜像的持续更新、发布顺序、失败门禁，以及已实现的 `scripts/sync-docs-repository.mjs`（`pnpm run check:docs-repository` / `sync:docs-repository` / `test:docs-repository`）。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
 - [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现legacy TaskCreate v1 create/get、ADR-0006首批Schema/pure library/fixtures，以及ADR-0008 Event v2 Schema/catalog/typed decode和migration 0003/mixed Outbox API；active TaskCreate v2 repository/handler、child Action materializer、active Event producer、Publisher、Approval v2、`agentd`与可连接server尚未实现。
-- [`docs/sdk/README.md`](docs/sdk/README.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
+- [`docs/sdk/extension-sdk.md`](docs/sdk/extension-sdk.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 
 ## 实现目标

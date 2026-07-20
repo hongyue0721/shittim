@@ -23,6 +23,17 @@ Shittim 同时维护两个私有 GitHub 仓库：
 
 只更新代码而让文档继续描述旧事实，或者只更新进度文字却没有对应实现与测试证据，都属于未完成。历史事实不得被改写成当前能力；计划、contract-only、schema-source-present、library-implemented、composition-reachable、publicly-usable、SDK-publishable 和 real-platform-verified 必须明确区分。
 
+### 2.1 完成状态单一来源（强制）
+
+完成状态**只允许**写在：
+
+1. `docs/IMPLEMENTATION_MATRIX.md` — 域状态表（规范/Schema/实现/测试）；
+2. `docs/PROGRESS.md` — 当前里程碑、未完成 backlog、阻塞与下一步。
+
+ADR 与 `docs/api/*` 页面**只允许**一枚状态徽章（如 `implemented` / `partial` / `contract-only`）+ 指向 MATRIX 与/或 PROGRESS 以及 `specs/` / 对应 ADR 的锚点链接。**禁止**在 ADR 文首/路线图段、API 导航页维护字段级复述（subject_hash、UUID 分配表、change_kind 真值表、projection 形状、IR/transaction 内部细节等）；那些事实只属于 `specs/*.md` 与 ADR 的决策段。
+
+违反即文档债：同一完成状态手写多处必然漂移，必须先收敛到 MATRIX/PROGRESS 再改代码说明。
+
 ## 3. 每个切片的发布顺序
 
 每个功能、修复、规范或文档切片按以下顺序闭环：

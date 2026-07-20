@@ -54,5 +54,5 @@
 - [Error Catalog](api/error-catalog.md)
 - [Approval v2合同](api/approval-contract.md)
 - [Schema 生成](api/schema-generation.md)
-- [SDK 文档](sdk/README.md)
+- [SDK 文档](sdk/extension-sdk.md)
 - [ADR 索引](../adr/README.md)

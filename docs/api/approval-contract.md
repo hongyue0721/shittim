@@ -1,45 +1,27 @@
 # Approval v2 与 PermissionDecision 授权合同
 
-> 状态：accepted contract-only；legacy v1仅供读取/迁移。字段、hash、CAS、identity repository、challenge终态、事件和错误唯一事实源为 [`IMPLEMENTATION_CONTRACTS.md`](../../specs/IMPLEMENTATION_CONTRACTS.md) §5.3.1、§5.6–5.7、§6.6、§6.10.1–6.10.6。
+> 状态徽章：**contract-only**（accepted；legacy v1 仅供读取/迁移；无 repository 实现）
 
-## Canonical confirmation mode
+## 唯一事实源
 
-全链统一：`generic | local | system_authentication | remote_signature | plan_revision`。PolicyRule v2使用该闭集；PD映射为`require_confirmation | require_local_confirmation | require_system_authentication | require_remote_signature | require_plan_revision`；Approval request wire直接保存canonical mode。remote mode算法无关，首版算法由`RemoteSignatureAlgorithmV1`的唯一`ed25519` branch表达。
+| 主题 | 锚点 |
+|---|---|
+| 可编码投影 / subject / confirmation mode / JCS preimage | [`IMPLEMENTATION_CONTRACTS.md` §5.3.1](../../specs/IMPLEMENTATION_CONTRACTS.md#531-可编码投影jcs-preimage-与规范化) |
+| Event payload / `change_kind` 真值表 | [`IMPLEMENTATION_CONTRACTS.md` §5.6](../../specs/IMPLEMENTATION_CONTRACTS.md#56-首批正式-event-catalog) |
+| 稳定错误码 | [`IMPLEMENTATION_CONTRACTS.md` §5.7](../../specs/IMPLEMENTATION_CONTRACTS.md#57-v2权威-error-catalog) |
+| PermissionDecision v2 | [`IMPLEMENTATION_CONTRACTS.md` §6.6](../../specs/IMPLEMENTATION_CONTRACTS.md#66-permissiondecision-v2) |
+| ApprovalRecord v2 联合身份 / CAS / material·observation | [`IMPLEMENTATION_CONTRACTS.md` §6.10](../../specs/IMPLEMENTATION_CONTRACTS.md#610-approvalrecord-v2) |
+| Event allocation / repository 闭集 / 唯一键 / 恢复硬门 | [`IMPLEMENTATION_CONTRACTS.md` §6.10.6](../../specs/IMPLEMENTATION_CONTRACTS.md#6106-approval-event-allocationrepository闭集唯一键与恢复硬门) |
+| 决策背景与边界 | [ADR-0007](../../adr/0007-approval-v2不可变联合身份与失效.md) |
+| 域状态 | [`../IMPLEMENTATION_MATRIX.md`](../IMPLEMENTATION_MATRIX.md) · [`../PROGRESS.md`](../PROGRESS.md) |
 
-## Approval tagged unions与subject hash
+## 范围
 
-ApprovalRecord v2外层`record_kind=request|resolution|invalidation`，内层`subject_kind=operation|task_proposal|plan_revision`。公共字段全部required，初始request的`predecessor_ref=null`，其余链关系按repository CAS。
+本页只导航 Authorization / Approval v2 合同边界：不可变 request/resolution/invalidation 链、subject 精确绑定、material 与 observation 分离、identity/challenge 证据与 current-head CAS。不复述字段、hash、真值表或 repository API 形状。
 
-`subject_hash`只等于完整`SubjectProjectionV1`的RFC8785 JCS/SHA-256。Approval wire仍保存完整subject；remote challenge/response/preimage与system authentication evidence共同绑定该hash。
+## 导航
 
-## 链操作
-
-- `append_request`只创建新链，expected head必须null；三个CAS方法均消费上层分配的正式`ApprovalEventAllocationV1 {event_id,correlation_id,dedup_key,changed_at,causation_ref}`。
-- replacement只能由`invalidate_and_optionally_replace`在同一事务完成；invalidation与replacement互相引用并形成新current head。
-- `resolve`只解析current request。
-- 不可update/delete，不按时间或ID猜head。
-
-每次成功head变化与Audit、Action/PD关系及Lease更新同事务写恰好一条`approval.state_changed`；atomic replacement不发布中间invalidation head。
-
-### Approval head event payload truth table
-
-`approval.state_changed`只用一个payload，但payload内必须显式携带`change_kind=initial_request|resolution|invalidation_without_replacement|replacement_request`。完整Schema真值表由IC §5.6权威定义；它逐类固定from/to record kind，以及from/to head、request、resolution、invalidation、replacement refs的required null/non-null。Schema不具备任意字符串字段等值能力，repository必须核对head/ref exact equality与replacement predecessor；不能根据`to_record_kind=request`猜initial或replacement。
-
-## Material/observation
-
-Material projection排除PD id/revision/self-reference；PD revision仍进入operation subject freshness。`content_origin_refs`按lowercase canonical UUID文本UTF-8排序去重；Task child capability hints只来自TaskScope hints。Observation projection为`not_applicable|observed` tagged union，不伪造provider。
-
-纯observation重评可产生新PD；Core重新构造material projection并证明hash相同后，才可复用旧current approved resolution。
-
-## Evidence矩阵
-
-- generic/plan_revision：专属evidence ref均null，`evidence_refs=[]`。
-- local：仅local presence ref，数组精确包含该ref。
-- system_authentication：仅system auth ref；认证取消/失败不写approved resolution。
-- remote_signature：仅remote response ref，approved/denied都要求合法签名response。
-
-## Identity、Challenge与证据
-
-Identity repositories分别拥有Credential register/rotate/revoke/get、Challenge issue/**只读**get/revoke/consume/`expire_challenge_with_expected_state`、local/system evidence insert/get。`get`不得因观察到过期写状态；remote与system resolve或任何consume在同一`BEGIN IMMEDIATE`内发现`issued && now>=expires_at`时，以expected `issued` CAS持久化`expired`、写identity/security Audit并返回`challenge_expired`。CAS loser重读`expired`仍返回同码；sweeper只能复用此helper，非正确性依赖。Challenge不是Approval chain，expiry**不**产生`approval.state_changed`。
-
-remote验签/expire/consume/resolve与system evidence校验/expire/consume/resolve都通过同一transaction-bound helper完成。system mode先由Kernel签发`SystemAuthenticationChallengeV1`，注册OS authority成功后写绑定的`SystemAuthenticationEvidenceV1`；resolve同一事务校验challenge current/expiry/binding、evidence和current head后才consume并append approved resolution。OS取消或失败不写evidence、不consume、也不写resolution。
+- [Error Catalog](error-catalog.md)
+- [Event Catalog](event-catalog.md)
+- [Task repository 合同](task-repository-contract.md)
+- [API 索引](README.md)
