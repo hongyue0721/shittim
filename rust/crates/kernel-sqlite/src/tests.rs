@@ -5,13 +5,13 @@ use domain_policy::{
     RateLimitConsume, RateLimitKey, RateLimitPort, RateLimitPreview, RateLimitRequest,
 };
 use kernel_contracts::{
-    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, AuditRecord,
-    AuditRecordAuditType, AuditRecordExternalContentStatus, AuditRecordLevel, AuditRecordOutcome,
-    AuditRecordRollbackCapability, AuditRecordSchemaVersion, CausationRef, CausationRefKind,
-    EntryPoint, EventEnvelopeType, PolicyRule, PolicyRuleActionMatch, PolicyRuleActorMatch,
+    Actor, ActorAuthenticationLevel, ActorKind, ActorSchemaVersion, CausationRefV2, EntryPoint,
+    EventEnvelopeV2Payload, PolicyRule, PolicyRuleActionMatch, PolicyRuleActorMatch,
     PolicyRuleCondition, PolicyRuleConditionRateLimit, PolicyRuleConditionRateLimitKeyScope,
     PolicyRuleContentOriginMatch, PolicyRuleCreatedBy, PolicyRuleEffect, PolicyRuleResourceMatch,
     PolicyRuleSchemaVersion, PolicyRuleSource, PolicyRuleUpdatedBy, SideEffectClass,
+    TaskCreatedPayload, TaskCreatedPayloadProposer, TaskCreatedPayloadSchemaVersion,
+    TaskStateChangedPayload, TaskStateChangedPayloadSchemaVersion, TaskStatus,
 };
 use rusqlite::Connection;
 use serde_json::json;
@@ -22,6 +22,7 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use uuid::Uuid;
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -75,7 +76,7 @@ fn migration_is_idempotent_and_connection_pragmas_are_verified() {
     assert_eq!(journal.to_ascii_lowercase(), "wal");
     assert_eq!(foreign_keys, 1);
     assert_eq!(busy_timeout, 2_000);
-    assert_eq!(migration_count, 4);
+    assert_eq!(migration_count, 5);
 }
 
 #[test]
@@ -105,20 +106,16 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             row.get(0)
         })
         .expect("migration count");
-    assert_eq!(migration_count, 4);
+    assert_eq!(migration_count, 5);
     for table in [
         "aggregate_event_sequences",
         "outbox",
-        "audit_records",
         "policy_rate_limit_consumptions",
-        "content_origins",
-        "content_origin_parent_refs",
         "content_origins_v2",
         "content_origin_v2_parent_refs",
         "task_scopes",
         "task_scope_source_refs",
         "tasks",
-        "task_create_idempotency",
         "root_task_create_idempotency_v2",
         "task_creation_provenances",
         "audit_records_v2",
@@ -132,55 +129,11 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             .expect("table count");
         assert_eq!(count, 1, "missing table {table}");
     }
-}
-
-#[test]
-fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
-    let database = TestDatabase::new();
-    let connection = database.raw();
-    migration::create_v1_database_for_test(&connection).expect("create v1 database");
-    let audit = valid_audit("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee");
-    crate::audit::insert_audit(&connection, &audit).expect("v1 audit");
-    let event = task_created_event(50, "v1-task");
-    let expected_event =
-        crate::outbox::append_legacy_v1_storage_for_test(&connection, event).expect("v1 event");
-    drop(connection);
-
-    let store = database.open();
-    assert_eq!(
-        store.get_audit(&audit.id).expect("upgraded audit"),
-        Some(audit)
-    );
-    assert_eq!(
-        store
-            .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
-            .expect("upgraded outbox"),
-        vec![expected_event]
-    );
-    let connection = database.raw();
-    let versions: Vec<i64> = {
-        let mut statement = connection
-            .prepare("SELECT version FROM schema_migrations ORDER BY version")
-            .expect("versions statement");
-        statement
-            .query_map([], |row| row.get(0))
-            .expect("version rows")
-            .collect::<Result<_, _>>()
-            .expect("versions")
-    };
-    assert_eq!(versions, [1, 2, 3, 4]);
     for table in [
+        "audit_records",
         "content_origins",
         "content_origin_parent_refs",
-        "content_origins_v2",
-        "content_origin_v2_parent_refs",
-        "task_scopes",
-        "task_scope_source_refs",
-        "tasks",
         "task_create_idempotency",
-        "root_task_create_idempotency_v2",
-        "task_creation_provenances",
-        "audit_records_v2",
     ] {
         let count: i64 = connection
             .query_row(
@@ -189,8 +142,37 @@ fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
                 |row| row.get(0),
             )
             .expect("table count");
-        assert_eq!(count, 1, "missing upgraded table {table}");
+        assert_eq!(count, 0, "legacy table {table} must be dropped");
     }
+}
+
+#[test]
+fn open_refuses_nonempty_legacy_v1_database_as_reinitialize_required() {
+    let database = TestDatabase::new();
+    let connection = database.raw();
+    migration::create_v1_database_for_test(&connection).expect("create v1 database");
+    // Seed a legacy outbox row so migration 0003 refuses under ADR-0009.
+    connection
+        .execute(
+            "INSERT INTO outbox(                event_id, event_type, schema_version, aggregate_type, aggregate_id, sequence,                 occurred_at, causation_kind, causation_id, correlation_id, dedup_key, payload_json             ) VALUES (?1, 'task.created', 1, 'task', ?2, 0, ?3, 'command_request', ?4, 'c', 'd', ?5)",
+            rusqlite::params![
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "2026-01-01T00:00:00+00:00",
+                "11111111-1111-4111-8111-111111111111",
+                r#"{"schema_version":1,"task_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","status":"candidate","proposer":"user","goal":"legacy","task_revision":1,"created_at":"2026-01-01T00:00:00+00:00"}"#,
+            ],
+        )
+        .expect("seed legacy outbox");
+    drop(connection);
+
+    let error = SqliteStore::open(&database.path, database.config).expect_err("refuse legacy");
+    assert_eq!(error.code, StoreErrorCode::StoredDataInvalid);
+    assert!(
+        error.message.contains("reinitialize-required"),
+        "message={}",
+        error.message
+    );
 }
 
 #[test]
@@ -288,7 +270,7 @@ fn migration_checksum_drift_and_too_new_are_rejected() {
         .execute(
             "INSERT INTO schema_migrations(\
                 version, name, checksum, applied_at, descriptor_hash, descriptor_format_version\
-             ) VALUES (5, 'future', ?1, '2026-01-01T00:00:00Z', ?1, 1)",
+             ) VALUES (9, 'future', ?1, '2026-01-01T00:00:00Z', ?1, 1)",
             ["a".repeat(64)],
         )
         .expect("insert future migration");
@@ -332,83 +314,16 @@ fn migration_unknown_version_is_rejected_as_drift() {
 }
 
 #[test]
-fn audit_is_canonical_immutable_validated_and_rollback_safe() {
-    let database = TestDatabase::new();
-    let store = database.open();
-    let record = valid_audit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
-    store
-        .with_write_transaction(|transaction| transaction.append_audit(&record))
-        .expect("append audit");
-    assert_eq!(
-        store.get_audit(&record.id).expect("get audit"),
-        Some(record.clone())
-    );
-
-    let raw: String = database
-        .raw()
-        .query_row("SELECT record_json FROM audit_records", [], |row| {
-            row.get(0)
-        })
-        .expect("stored json");
-    assert_eq!(
-        raw,
-        kernel_contracts::canonical_json_string(&serde_json::to_value(&record).expect("value"))
-            .expect("canonical")
-    );
-    assert_eq!(
-        store
-            .with_write_transaction(|transaction| transaction.append_audit(&record))
-            .expect_err("immutable duplicate")
-            .code,
-        StoreErrorCode::ConstraintViolation
-    );
-    let immutable_connection = database.raw();
-    assert!(immutable_connection
-        .execute("UPDATE audit_records SET record_json = record_json", [],)
-        .is_err());
-    assert!(immutable_connection
-        .execute("DELETE FROM audit_records", [])
-        .is_err());
-
-    let mut invalid = valid_audit("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
-    invalid.external_content_status = AuditRecordExternalContentStatus::Sent;
-    invalid.causation_ref = None;
-    assert_eq!(
-        store
-            .with_write_transaction(|transaction| transaction.append_audit(&invalid))
-            .expect_err("sent support")
-            .code,
-        StoreErrorCode::ContractInvalid
-    );
-    assert!(store.get_audit(&invalid.id).expect("get invalid").is_none());
-
-    let rollback = valid_audit("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
-    let error = store
-        .with_write_transaction(|transaction| {
-            transaction.append_audit(&rollback)?;
-            Err::<(), _>(StoreError::new(StoreErrorCode::NotFound, "force rollback"))
-        })
-        .expect_err("rollback");
-    assert_eq!(error.code, StoreErrorCode::NotFound);
-    assert!(store
-        .get_audit(&rollback.id)
-        .expect("get rollback")
-        .is_none());
-}
-
-#[test]
 fn transaction_panic_rolls_back_and_does_not_poison_store() {
     let database = TestDatabase::new();
     let store = database.open();
-    let audit = valid_audit("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
     let instant = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     let key = RateLimitKey("panic".into());
     let request = rate_request("panic-rule", 1, &key, instant, 1, 60);
 
     let panic = catch_unwind(AssertUnwindSafe(|| {
         let _ = store.with_write_transaction(|transaction| -> Result<(), StoreError> {
-            transaction.append_audit(&audit)?;
-            transaction.append_legacy_event_v1(task_created_event(50, "panic-task"))?;
+            transaction.append_active_event_v2(task_created_event(50, "panic-task"))?;
             assert_eq!(
                 transaction
                     .rate_limit_port()
@@ -420,10 +335,6 @@ fn transaction_panic_rolls_back_and_does_not_poison_store() {
         });
     }));
     assert!(panic.is_err());
-    assert!(store
-        .get_audit(&audit.id)
-        .expect("read after panic")
-        .is_none());
     assert!(store
         .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
         .expect("outbox after panic")
@@ -438,15 +349,10 @@ fn transaction_panic_rolls_back_and_does_not_poison_store() {
                     .expect("preview after panic"),
                 RateLimitPreview::Available
             );
-            transaction.append_audit(&audit)?;
-            transaction.append_legacy_event_v1(task_created_event(51, "panic-task"))?;
+            transaction.append_active_event_v2(task_created_event(51, "panic-task"))?;
             Ok(())
         })
         .expect("store remains writable");
-    assert!(store
-        .get_audit(&audit.id)
-        .expect("audit after retry")
-        .is_some());
     assert_eq!(
         store
             .latest_position()
@@ -458,36 +364,15 @@ fn transaction_panic_rolls_back_and_does_not_poison_store() {
 }
 
 #[test]
-fn audit_read_revalidates_tampered_storage() {
-    let database = TestDatabase::new();
-    database.open();
-    database
-        .raw()
-        .execute(
-            "INSERT INTO audit_records(record_json) VALUES (?1)",
-            [json!({"id":"not-a-uuid","schema_version":1}).to_string()],
-        )
-        .expect("insert minimally checked malformed record");
-    let store = database.open();
-    assert_eq!(
-        store
-            .get_audit("not-a-uuid")
-            .expect_err("contract revalidation")
-            .code,
-        StoreErrorCode::ContractInvalid
-    );
-}
-
-#[test]
 fn outbox_allocates_sequences_positions_and_multiple_aggregates() {
     let database = TestDatabase::new();
     let store = database.open();
     let records = store
         .with_write_transaction(|transaction| {
             Ok(vec![
-                transaction.append_legacy_event_v1(task_created_event_for(1, "task-a", 1, 1))?,
-                transaction.append_legacy_event_v1(task_state_event(2, "task-a", 1))?,
-                transaction.append_legacy_event_v1(task_created_event_for(3, "task-b", 3, 3))?,
+                transaction.append_active_event_v2(task_created_event_for(1, "task-a", 1, 1))?,
+                transaction.append_active_event_v2(task_state_event(2, "task-a", 1))?,
+                transaction.append_active_event_v2(task_created_event_for(3, "task-b", 3, 3))?,
             ])
         })
         .expect("append events");
@@ -511,17 +396,17 @@ fn failed_event_rolls_back_sequence_and_position_without_gaps() {
     let database = TestDatabase::new();
     let store = database.open();
     let mut mismatch = task_created_event(1, "task-a");
-    mismatch.event_type = EventEnvelopeType::TaskStateChanged;
+    mismatch.aggregate_id = EventAggregateId::Task(Uuid::from_u128(0xdead));
     assert_eq!(
         store
-            .with_write_transaction(|transaction| transaction.append_legacy_event_v1(mismatch))
+            .with_write_transaction(|transaction| transaction.append_active_event_v2(mismatch))
             .expect_err("payload mismatch")
             .code,
         StoreErrorCode::ContractInvalid
     );
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(2, "task-a"))
+            transaction.append_active_event_v2(task_created_event(2, "task-a"))
         })
         .expect("valid event");
     assert_eq!(record.envelope.sequence(), 0);
@@ -533,17 +418,19 @@ fn contract_invalid_event_rolls_back_allocations() {
     let database = TestDatabase::new();
     let store = database.open();
     let mut invalid = task_created_event(1, "task-a");
-    invalid.payload["goal"] = json!("");
+    if let EventEnvelopeV2Payload::TaskCreated(payload) = &mut invalid.payload {
+        payload.goal = String::new();
+    }
     assert_eq!(
         store
-            .with_write_transaction(|transaction| transaction.append_legacy_event_v1(invalid))
+            .with_write_transaction(|transaction| transaction.append_active_event_v2(invalid))
             .expect_err("invalid payload")
             .code,
         StoreErrorCode::ContractInvalid
     );
     let valid = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(2, "task-a"))
+            transaction.append_active_event_v2(task_created_event(2, "task-a"))
         })
         .expect("valid event");
     assert_eq!(valid.envelope.sequence(), 0);
@@ -557,9 +444,11 @@ fn ignored_invalid_first_append_is_self_rolled_back() {
     store
         .with_write_transaction(|transaction| {
             let mut invalid = task_created_event(10, "task-a");
-            invalid.payload["goal"] = json!("");
+            if let EventEnvelopeV2Payload::TaskCreated(payload) = &mut invalid.payload {
+                payload.goal = String::new();
+            }
             let error = transaction
-                .append_legacy_event_v1(invalid)
+                .append_active_event_v2(invalid)
                 .expect_err("invalid append");
             assert_eq!(error.code, StoreErrorCode::ContractInvalid);
             Ok(())
@@ -572,7 +461,7 @@ fn ignored_invalid_first_append_is_self_rolled_back() {
 
     let valid = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(11, "task-a"))
+            transaction.append_active_event_v2(task_created_event(11, "task-a"))
         })
         .expect("valid append");
     assert_eq!(valid.envelope.sequence(), 0);
@@ -585,11 +474,13 @@ fn ignored_invalid_second_append_preserves_prior_event_without_gaps() {
     let store = database.open();
     let first = store
         .with_write_transaction(|transaction| {
-            let first = transaction.append_legacy_event_v1(task_created_event(20, "task-a"))?;
+            let first = transaction.append_active_event_v2(task_created_event(20, "task-a"))?;
             let mut invalid = task_created_event(21, "task-a");
-            invalid.payload["goal"] = json!("");
+            if let EventEnvelopeV2Payload::TaskCreated(payload) = &mut invalid.payload {
+                payload.goal = String::new();
+            }
             let error = transaction
-                .append_legacy_event_v1(invalid)
+                .append_active_event_v2(invalid)
                 .expect_err("invalid append");
             assert_eq!(error.code, StoreErrorCode::ContractInvalid);
             Ok(first)
@@ -600,7 +491,7 @@ fn ignored_invalid_second_append_preserves_prior_event_without_gaps() {
 
     let next = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(22, "task-a"))
+            transaction.append_active_event_v2(task_created_event(22, "task-a"))
         })
         .expect("next append");
     assert_eq!(next.envelope.sequence(), 1);
@@ -636,7 +527,7 @@ fn cursor_parsing_ordering_and_limits_are_strict() {
     for number in 1..=3 {
         store
             .with_write_transaction(|transaction| {
-                transaction.append_legacy_event_v1(task_created_event_for(
+                transaction.append_active_event_v2(task_created_event_for(
                     number,
                     &format!("task-{number}"),
                     number,
@@ -661,7 +552,7 @@ fn undelivered_reads_are_at_least_once_across_reopen() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let limit = PageLimit::new(10).expect("limit");
@@ -710,7 +601,7 @@ fn delivered_marking_retains_first_time_and_history() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let position =
@@ -748,7 +639,7 @@ fn mark_delivered_helper_err_rolls_back_and_public_retry_marks() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let position =
@@ -790,7 +681,7 @@ fn mark_delivered_helper_panic_rolls_back_and_store_remains_healthy() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let position =
@@ -832,7 +723,7 @@ fn unhealthy_store_public_mark_fail_closed_and_peer_store_unchanged() {
     let peer = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let position =
@@ -863,7 +754,7 @@ fn mark_delivered_writer_contention_maps_busy_and_retries_after_release() {
     let contender = database.open();
     let record = holder
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
+            transaction.append_active_event_v2(task_created_event(1, "task-a"))
         })
         .expect("event");
     let position =
@@ -908,7 +799,7 @@ fn concurrent_mark_delivered_exact_one_marked_and_winner_timestamp() {
     let bootstrap = database.open();
     let record = bootstrap
         .with_write_transaction(|transaction| {
-            transaction.append_legacy_event_v1(task_created_event(1, "shared-task"))
+            transaction.append_active_event_v2(task_created_event(1, "shared-task"))
         })
         .expect("event");
     drop(bootstrap);
@@ -988,7 +879,7 @@ fn multiple_stores_serialize_sequence_and_position_allocation() {
             barrier.wait();
             store
                 .with_write_transaction(|transaction| {
-                    transaction.append_legacy_event_v1(task_created_event_for(
+                    transaction.append_active_event_v2(task_created_event_for(
                         number,
                         "shared-task",
                         number,
@@ -1222,46 +1113,6 @@ fn policy_matcher_consumes_only_the_winner() {
         .expect("matcher transaction");
 }
 
-fn valid_audit(id: &str) -> AuditRecord {
-    AuditRecord {
-        action_id: None,
-        actor: Some(actor()),
-        approval_record_ref: None,
-        artifact_refs: vec![],
-        audit_type: AuditRecordAuditType::CommandAccepted,
-        causation_ref: Some(CausationRef {
-            id: "77777777-7777-4777-8777-777777777777".into(),
-            kind: CausationRefKind::CommandRequest,
-        }),
-        content_origin_refs: vec![],
-        correlation_id: Some("correlation".into()),
-        delegation_ref: None,
-        details: json!({"b": 2, "a": 1}),
-        entry_point: EntryPoint::LocalDesktop,
-        extension_id: None,
-        external_content_status: AuditRecordExternalContentStatus::NotSent,
-        id: id.into(),
-        level: AuditRecordLevel::Security,
-        model_call_refs: vec![],
-        occurred_at: "2026-01-01T00:00:00Z".into(),
-        outcome: AuditRecordOutcome::Observed,
-        payload_manifest_refs: vec![],
-        permission_decision_ref: None,
-        policy_context: None,
-        provider_id: None,
-        reason_codes: vec!["accepted".into()],
-        recovery_attempt_ref: None,
-        resource_refs: vec![],
-        rollback_capability: AuditRecordRollbackCapability::Unknown,
-        schema_version: AuditRecordSchemaVersion,
-        stop_fence_generation: None,
-        summary: Some("accepted".into()),
-        task_creation_context: None,
-        task_id: None,
-        verification_result_refs: vec![],
-    }
-}
-
 fn actor() -> Actor {
     Actor {
         authentication_level: ActorAuthenticationLevel::Asserted,
@@ -1274,7 +1125,7 @@ fn actor() -> Actor {
     }
 }
 
-fn task_created_event(number: u32, aggregate_id: &str) -> PendingLegacyEventV1 {
+fn task_created_event(number: u32, aggregate_id: &str) -> PendingActiveEventV2 {
     task_created_event_for(number, aggregate_id, number, number)
 }
 
@@ -1283,71 +1134,62 @@ fn task_created_event_for(
     aggregate_id: &str,
     task_number: u32,
     second: u32,
-) -> PendingLegacyEventV1 {
-    let task_id = test_aggregate_uuid(aggregate_id, task_number);
-    PendingLegacyEventV1 {
-        event_id: format!("10000000-0000-4000-8000-{event_number:012}"),
-        event_type: EventEnvelopeType::TaskCreated,
-        aggregate_type: "task".into(),
-        aggregate_id: task_id.clone(),
-        occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, second).unwrap(),
-        causation_ref: CausationRef {
+) -> PendingActiveEventV2 {
+    let task_uuid = test_aggregate_uuid(aggregate_id, task_number);
+    let occurred_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, second).unwrap();
+    PendingActiveEventV2 {
+        event_id: Uuid::from_u128(0x1000_0000_0000_4000_8000_0000_0000_0000 + event_number as u128),
+        aggregate_id: EventAggregateId::Task(task_uuid),
+        occurred_at,
+        causation_ref: CausationRefV2::CommandRequest {
             id: format!("20000000-0000-4000-8000-{event_number:012}"),
-            kind: CausationRefKind::CommandRequest,
         },
         correlation_id: format!("correlation-{event_number}"),
         dedup_key: format!("dedup-{event_number}"),
-        payload: json!({
-            "schema_version": 1,
-            "task_id": task_id,
-            "status": "candidate",
-            "proposer": "user",
-            "goal": "test goal",
-            "task_revision": 1,
-            "created_at": format!("2026-01-01T00:00:{second:02}Z")
-        }),
+        payload: EventEnvelopeV2Payload::TaskCreated(Box::new(TaskCreatedPayload {
+            created_at: occurred_at.to_rfc3339(),
+            goal: "test goal".to_owned(),
+            proposer: TaskCreatedPayloadProposer::User,
+            schema_version: TaskCreatedPayloadSchemaVersion,
+            status: TaskStatus::Candidate,
+            task_id: task_uuid.to_string(),
+            task_revision: 1,
+        })),
     }
 }
 
-fn task_state_event(number: u32, aggregate_id: &str, task_number: u32) -> PendingLegacyEventV1 {
-    let task_id = test_aggregate_uuid(aggregate_id, task_number);
-    PendingLegacyEventV1 {
-        event_id: format!("30000000-0000-4000-8000-{number:012}"),
-        event_type: EventEnvelopeType::TaskStateChanged,
-        aggregate_type: "task".into(),
-        aggregate_id: task_id.clone(),
-        occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 1, number).unwrap(),
-        causation_ref: CausationRef {
+fn task_state_event(number: u32, aggregate_id: &str, task_number: u32) -> PendingActiveEventV2 {
+    let task_uuid = test_aggregate_uuid(aggregate_id, task_number);
+    let occurred_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 1, number).unwrap();
+    PendingActiveEventV2 {
+        event_id: Uuid::from_u128(0x3000_0000_0000_4000_8000_0000_0000_0000 + number as u128),
+        aggregate_id: EventAggregateId::Task(task_uuid),
+        occurred_at,
+        causation_ref: CausationRefV2::Event {
             id: format!("40000000-0000-4000-8000-{number:012}"),
-            kind: CausationRefKind::Event,
         },
         correlation_id: format!("correlation-{number}"),
         dedup_key: format!("dedup-state-{number}"),
-        payload: json!({
-            "schema_version": 1,
-            "task_id": task_id,
-            "from_status": "candidate",
-            "to_status": "planned",
-            "task_revision": 2,
-            "reason_code": "planning_started",
-            "changed_at": format!("2026-01-01T00:01:{number:02}Z")
-        }),
+        payload: EventEnvelopeV2Payload::TaskStateChanged(Box::new(TaskStateChangedPayload {
+            changed_at: occurred_at.to_rfc3339(),
+            from_status: TaskStatus::Candidate,
+            reason_code: "planning_started".to_owned(),
+            schema_version: TaskStateChangedPayloadSchemaVersion,
+            task_id: task_uuid.to_string(),
+            task_revision: 2,
+            to_status: TaskStatus::Planned,
+        })),
     }
 }
 
-fn test_aggregate_uuid(aggregate_id: &str, _fallback_number: u32) -> String {
-    uuid::Uuid::parse_str(aggregate_id)
-        .map(|id| id.to_string())
-        .unwrap_or_else(|_| {
-            let mut hash = 0_u128;
-            for byte in aggregate_id.bytes() {
-                hash = hash.wrapping_mul(257).wrapping_add(u128::from(byte));
-            }
-            uuid::Uuid::from_u128(
-                0x1000_0000_0000_4000_8000_0000_0000_0000 | (hash & 0xffff_ffff_ffff),
-            )
-            .to_string()
-        })
+fn test_aggregate_uuid(aggregate_id: &str, _fallback_number: u32) -> Uuid {
+    Uuid::parse_str(aggregate_id).unwrap_or_else(|_| {
+        let mut hash = 0_u128;
+        for byte in aggregate_id.bytes() {
+            hash = hash.wrapping_mul(257).wrapping_add(u128::from(byte));
+        }
+        Uuid::from_u128(0x1000_0000_0000_4000_8000_0000_0000_0000 | (hash & 0xffff_ffff_ffff))
+    })
 }
 
 fn rate_request<'a>(

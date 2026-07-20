@@ -1,10 +1,13 @@
 use super::*;
 use chrono::{TimeZone, Utc};
-use kernel_contracts::{CausationRef, CausationRefKind, EventEnvelopeType};
-use serde_json::json;
+use kernel_contracts::{
+    CausationRefV2, EventEnvelopeV2Payload, TaskCreatedPayload, TaskCreatedPayloadProposer,
+    TaskCreatedPayloadSchemaVersion, TaskStatus,
+};
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
+use uuid::Uuid;
 
 struct SavepointDatabase {
     _directory: TempDir,
@@ -34,7 +37,7 @@ fn release_failure_poison_prevents_commit_even_when_caller_swallows_error() {
     let result = store.with_write_transaction(|transaction| {
         transaction.inject_savepoint_failure_for_test(SavepointFailureForTest::Release);
         let error = transaction
-            .append_legacy_event_v1(event(1))
+            .append_active_event_v2(event(1))
             .expect_err("release failure");
         assert_eq!(error.code, StoreErrorCode::InternalStoreError);
         Ok(())
@@ -107,29 +110,26 @@ fn outer_rollback_failure_marks_store_unhealthy() {
     );
 }
 
-fn event(number: u32) -> PendingLegacyEventV1 {
-    let task_id = format!("10000000-0000-4000-8000-{number:012}");
+fn event(number: u32) -> PendingActiveEventV2 {
+    let task_id = Uuid::from_u128(0x1000_0000_0000_4000_8000_0000_0000_0000 + number as u128);
     let instant = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, number).unwrap();
-    PendingLegacyEventV1 {
-        event_id: format!("20000000-0000-4000-8000-{number:012}"),
-        event_type: EventEnvelopeType::TaskCreated,
-        aggregate_type: "task".to_owned(),
-        aggregate_id: task_id.clone(),
+    PendingActiveEventV2 {
+        event_id: Uuid::from_u128(0x2000_0000_0000_4000_8000_0000_0000_0000 + number as u128),
+        aggregate_id: EventAggregateId::Task(task_id),
         occurred_at: instant,
-        causation_ref: CausationRef {
-            kind: CausationRefKind::CommandRequest,
+        causation_ref: CausationRefV2::CommandRequest {
             id: "30000000-0000-4000-8000-000000000001".to_owned(),
         },
         correlation_id: "savepoint-correlation".to_owned(),
         dedup_key: format!("savepoint-dedup-{number}"),
-        payload: json!({
-            "schema_version": 1,
-            "task_id": task_id,
-            "status": "candidate",
-            "proposer": "user",
-            "goal": "savepoint test",
-            "task_revision": 1,
-            "created_at": instant.to_rfc3339(),
-        }),
+        payload: EventEnvelopeV2Payload::TaskCreated(Box::new(TaskCreatedPayload {
+            created_at: instant.to_rfc3339(),
+            goal: "savepoint test".to_owned(),
+            proposer: TaskCreatedPayloadProposer::User,
+            schema_version: TaskCreatedPayloadSchemaVersion,
+            status: TaskStatus::Candidate,
+            task_id: task_id.to_string(),
+            task_revision: 1,
+        })),
     }
 }

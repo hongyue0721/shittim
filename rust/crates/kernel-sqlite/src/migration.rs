@@ -1,7 +1,6 @@
 //! Embedded, ordered, checksum-protected SQLite migrations.
 
 use crate::{StoreError, StoreErrorCode};
-use kernel_contracts::{canonical_json_string, CausationRef, CausationRefKind};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -17,6 +16,11 @@ const MIGRATION_0004_ASSET_PATH: &str =
 const MIGRATION_0004_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
 const MIGRATION_0004_IMPLEMENTATION_ID: &str =
     "kernel_sqlite::migration::root_task_create_v2_ddl_only_v1";
+const MIGRATION_0005_ASSET_PATH: &str =
+    "rust/crates/kernel-sqlite/migrations/0005_drop_v1_business_tables.sql";
+const MIGRATION_0005_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
+const MIGRATION_0005_IMPLEMENTATION_ID: &str =
+    "kernel_sqlite::migration::drop_v1_business_tables_ddl_only_v1";
 
 #[derive(Debug, Clone, Copy)]
 struct LegacySqlMigration {
@@ -105,6 +109,18 @@ const MIGRATIONS: &[MigrationDefinition] = &[
         },
         phases: DescriptorPhaseSet::SchemaOnly,
     }),
+    MigrationDefinition::DescriptorV1(DescriptorV1Migration {
+        version: 5,
+        name: "drop_v1_business_tables",
+        asset_path: MIGRATION_0005_ASSET_PATH,
+        sql: include_bytes!("../migrations/0005_drop_v1_business_tables.sql"),
+        transform: TransformIdentity {
+            algorithm_id: MIGRATION_0005_ALGORITHM_ID,
+            version: 1,
+            implementation_id: MIGRATION_0005_IMPLEMENTATION_ID,
+        },
+        phases: DescriptorPhaseSet::SchemaOnly,
+    }),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,6 +159,47 @@ pub(crate) fn apply_migrations(connection: &Connection) -> Result<(), StoreError
     for migration in MIGRATIONS {
         if !is_applied(connection, migration.version())? {
             apply_one(connection, *migration)?;
+        }
+    }
+    Ok(())
+}
+
+/// After migrations, refuse any database that still carries v1 business facts.
+///
+/// Stable code is [`StoreErrorCode::StoredDataInvalid`]; message is the
+/// reinitialize-required diagnostic. Kernel never auto-wipes or upgrades those rows.
+pub(crate) fn reject_legacy_v1_business_data(connection: &Connection) -> Result<(), StoreError> {
+    if table_exists(connection, "outbox")? {
+        let legacy_outbox: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM outbox WHERE schema_version = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(migration_error)?;
+        if legacy_outbox != 0 {
+            return Err(reinitialize_required(
+                "database contains legacy Outbox schema_version=1 rows",
+            ));
+        }
+    }
+    for (table, label) in [
+        ("content_origins", "legacy content_origins rows"),
+        ("audit_records", "legacy audit_records rows"),
+        (
+            "task_create_idempotency",
+            "legacy task_create_idempotency rows",
+        ),
+    ] {
+        if table_exists(connection, table)? {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .map_err(migration_error)?;
+            if count != 0 {
+                return Err(reinitialize_required(&format!("database contains {label}")));
+            }
         }
     }
     Ok(())
@@ -289,6 +346,14 @@ fn validate_descriptor_migration(migration: DescriptorV1Migration) -> Result<(),
                 && migration.transform.implementation_id == MIGRATION_0004_IMPLEMENTATION_ID
                 && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
         }
+        5 => {
+            migration.name == "drop_v1_business_tables"
+                && migration.asset_path == MIGRATION_0005_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0005_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0005_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
+        }
         _ => false,
     };
     if !accepted {
@@ -332,14 +397,7 @@ fn descriptor_bytes(migration: DescriptorV1Migration) -> Result<Vec<u8>, StoreEr
             "migration descriptor serialization failed",
         )
     })?;
-    let mut bytes = canonical_json_string(&value)
-        .map_err(|_| {
-            StoreError::new(
-                StoreErrorCode::MigrationFailed,
-                "migration descriptor canonicalization failed",
-            )
-        })?
-        .into_bytes();
+    let mut bytes = canonical_json_string_for_descriptor(&value)?;
     bytes.push(b'\n');
     Ok(bytes)
 }
@@ -428,10 +486,22 @@ fn apply_descriptor_v1(
             execute_phase(connection, &phases, "table_swap")?;
             validate_versioned_outbox(connection)?;
         }
-        DescriptorPhaseSet::SchemaOnly => {
-            execute_phase(connection, &phases, "schema")?;
-            validate_root_task_create_v2_schema(connection)?;
-        }
+        DescriptorPhaseSet::SchemaOnly => match migration.version {
+            4 => {
+                execute_phase(connection, &phases, "schema")?;
+                validate_root_task_create_v2_schema(connection)?;
+            }
+            5 => {
+                refuse_nonempty_v1_business_tables(connection)?;
+                execute_phase(connection, &phases, "schema")?;
+                validate_v1_business_tables_dropped(connection)?;
+            }
+            _ => {
+                return Err(migration_drift(
+                    "descriptor schema-only migration version is not accepted",
+                ));
+            }
+        },
     }
     let hash = descriptor_hash(migration)?;
     connection
@@ -546,6 +616,77 @@ fn validate_root_task_create_v2_schema(connection: &Connection) -> Result<(), St
     Ok(())
 }
 
+fn refuse_nonempty_v1_business_tables(connection: &Connection) -> Result<(), StoreError> {
+    for (table, label) in [
+        ("content_origins", "legacy content_origins rows"),
+        (
+            "content_origin_parent_refs",
+            "legacy content_origin_parent_refs rows",
+        ),
+        ("audit_records", "legacy audit_records rows"),
+        (
+            "task_create_idempotency",
+            "legacy task_create_idempotency rows",
+        ),
+    ] {
+        if !table_exists(connection, table)? {
+            continue;
+        }
+        let count: i64 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .map_err(migration_error)?;
+        if count != 0 {
+            return Err(reinitialize_required(&format!(
+                "migration 0005 refused non-empty {label}"
+            )));
+        }
+    }
+    if table_exists(connection, "outbox")? {
+        let legacy_outbox: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM outbox WHERE schema_version = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(migration_error)?;
+        if legacy_outbox != 0 {
+            return Err(reinitialize_required(
+                "migration 0005 refused Outbox schema_version=1 rows",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_v1_business_tables_dropped(connection: &Connection) -> Result<(), StoreError> {
+    for table in [
+        "content_origins",
+        "content_origin_parent_refs",
+        "audit_records",
+        "task_create_idempotency",
+    ] {
+        if table_exists(connection, table)? {
+            return Err(migration_drift(
+                "migration 0005 did not drop all legacy v1 business tables",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreError> {
+    let count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name = ?1",
+            [table],
+            |row| row.get(0),
+        )
+        .map_err(migration_error)?;
+    Ok(count == 1)
+}
+
 fn table_has_foreign_key(
     connection: &Connection,
     table: &str,
@@ -576,139 +717,30 @@ fn execute_phase(
         .map_err(migration_error)
 }
 
-/// Exact migration 0003 transformation algorithm implementation.
+/// Migration 0003 shape upgrade for the empty fresh-baseline Outbox only.
+///
+/// Descriptor identity is intentionally stable: algorithm_id remains
+/// `shittim.kernel-sqlite.outbox-v1-to-versioned-v1` / version `1` /
+/// `kernel_sqlite::migration::outbox_v1_to_versioned_v1` so applied ledger
+/// descriptor_hash continues to match this binary. ADR-0009 changed only the
+/// runtime semantics of that same identity: non-empty pre-0003 Outbox rows are
+/// refused (reinitialize-required). The replacement table is still created and
+/// swapped so the live schema is the versioned shape; no v1 business facts are
+/// transformed or preserved.
 fn outbox_v1_to_versioned_v1(connection: &Connection) -> Result<(), StoreError> {
-    #[derive(Debug)]
-    struct LegacyRow {
-        position: i64,
-        event_id: String,
-        event_type: String,
-        schema_version: i64,
-        aggregate_type: String,
-        aggregate_id: String,
-        sequence: i64,
-        occurred_at: String,
-        causation_kind: String,
-        causation_id: String,
-        correlation_id: String,
-        dedup_key: String,
-        payload_json: String,
-        delivered_at: Option<String>,
-    }
-
-    let rows = {
-        let mut statement = connection
-            .prepare(
-                "SELECT outbox_position, event_id, event_type, schema_version, aggregate_type, \
-                        aggregate_id, sequence, occurred_at, causation_kind, causation_id, \
-                        correlation_id, dedup_key, payload_json, delivered_at \
-                 FROM outbox ORDER BY outbox_position",
-            )
-            .map_err(migration_error)?;
-        let mapped = statement
-            .query_map([], |row| {
-                Ok(LegacyRow {
-                    position: row.get(0)?,
-                    event_id: row.get(1)?,
-                    event_type: row.get(2)?,
-                    schema_version: row.get(3)?,
-                    aggregate_type: row.get(4)?,
-                    aggregate_id: row.get(5)?,
-                    sequence: row.get(6)?,
-                    occurred_at: row.get(7)?,
-                    causation_kind: row.get(8)?,
-                    causation_id: row.get(9)?,
-                    correlation_id: row.get(10)?,
-                    dedup_key: row.get(11)?,
-                    payload_json: row.get(12)?,
-                    delivered_at: row.get(13)?,
-                })
-            })
-            .map_err(migration_error)?;
-        mapped
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(migration_error)?
-    };
-
-    for row in &rows {
-        let payload = crate::outbox::decode_legacy_storage_parts(
-            row.position,
-            &row.event_id,
-            &row.event_type,
-            row.schema_version,
-            &row.aggregate_type,
-            &row.aggregate_id,
-            row.sequence,
-            &row.occurred_at,
-            &row.causation_kind,
-            &row.causation_id,
-            &row.correlation_id,
-            &row.dedup_key,
-            &row.payload_json,
-            row.delivered_at.as_deref(),
-        )?;
-        let causation = CausationRef {
-            kind: match row.causation_kind.as_str() {
-                "command_request" => CausationRefKind::CommandRequest,
-                "event" => CausationRefKind::Event,
-                _ => return Err(stored_invalid()),
-            },
-            id: row.causation_id.clone(),
-        };
-        let causation_value = serde_json::to_value(&causation).map_err(|_| stored_invalid())?;
-        let causation_json =
-            canonical_json_string(&causation_value).map_err(|_| stored_invalid())?;
-        connection
-            .execute(
-                "INSERT INTO outbox_versioned_replacement(\
-                    outbox_position, event_id, event_type, schema_version, aggregate_type, \
-                    aggregate_id, sequence, occurred_at, causation_json, correlation_id, \
-                    dedup_key, payload_json, delivered_at\
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                params![
-                    row.position,
-                    row.event_id,
-                    row.event_type,
-                    row.schema_version,
-                    row.aggregate_type,
-                    row.aggregate_id,
-                    row.sequence,
-                    row.occurred_at,
-                    causation_json,
-                    row.correlation_id,
-                    row.dedup_key,
-                    row.payload_json,
-                    row.delivered_at,
-                ],
-            )
-            .map_err(migration_error)?;
-        let readback = crate::outbox::decode_versioned_row_at(
-            connection,
-            "outbox_versioned_replacement",
-            row.position,
-        )?
-        .ok_or_else(stored_invalid)?;
-        if readback != payload {
-            return Err(stored_invalid());
-        }
-    }
-
-    let copied: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM outbox_versioned_replacement",
-            [],
-            |row| row.get(0),
-        )
+    let row_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM outbox", [], |row| row.get(0))
         .map_err(migration_error)?;
-    if copied != rows.len() as i64 {
-        return Err(stored_invalid());
+    if row_count != 0 {
+        return Err(reinitialize_required(
+            "migration 0003 refused non-empty legacy Outbox; reinitialize-required",
+        ));
     }
-    validate_sequence_closure(connection, "outbox_versioned_replacement")?;
-    let next_sequence = rows.last().map_or(1, |row| row.position + 1);
+    // Preserve AUTOINCREMENT continuity for the empty table (seq stays absent/0).
     connection
         .execute(
-            "INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES ('outbox_versioned_replacement', ?1)",
-            [next_sequence - 1],
+            "INSERT OR REPLACE INTO sqlite_sequence(name, seq) VALUES ('outbox_versioned_replacement', 0)",
+            [],
         )
         .map_err(migration_error)?;
     Ok(())
@@ -793,6 +825,16 @@ fn checksum_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+fn canonical_json_string_for_descriptor(value: &serde_json::Value) -> Result<Vec<u8>, StoreError> {
+    let text = kernel_contracts::canonical_json_string(value).map_err(|_| {
+        StoreError::new(
+            StoreErrorCode::MigrationFailed,
+            "migration descriptor canonicalization failed",
+        )
+    })?;
+    Ok(text.into_bytes())
+}
+
 fn migration_error(error: rusqlite::Error) -> StoreError {
     StoreError::sqlite(error, StoreErrorCode::MigrationFailed)
 }
@@ -804,7 +846,14 @@ fn migration_drift(message: &'static str) -> StoreError {
 fn stored_invalid() -> StoreError {
     StoreError::new(
         StoreErrorCode::StoredDataInvalid,
-        "legacy Outbox data failed migration integrity validation",
+        "Outbox schema failed migration integrity validation",
+    )
+}
+
+fn reinitialize_required(detail: &str) -> StoreError {
+    StoreError::new(
+        StoreErrorCode::StoredDataInvalid,
+        format!("reinitialize-required: {detail}"),
     )
 }
 
@@ -819,6 +868,16 @@ pub(crate) fn create_v2_database_for_test(connection: &Connection) -> Result<(),
     ensure_migration_table(connection)?;
     apply_one(connection, MIGRATIONS[0])?;
     apply_one(connection, MIGRATIONS[1])
+}
+
+/// Applies migrations 0001–0004 so tests can seed dead v1 tables immediately before 0005.
+#[cfg(test)]
+pub(crate) fn create_through_0004_for_test(connection: &Connection) -> Result<(), StoreError> {
+    ensure_migration_table(connection)?;
+    apply_one(connection, MIGRATIONS[0])?;
+    apply_one(connection, MIGRATIONS[1])?;
+    apply_one(connection, MIGRATIONS[2])?;
+    apply_one(connection, MIGRATIONS[3])
 }
 
 #[cfg(test)]

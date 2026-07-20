@@ -16,7 +16,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 use uuid::Uuid;
 
-const V2_FACT_TABLES: [&str; 10] = [
+const V2_FACT_TABLES: [&str; 9] = [
     "content_origins_v2",
     "content_origin_v2_parent_refs",
     "task_scopes",
@@ -26,7 +26,6 @@ const V2_FACT_TABLES: [&str; 10] = [
     "audit_records_v2",
     "root_task_create_idempotency_v2",
     "outbox",
-    "content_origins",
 ];
 
 struct RootV2Database {
@@ -55,7 +54,7 @@ impl RootV2Database {
 }
 
 #[test]
-fn migration_0004_creates_root_v2_tables_and_preserves_v1_tables() {
+fn migration_0005_fresh_baseline_has_v2_tables_and_drops_v1_dead_tables() {
     let database = RootV2Database::new();
     database.open();
     let connection = database.raw();
@@ -64,15 +63,13 @@ fn migration_0004_creates_root_v2_tables_and_preserves_v1_tables() {
             row.get(0)
         })
         .expect("version");
-    assert_eq!(version, 4);
+    assert_eq!(version, 5);
     for table in [
         "content_origins_v2",
         "content_origin_v2_parent_refs",
         "task_creation_provenances",
         "audit_records_v2",
         "root_task_create_idempotency_v2",
-        "content_origins",
-        "task_create_idempotency",
         "tasks",
         "task_scopes",
     ] {
@@ -84,6 +81,21 @@ fn migration_0004_creates_root_v2_tables_and_preserves_v1_tables() {
             )
             .expect("table");
         assert_eq!(count, 1, "missing {table}");
+    }
+    for table in [
+        "content_origins",
+        "content_origin_parent_refs",
+        "task_create_idempotency",
+        "audit_records",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table");
+        assert_eq!(count, 0, "legacy table {table} must be dropped");
     }
 }
 
@@ -144,10 +156,17 @@ fn root_v2_create_atomically_writes_full_bundle_and_readback() {
     );
     assert_eq!(origin.carrier_ref.kind.as_str(), "command_request");
     assert_eq!(origin.carrier_ref.id, command.envelope.request_id);
-    assert!(store
-        .get_content_origin(&expected_origin_id)
-        .expect("legacy origin")
-        .is_none());
+    // Legacy content_origins table is dropped by migration 0005; only v2 remains.
+    let connection = store.lock_connection().expect("connection");
+    let legacy_origin_tables: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'content_origins'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("legacy table probe");
+    assert_eq!(legacy_origin_tables, 0);
+    drop(connection);
 
     let provenance = store
         .get_task_creation_provenance(&expected_provenance)
@@ -198,9 +217,7 @@ fn root_v2_create_atomically_writes_full_bundle_and_readback() {
         .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
         .expect("events");
     assert_eq!(events.len(), 1);
-    let StoredEventEnvelope::ActiveV2(envelope) = &events[0].envelope else {
-        panic!("active v2 envelope required");
-    };
+    let StoredEventEnvelope::ActiveV2(envelope) = &events[0].envelope;
     assert_eq!(envelope.type_, "task.created");
     assert_eq!(envelope.aggregate_type, "task");
     assert_eq!(envelope.aggregate_id, expected_task_id);
@@ -226,7 +243,7 @@ fn root_v2_create_atomically_writes_full_bundle_and_readback() {
     assert_eq!(payload.task_revision, 1);
     assert_eq!(payload.status, TaskStatus::Candidate);
 
-    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1, 0]);
+    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1]);
 }
 
 #[test]
@@ -257,7 +274,7 @@ fn root_v2_idempotent_replay_and_conflict() {
         }
         other => panic!("unexpected {other:?}"),
     }
-    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1, 0]);
+    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1]);
 
     let mut conflict = command.clone();
     conflict.request.goal = "different goal".into();
@@ -268,7 +285,7 @@ fn root_v2_idempotent_replay_and_conflict() {
             .code,
         StoreErrorCode::IdempotencyConflict
     );
-    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1, 0]);
+    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 1, 1, 1]);
 }
 
 #[test]
@@ -284,7 +301,7 @@ fn root_v2_rejects_duplicate_internal_uuid_and_external_collision() {
             .code,
         StoreErrorCode::ContractInvalid
     );
-    assert_fact_counts(&database.raw(), &[0; 10]);
+    assert_fact_counts(&database.raw(), &[0; 9]);
 
     let mut command = basic_command(2);
     command.envelope.request_id = command.allocation.task_id.clone();
@@ -295,7 +312,7 @@ fn root_v2_rejects_duplicate_internal_uuid_and_external_collision() {
             .code,
         StoreErrorCode::ContractInvalid
     );
-    assert_fact_counts(&database.raw(), &[0; 10]);
+    assert_fact_counts(&database.raw(), &[0; 9]);
 }
 
 #[test]
@@ -311,7 +328,7 @@ fn root_v2_parent_origin_not_found_and_rollback_does_not_consume_ids() {
             .code,
         StoreErrorCode::ParentOriginNotFound
     );
-    assert_fact_counts(&database.raw(), &[0; 10]);
+    assert_fact_counts(&database.raw(), &[0; 9]);
     assert_table_count(&database.raw(), "aggregate_event_sequences", 0);
 
     // Retry with valid command reuses sequence zero / position one.
@@ -334,37 +351,25 @@ fn root_v2_does_not_pollute_v1_idempotency_or_origin_tables() {
         .with_write_transaction(|transaction| transaction.create_root_task_v2(basic_command(1)))
         .expect("v2 create");
     let connection = database.raw();
-    assert_table_count(&connection, "content_origins", 0);
-    assert_table_count(&connection, "task_create_idempotency", 0);
+    // migration 0005 drops dead v1 tables on fresh baseline
+    for table in [
+        "content_origins",
+        "task_create_idempotency",
+        "audit_records",
+        "content_origin_parent_refs",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table existence");
+        assert_eq!(count, 0, "legacy table {table} must be absent");
+    }
     assert_table_count(&connection, "content_origins_v2", 1);
     assert_table_count(&connection, "root_task_create_idempotency_v2", 1);
-    assert_table_count(&connection, "audit_records", 0);
     assert_table_count(&connection, "audit_records_v2", 1);
-}
-
-#[test]
-fn root_v2_and_legacy_v1_can_coexist_on_shared_task_tables() {
-    let database = RootV2Database::new();
-    let store = database.open();
-    store
-        .with_write_transaction(|transaction| transaction.create_root_task_v2(basic_command(1)))
-        .expect("v2");
-    let legacy = legacy_command(2);
-    store
-        .with_write_transaction(|transaction| transaction.create_task(legacy.clone()))
-        .expect("v1");
-    assert!(store
-        .get_task(&basic_command(1).allocation.task_id)
-        .expect("v2 task")
-        .is_some());
-    assert!(store
-        .get_task(&legacy.allocation.task_id)
-        .expect("v1 task")
-        .is_some());
-    assert_table_count(&database.raw(), "content_origins", 1);
-    assert_table_count(&database.raw(), "content_origins_v2", 1);
-    assert_table_count(&database.raw(), "tasks", 2);
-    assert_table_count(&database.raw(), "outbox", 2);
 }
 
 #[test]
@@ -448,7 +453,7 @@ fn root_v2_replay_fails_closed_when_audit_missing() {
         StoreErrorCode::StoredDataInvalid
     );
     // Replay failure must not write new facts.
-    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 0, 1, 1, 0]);
+    assert_fact_counts(&database.raw(), &[1, 0, 1, 1, 1, 1, 0, 1, 1]);
 }
 
 #[test]
@@ -677,7 +682,7 @@ fn root_v2_post_append_bundle_failure_rolls_back_sequence_and_position() {
             .code,
         StoreErrorCode::StoredDataInvalid
     );
-    assert_fact_counts(&database.raw(), &[0; 10]);
+    assert_fact_counts(&database.raw(), &[0; 9]);
     assert_table_count(&database.raw(), "aggregate_event_sequences", 0);
 
     // Successful retry must still own sequence 0 / position 1.
@@ -689,9 +694,7 @@ fn root_v2_post_append_bundle_failure_rolls_back_sequence_and_position() {
         .expect("events");
     assert_eq!(events[0].envelope.sequence(), 0);
     assert_eq!(events[0].envelope.outbox_position(), "1");
-    let StoredEventEnvelope::ActiveV2(envelope) = &events[0].envelope else {
-        panic!("active v2 envelope required");
-    };
+    let StoredEventEnvelope::ActiveV2(envelope) = &events[0].envelope;
     assert_eq!(envelope.event_id, command.allocation.task_created_event_id);
 }
 
@@ -709,7 +712,7 @@ fn root_v2_invalid_scope_pattern_is_caller_invalid_and_rolls_back() {
             .code,
         StoreErrorCode::InvalidScopePattern
     );
-    assert_fact_counts(&database.raw(), &[0; 10]);
+    assert_fact_counts(&database.raw(), &[0; 9]);
 }
 
 #[test]
@@ -731,7 +734,7 @@ fn root_v2_subsecond_accepted_at_is_contract_invalid() {
     );
 }
 
-fn assert_fact_counts(connection: &Connection, expected: &[i64; 10]) {
+fn assert_fact_counts(connection: &Connection, expected: &[i64; 9]) {
     for (table, expected_count) in V2_FACT_TABLES.into_iter().zip(expected) {
         assert_table_count(connection, table, *expected_count);
     }
@@ -814,61 +817,6 @@ fn actor() -> Actor {
         revision: 1,
         schema_version: ActorSchemaVersion,
         source: "actor-source://local/desktop".into(),
-    }
-}
-
-fn legacy_command(number: u32) -> TaskCreateCommand {
-    let request: kernel_contracts::TaskCreateRequest = serde_json::from_value(json!({
-        "schema_version": 1,
-        "proposer": "user",
-        "goal": format!("legacy goal {number}"),
-        "constraints": ["keep"],
-        "success_criteria": ["done"],
-        "risk_hint": null,
-        "capability_hints": ["filesystem.read"],
-        "task_scope": {
-            "schema_version": 1,
-            "resource_patterns": ["https://example.com/legacy/**"],
-            "exclusions": [],
-            "allowed_capability_hints": ["filesystem.read"],
-            "expires_at": null
-        },
-        "delegation_ref": null,
-        "parent_task_id": null,
-        "origin": {
-            "schema_version": 1,
-            "kind": "user_input",
-            "source_uri": null,
-            "upstream_stable_id": null,
-            "producer_ref": {"kind": "actor", "id": "actor"},
-            "parent_origin_refs": []
-        }
-    }))
-    .expect("legacy request");
-    TaskCreateCommand {
-        envelope: TaskCreateEnvelopeFacts {
-            actor: actor(),
-            entry_point: EntryPoint::LocalDesktop,
-            request_id: format!("11000000-0000-4000-8000-{number:012}"),
-            envelope_task_id: None,
-            context: None,
-            expected_revision: None,
-            idempotency_key: format!("legacy-{number}"),
-        },
-        request,
-        allocation: TaskCreateAllocation {
-            task_id: format!("01000000-0000-4000-8000-{number:012}"),
-            task_scope_id: format!("21000000-0000-4000-8000-{number:012}"),
-            content_origin_id: format!("31000000-0000-4000-8000-{number:012}"),
-            receipt_id: format!("41000000-0000-4000-8000-{number:012}"),
-            audit_id: format!("51000000-0000-4000-8000-{number:012}"),
-            event_id: format!("61000000-0000-4000-8000-{number:012}"),
-            correlation_id: format!("correlation-legacy-{number}"),
-            dedup_key: format!("dedup-legacy-{number}"),
-            accepted_at: Utc
-                .with_ymd_and_hms(2026, 7, 18, 14, 0, number % 60)
-                .unwrap(),
-        },
     }
 }
 

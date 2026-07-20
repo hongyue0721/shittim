@@ -62,8 +62,8 @@ pub trait KernelIdGenerator {
 /// Closed application-backend failure classification for active handlers.
 ///
 /// Active root task.create v2 maps the business subset of §5.7. Legacy
-/// `parent_task_not_found` is not an active create error and is folded to
-/// [`BackendError::Internal`] at the SQLite adapter boundary.
+/// `parent_task_not_found` is not an active create error; the sqlite store code
+/// was removed with the v1 create write path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendError {
     /// Task scope URI normalization failed.

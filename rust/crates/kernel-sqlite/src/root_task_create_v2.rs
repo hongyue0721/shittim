@@ -373,9 +373,7 @@ fn replay_root_v2_if_present(
     let audit = find_root_creation_audit(connection, &task_id, &provenance_id)?
         .ok_or_else(stored_invalid)?;
     let event = find_task_created_event(connection, &task_id)?.ok_or_else(stored_invalid)?;
-    let StoredEventEnvelope::ActiveV2(envelope) = &event.envelope else {
-        return Err(stored_invalid());
-    };
+    let StoredEventEnvelope::ActiveV2(envelope) = &event.envelope;
     validate_created_bundle(
         connection,
         CreatedBundleExpectation {
@@ -868,9 +866,7 @@ fn validate_root_task_created_event(
     task: &TaskSpec,
     refs: RootTaskCreatedEventRefs<'_>,
 ) -> Result<(), StoreError> {
-    let StoredEventEnvelope::ActiveV2(envelope) = &record.envelope else {
-        return Err(stored_invalid());
-    };
+    let StoredEventEnvelope::ActiveV2(envelope) = &record.envelope;
     let EventEnvelopeV2Payload::TaskCreated(payload) = &envelope.payload else {
         return Err(stored_invalid());
     };

@@ -89,9 +89,7 @@ fn sqlite_v2_create_get_and_replay_bind_active_event_audit_and_provenance() {
         .read_after(OutboxCursor::START, PageLimit::new(10).unwrap())
         .unwrap();
     assert_eq!(events.len(), 1);
-    let StoredEventEnvelope::ActiveV2(event) = &events[0].envelope else {
-        panic!("active v2 task.created envelope expected");
-    };
+    let StoredEventEnvelope::ActiveV2(event) = &events[0].envelope;
     assert_eq!(event.event_id, intent_event_id);
     assert_eq!(event.type_, "task.created");
     assert_eq!(event.aggregate_type, "task");
@@ -165,9 +163,9 @@ fn sqlite_v2_create_get_and_replay_bind_active_event_audit_and_provenance() {
         }
         other => panic!("unexpected provenance {other:?}"),
     }
-    // Legacy v1 origin/audit tables must not receive the active create write.
-    assert!(store.get_content_origin(ORIGIN_ID).unwrap().is_none());
-    assert!(store.get_audit(AUDIT_ID).unwrap().is_none());
+    // Legacy v1 origin/audit tables are dropped (migration 0005); active create writes v2 only.
+    assert!(store.get_content_origin_v2(ORIGIN_ID).unwrap().is_some());
+    assert!(store.get_audit_v2(AUDIT_ID).unwrap().is_some());
 
     let get = handle_task_get(
         &get_envelope(&intent_task_id, "2026-07-18T12:00:10Z"),

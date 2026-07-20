@@ -132,8 +132,6 @@ fn map_store_error_code(code: StoreErrorCode) -> BackendError {
         StoreErrorCode::InvalidScopePattern => BackendError::InvalidScopePattern,
         StoreErrorCode::IdempotencyConflict => BackendError::IdempotencyConflict,
         StoreErrorCode::DelegationNotFound => BackendError::DelegationNotFound,
-        // Active root create has no parent_task_id; any residual store code is internal.
-        StoreErrorCode::ParentTaskNotFound => BackendError::Internal,
         StoreErrorCode::ParentOriginNotFound => BackendError::ParentOriginNotFound,
         StoreErrorCode::SqliteBusy => BackendError::SqliteBusy,
         StoreErrorCode::SqliteFull => BackendError::SqliteFull,
@@ -199,7 +197,6 @@ mod tests {
                 StoreErrorCode::DelegationNotFound,
                 BackendError::DelegationNotFound,
             ),
-            (StoreErrorCode::ParentTaskNotFound, BackendError::Internal),
             (
                 StoreErrorCode::ParentOriginNotFound,
                 BackendError::ParentOriginNotFound,

@@ -1,14 +1,14 @@
 //! File-backed SQLite persistence base for the Kernel.
 //!
-//! This crate owns migrations, immutable AuditRecord JSON, atomic Event Outbox allocation,
-//! publisher storage operations, transaction-bound policy rate-limit consumption, the legacy Task
-//! create/get repository, and the active root TaskCreate v2 repository. It does not implement Task
-//! update/list, Action/PermissionDecision repositories, KCP, `agentd`, networking, or a Publisher
-//! loop.
+//! This crate owns migrations, atomic Event Outbox allocation (v2-only), publisher storage
+//! operations, transaction-bound policy rate-limit consumption, strict Task/TaskScope/
+//! ContentOrigin(v2) reads, and the active root TaskCreate v2 repository. Legacy v1 TaskCreate
+//! write, AuditRecord v1 write, and Outbox v1 append were deleted under ADR-0009. It does not
+//! implement Task update/list, Action/PermissionDecision repositories, KCP, `agentd`, networking,
+//! or a Publisher loop.
 
 #![deny(missing_docs)]
 
-mod audit;
 mod config;
 mod error;
 mod migration;
@@ -21,20 +21,16 @@ pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
 pub use outbox::{
     EventAggregateId, MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit,
-    PendingActiveEventV2, PendingLegacyEventV1, StoredEventEnvelope,
+    PendingActiveEventV2, StoredEventEnvelope,
 };
 pub use rate_limit::TransactionRateLimitPort;
 pub use root_task_create_v2::{
     CreateRootTaskV2Result, RootTaskCreateV2Command, RootTaskCreateV2EnvelopeFacts,
 };
-pub use task::{
-    CreateTaskResult, TaskCreateAllocation, TaskCreateCommand, TaskCreateEnvelopeFacts,
-};
 
 use chrono::{DateTime, Utc};
 use kernel_contracts::{
-    AuditRecord, AuditRecordV2, ContentOrigin, ContentOriginV2, TaskCreationProvenanceV1,
-    TaskScope, TaskSpec,
+    AuditRecordV2, ContentOriginV2, TaskCreationProvenanceV1, TaskScope, TaskSpec,
 };
 use rusqlite::Connection;
 use std::cell::Cell;
@@ -65,6 +61,8 @@ impl SqliteStore {
         config::initialize_wal(&connection, config.busy_timeout)?;
         // Non-business write exception: schema bootstrap + pending migration units.
         migration::apply_migrations(&connection)?;
+        // ADR-0009: refuse any remaining v1 business facts after migrations.
+        migration::reject_legacy_v1_business_data(&connection)?;
         Ok(Self {
             connection: Mutex::new(connection),
             healthy: AtomicBool::new(true),
@@ -147,12 +145,6 @@ impl SqliteStore {
         }
     }
 
-    /// Reads an immutable AuditRecord and revalidates its stored JSON contract.
-    pub fn get_audit(&self, id: &str) -> Result<Option<AuditRecord>, StoreError> {
-        let connection = self.lock_connection()?;
-        audit::get_audit(&connection, id)
-    }
-
     /// Reads a Task and validates its ContentOrigin/TaskScope relation closure.
     pub fn get_task(&self, id: &str) -> Result<Option<TaskSpec>, StoreError> {
         let connection = self.lock_connection()?;
@@ -163,12 +155,6 @@ impl SqliteStore {
     pub fn get_task_scope(&self, id: &str) -> Result<Option<TaskScope>, StoreError> {
         let connection = self.lock_connection()?;
         task::get_task_scope(&connection, id)
-    }
-
-    /// Reads a legacy ContentOrigin v1 and validates ordered parent mirrors and parent existence.
-    pub fn get_content_origin(&self, id: &str) -> Result<Option<ContentOrigin>, StoreError> {
-        let connection = self.lock_connection()?;
-        task::get_content_origin(&connection, id)
     }
 
     /// Reads an active ContentOriginV2 and validates ordered parent mirrors and parent existence.
@@ -291,19 +277,6 @@ pub struct WriteTransaction<'connection> {
 }
 
 impl<'connection> WriteTransaction<'connection> {
-    /// Validates, canonicalizes, and inserts an immutable AuditRecord.
-    pub fn append_audit(&self, record: &AuditRecord) -> Result<(), StoreError> {
-        audit::insert_audit(self.connection, record)
-    }
-
-    /// Allocates aggregate sequence/global position for a retained v1 event.
-    pub fn append_legacy_event_v1(
-        &self,
-        event: PendingLegacyEventV1,
-    ) -> Result<OutboxRecord, StoreError> {
-        outbox::append_legacy_event_v1(self, event)
-    }
-
     /// Derives active type/aggregate facts and appends an EventEnvelope v2.
     pub fn append_active_event_v2(
         &self,
@@ -435,7 +408,5 @@ mod outbox_tests;
 mod root_task_create_v2_tests;
 #[cfg(test)]
 mod savepoint_tests;
-#[cfg(test)]
-mod task_tests;
 #[cfg(test)]
 mod tests;

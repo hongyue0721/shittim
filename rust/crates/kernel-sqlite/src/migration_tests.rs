@@ -81,84 +81,42 @@ fn descriptor_v1_bytes_are_jcs_lf_and_hash_matches_ledger() {
 }
 
 #[test]
-fn migration_0003_preserves_legacy_bytes_positions_delivery_and_sequence() {
+fn migration_0003_refuses_nonempty_legacy_outbox_with_reinitialize_required() {
     let database = MigrationDatabase::new();
     let connection = database.raw();
     migration::create_v2_database_for_test(&connection).expect("v2 database");
-    let event = legacy_event(1, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
-    let expected =
-        outbox::append_legacy_v1_storage_for_test(&connection, event).expect("legacy append");
     connection
         .execute(
-            "UPDATE outbox SET delivered_at = ?1 WHERE outbox_position = 1",
-            ["2026-01-01T00:00:05+00:00"],
+            "INSERT INTO outbox(\
+                event_id, event_type, schema_version, aggregate_type, aggregate_id, sequence, \
+                occurred_at, causation_kind, causation_id, correlation_id, dedup_key, payload_json\
+             ) VALUES (?1, 'task.created', 1, 'task', ?2, 0, ?3, 'command_request', ?4, 'c', 'd', ?5)",
+            rusqlite::params![
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "2026-01-01T00:00:00+00:00",
+                "11111111-1111-4111-8111-111111111111",
+                r#"{"schema_version":1,"task_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","status":"candidate","proposer":"user","goal":"legacy","task_revision":1,"created_at":"2026-01-01T00:00:00+00:00"}"#,
+            ],
         )
-        .expect("delivery");
-    let payload_before: String = connection
-        .query_row("SELECT payload_json FROM outbox", [], |row| row.get(0))
-        .expect("payload before");
+        .expect("seed legacy outbox row");
     drop(connection);
 
-    let store = SqliteStore::open(&database.path, database.config).expect("upgrade");
-    let record = store
-        .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
-        .expect("read")
-        .pop()
-        .expect("row");
-    assert_eq!(record.envelope, expected.envelope);
-    assert_eq!(
-        record.delivered_at,
-        Some(Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 5).unwrap())
+    let error = SqliteStore::open(&database.path, database.config).expect_err("must refuse");
+    assert_eq!(error.code, StoreErrorCode::StoredDataInvalid);
+    assert!(
+        error.message.contains("reinitialize-required"),
+        "message={}",
+        error.message
     );
-    let connection = database.raw();
-    let (payload_after, causation, position, sequence): (String, String, i64, i64) = connection
-        .query_row(
-            "SELECT payload_json, causation_json, outbox_position, sequence FROM outbox",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )
-        .expect("post migration row");
-    assert_eq!(payload_after, payload_before);
-    assert_eq!(
-        causation,
-        r#"{"id":"11111111-1111-4111-8111-111111111111","kind":"command_request"}"#
-    );
-    assert_eq!((position, sequence), (1, 0));
-    let sqlite_sequence: i64 = connection
-        .query_row(
-            "SELECT seq FROM sqlite_sequence WHERE name = 'outbox'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("sqlite sequence");
-    assert_eq!(sqlite_sequence, 1);
-}
 
-#[test]
-fn migration_corruption_rolls_back_ledger_columns_replacement_and_row() {
-    let database = MigrationDatabase::new();
     let connection = database.raw();
-    migration::create_v2_database_for_test(&connection).expect("v2 database");
-    outbox::append_legacy_v1_storage_for_test(
-        &connection,
-        legacy_event(1, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
-    )
-    .expect("legacy append");
-    connection
-        .execute(
-            "UPDATE outbox SET payload_json = ?1 WHERE outbox_position = 1",
-            [r#"{"schema_version":1}"#],
-        )
-        .expect("corrupt payload");
-    drop(connection);
-
-    assert_eq!(
-        SqliteStore::open(&database.path, database.config)
-            .expect_err("migration must fail")
-            .code,
-        StoreErrorCode::StoredDataInvalid
-    );
-    let connection = database.raw();
+    let migration_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })
+        .expect("migration count");
+    assert_eq!(migration_count, 2);
     let columns: Vec<String> = {
         let mut statement = connection
             .prepare("PRAGMA table_info(schema_migrations)")
@@ -170,21 +128,362 @@ fn migration_corruption_rolls_back_ledger_columns_replacement_and_row() {
             .expect("collect")
     };
     assert!(!columns.iter().any(|column| column == "descriptor_hash"));
-    let migration_count: i64 = connection
-        .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
-            row.get(0)
+}
+
+#[test]
+fn migration_0003_empty_outbox_upgrades_and_fresh_baseline_reaches_0005() {
+    let database = MigrationDatabase::new();
+    let connection = database.raw();
+    migration::create_v2_database_for_test(&connection).expect("v2 database");
+    drop(connection);
+
+    let store = SqliteStore::open(&database.path, database.config).expect("upgrade empty");
+    let connection = database.raw();
+    let versions: Vec<i64> = {
+        let mut statement = connection
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .expect("versions");
+        statement
+            .query_map([], |row| row.get(0))
+            .expect("rows")
+            .collect::<Result<_, _>>()
+            .expect("collect")
+    };
+    assert_eq!(versions, [1, 2, 3, 4, 5]);
+    for table in [
+        "content_origins",
+        "content_origin_parent_refs",
+        "audit_records",
+        "task_create_idempotency",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table count");
+        assert_eq!(count, 0, "legacy table {table} must be dropped");
+    }
+    for table in [
+        "content_origins_v2",
+        "audit_records_v2",
+        "root_task_create_idempotency_v2",
+        "task_creation_provenances",
+        "tasks",
+        "task_scopes",
+        "outbox",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .expect("table count");
+        assert_eq!(count, 1, "missing table {table}");
+    }
+    drop(connection);
+
+    let task_id = Uuid::from_u128(0x1000_0000_0000_4000_8000_0000_0000_0001);
+    let record = store
+        .with_write_transaction(|transaction| {
+            transaction.append_active_event_v2(active_task_created(task_id, 1))
         })
-        .expect("migration count");
-    assert_eq!(migration_count, 2);
-    let replacement_count: i64 = connection
+        .expect("v2-only append after upgrade");
+    assert_eq!(record.envelope.sequence(), 0);
+    assert_eq!(record.envelope.outbox_position(), "1");
+}
+
+#[test]
+fn open_refuses_schema_version_1_outbox_rows_as_reinitialize_required() {
+    let database = MigrationDatabase::new();
+    SqliteStore::open(&database.path, database.config).expect("fresh open");
+    database
+        .raw()
+        .execute(
+            "INSERT INTO outbox(\
+                event_id, event_type, schema_version, aggregate_type, aggregate_id, sequence, \
+                occurred_at, causation_json, correlation_id, dedup_key, payload_json\
+             ) VALUES (?1, 'task.created', 1, 'task', ?2, 0, ?3, ?4, 'c', 'd', ?5)",
+            rusqlite::params![
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "2026-01-01T00:00:00+00:00",
+                r#"{"id":"11111111-1111-4111-8111-111111111111","kind":"command_request"}"#,
+                r#"{"created_at":"2026-01-01T00:00:00+00:00","goal":"legacy","proposer":"user","schema_version":1,"status":"candidate","task_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","task_revision":1}"#,
+            ],
+        )
+        .expect("force schema_version=1 row past CHECK if possible or fail");
+    // If CHECK rejected the insert, re-open with PRAGMA ignore.
+    let inserted: i64 = database
+        .raw()
         .query_row(
-            "SELECT COUNT(*) FROM sqlite_master \
-             WHERE type = 'table' AND name = 'outbox_versioned_replacement'",
+            "SELECT COUNT(*) FROM outbox WHERE schema_version = 1",
             [],
             |row| row.get(0),
         )
-        .expect("replacement count");
-    assert_eq!(replacement_count, 0);
+        .expect("count");
+    if inserted == 0 {
+        database
+            .raw()
+            .execute_batch(
+                "PRAGMA ignore_check_constraints=ON; \
+                 INSERT INTO outbox(\
+                    event_id, event_type, schema_version, aggregate_type, aggregate_id, sequence, \
+                    occurred_at, causation_json, correlation_id, dedup_key, payload_json\
+                 ) VALUES (\
+                    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','task.created',1,'task',\
+                    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',0,'2026-01-01T00:00:00+00:00',\
+                    '{\"id\":\"11111111-1111-4111-8111-111111111111\",\"kind\":\"command_request\"}',\
+                    'c','d',\
+                    '{\"created_at\":\"2026-01-01T00:00:00+00:00\",\"goal\":\"legacy\",\"proposer\":\"user\",\"schema_version\":1,\"status\":\"candidate\",\"task_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"task_revision\":1}'\
+                 ); \
+                 PRAGMA ignore_check_constraints=OFF;",
+            )
+            .expect("force insert");
+    }
+    let error = SqliteStore::open(&database.path, database.config).expect_err("refuse v1 outbox");
+    assert_eq!(error.code, StoreErrorCode::StoredDataInvalid);
+    assert!(error.message.contains("reinitialize-required"));
+}
+
+#[test]
+fn migration_0005_refuses_nonempty_content_origins_and_parent_refs() {
+    assert_0005_refuses_nonempty_legacy_table(
+        "content_origins",
+        |connection| {
+            // parent_refs must be inserted before the origin row (late-insert trigger).
+            connection
+                .execute_batch("PRAGMA foreign_keys=OFF")
+                .expect("fk off");
+            connection
+                .execute(
+                    "INSERT INTO content_origin_parent_refs(origin_id, ordinal, parent_origin_id) \
+                     VALUES (?1, 0, ?2)",
+                    rusqlite::params![
+                        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                    ],
+                )
+                .expect("seed parent_refs");
+            connection
+                .execute(
+                    "INSERT INTO content_origins(record_json) VALUES (?1)",
+                    [r#"{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","schema_version":1}"#],
+                )
+                .expect("seed content_origins");
+        },
+        "legacy content_origins",
+    );
+}
+
+#[test]
+fn migration_0005_refuses_nonempty_audit_records() {
+    assert_0005_refuses_nonempty_legacy_table(
+        "audit_records",
+        |connection| {
+            connection
+                .execute(
+                    "INSERT INTO audit_records(record_json) VALUES (?1)",
+                    [r#"{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","schema_version":1}"#],
+                )
+                .expect("seed audit_records");
+        },
+        "legacy audit_records",
+    );
+}
+
+#[test]
+fn migration_0005_refuses_nonempty_task_create_idempotency() {
+    assert_0005_refuses_nonempty_legacy_table(
+        "task_create_idempotency",
+        |connection| {
+            // Seed after 0004 so the rebuilt table is present and 0005 is the next unit.
+            connection
+                .execute_batch("PRAGMA foreign_keys=OFF")
+                .expect("fk off");
+            connection
+                .execute(
+                    "INSERT INTO task_create_idempotency(\
+                        projection_json, idempotency_key, projection_hash, created_task_id, accepted_at\
+                     ) VALUES (?1, 'key', ?2, ?3, '2026-01-01T00:00:00+00:00')",
+                    rusqlite::params![
+                        r#"{"actor":{"id":"actor"},"entry_point":"local_desktop","command_type":"task.create"}"#,
+                        "a".repeat(64),
+                        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    ],
+                )
+                .expect("seed task_create_idempotency");
+        },
+        "legacy task_create_idempotency",
+    );
+}
+
+#[test]
+fn open_refuses_nonempty_content_origins_after_0005() {
+    assert_open_refuses_recreated_legacy_table("content_origins", |connection| {
+        connection
+            .execute_batch(
+                "CREATE TABLE content_origins (
+                    record_json TEXT NOT NULL
+                );",
+            )
+            .expect("recreate content_origins");
+        connection
+            .execute(
+                "INSERT INTO content_origins(record_json) VALUES ('legacy-row')",
+                [],
+            )
+            .expect("seed content_origins");
+    });
+}
+
+#[test]
+fn open_refuses_nonempty_audit_records_after_0005() {
+    assert_open_refuses_recreated_legacy_table("audit_records", |connection| {
+        connection
+            .execute_batch(
+                "CREATE TABLE audit_records (
+                    record_json TEXT NOT NULL
+                );",
+            )
+            .expect("recreate audit_records");
+        connection
+            .execute(
+                "INSERT INTO audit_records(record_json) VALUES ('legacy-row')",
+                [],
+            )
+            .expect("seed audit_records");
+    });
+}
+
+#[test]
+fn open_refuses_nonempty_task_create_idempotency_after_0005() {
+    assert_open_refuses_recreated_legacy_table("task_create_idempotency", |connection| {
+        connection
+            .execute_batch(
+                "CREATE TABLE task_create_idempotency (
+                    projection_json TEXT NOT NULL
+                );",
+            )
+            .expect("recreate task_create_idempotency");
+        connection
+            .execute(
+                "INSERT INTO task_create_idempotency(projection_json) VALUES ('legacy-row')",
+                [],
+            )
+            .expect("seed task_create_idempotency");
+    });
+}
+
+fn assert_0005_refuses_nonempty_legacy_table(
+    table: &str,
+    seed: impl FnOnce(&Connection),
+    expected_label_fragment: &str,
+) {
+    let database = MigrationDatabase::new();
+    let connection = database.raw();
+    // Reach post-0004 so dead v1 tables still exist and 0005 is the next unit.
+    // Seeding before 0004 is unsafe for task_create_idempotency (FK rebuild).
+    migration::create_through_0004_for_test(&connection).expect("through 0004");
+    seed(&connection);
+    let seeded: i64 = connection
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .expect("seed count");
+    assert!(seeded > 0, "{table} must be non-empty before open");
+    drop(connection);
+
+    let error = SqliteStore::open(&database.path, database.config).expect_err("must refuse");
+    assert_eq!(error.code, StoreErrorCode::StoredDataInvalid);
+    assert!(
+        error.message.starts_with("reinitialize-required:"),
+        "message={}",
+        error.message
+    );
+    assert!(
+        error.message.contains(expected_label_fragment),
+        "message={}",
+        error.message
+    );
+
+    let versions = applied_versions(&database);
+    assert_eq!(
+        versions,
+        [1, 2, 3, 4],
+        "0005 must not advance the ledger when refusing non-empty {table}"
+    );
+    assert!(
+        table_exists_raw(&database, table),
+        "{table} must remain after refused 0005"
+    );
+}
+
+fn assert_open_refuses_recreated_legacy_table(
+    table: &str,
+    recreate_and_seed: impl FnOnce(&Connection),
+) {
+    let database = MigrationDatabase::new();
+    SqliteStore::open(&database.path, database.config).expect("fresh baseline");
+    assert_eq!(applied_versions(&database), [1, 2, 3, 4, 5]);
+    assert!(
+        !table_exists_raw(&database, table),
+        "{table} must be dropped on fresh baseline"
+    );
+
+    let connection = database.raw();
+    recreate_and_seed(&connection);
+    let seeded: i64 = connection
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .expect("seed count");
+    assert!(seeded > 0, "{table} must be non-empty before reopen");
+    drop(connection);
+
+    let error = SqliteStore::open(&database.path, database.config).expect_err("must refuse reopen");
+    assert_eq!(error.code, StoreErrorCode::StoredDataInvalid);
+    assert!(
+        error.message.starts_with("reinitialize-required:"),
+        "message={}",
+        error.message
+    );
+    assert!(
+        error.message.contains(table),
+        "message must name {table}; got {}",
+        error.message
+    );
+    assert_eq!(
+        applied_versions(&database),
+        [1, 2, 3, 4, 5],
+        "open refuse must not advance ledger"
+    );
+}
+
+fn applied_versions(database: &MigrationDatabase) -> Vec<i64> {
+    let connection = database.raw();
+    let mut statement = connection
+        .prepare("SELECT version FROM schema_migrations ORDER BY version")
+        .expect("versions");
+    statement
+        .query_map([], |row| row.get(0))
+        .expect("rows")
+        .collect::<Result<_, _>>()
+        .expect("collect")
+}
+
+fn table_exists_raw(database: &MigrationDatabase, table: &str) -> bool {
+    let count: i64 = database
+        .raw()
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |row| row.get(0),
+        )
+        .expect("table probe");
+    count == 1
 }
 
 #[test]
@@ -209,7 +508,7 @@ fn descriptor_half_shape_is_drift_but_too_new_has_priority() {
     connection
         .execute(
             "INSERT INTO schema_migrations(version, name, checksum, applied_at) \
-             VALUES (5, 'future', ?1, '2026-01-01T00:00:00Z')",
+             VALUES (9, 'future', ?1, '2026-01-01T00:00:00Z')",
             ["a".repeat(64)],
         )
         .expect("future row");
@@ -266,21 +565,9 @@ fn raw_sql_constraints_reject_invalid_version_mapping_and_duplicate_dedup() {
 }
 
 #[test]
-fn concurrent_upgrade_to_0003_with_legacy_data_leaves_both_stores_writable() {
-    // 回归守护：竞态中输家在锁内看到 0003 已应用时，曾带着未关闭的
-    // BEGIN IMMEDIATE 返回，使该连接后续所有写事务失败。多跑几轮以降低
-    // “输家未真正进入 already-applied 分支”的偶然性。
+fn concurrent_first_open_of_empty_file_reaches_0005_once() {
     for round in 0..5 {
         let database = MigrationDatabase::new();
-        let connection = database.raw();
-        migration::create_v2_database_for_test(&connection).expect("v2 database");
-        outbox::append_legacy_v1_storage_for_test(
-            &connection,
-            legacy_event(1, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
-        )
-        .expect("legacy append");
-        drop(connection);
-
         let barrier = Arc::new(Barrier::new(3));
         let mut handles = Vec::new();
         for _ in 0..2 {
@@ -289,7 +576,7 @@ fn concurrent_upgrade_to_0003_with_legacy_data_leaves_both_stores_writable() {
             let barrier = Arc::clone(&barrier);
             handles.push(thread::spawn(move || {
                 barrier.wait();
-                SqliteStore::open(&path, config).expect("concurrent upgrade")
+                SqliteStore::open(&path, config).expect("concurrent open")
             }));
         }
         barrier.wait();
@@ -299,91 +586,56 @@ fn concurrent_upgrade_to_0003_with_legacy_data_leaves_both_stores_writable() {
             .collect();
 
         let connection = database.raw();
-        let (migration_rows, outbox_rows): (i64, i64) = connection
-            .query_row(
-                "SELECT (SELECT COUNT(*) FROM schema_migrations WHERE version = 3), \
-                 (SELECT COUNT(*) FROM outbox)",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            )
-            .expect("post race counts");
-        assert_eq!((migration_rows, outbox_rows), (1, 1), "round {round}");
+        let migration_rows: i64 = connection
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .expect("count");
+        assert_eq!(migration_rows, 5, "round {round}");
         drop(connection);
 
         for (index, store) in stores.iter().enumerate() {
-            let number = index as u32 + 2;
+            let task_id =
+                Uuid::from_u128(0x2000_0000_0000_4000_8000_0000_0000_0000 + index as u128);
             let record = store
                 .with_write_transaction(|transaction| {
-                    transaction.append_legacy_event_v1(legacy_event(
-                        number,
-                        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-                    ))
+                    transaction
+                        .append_active_event_v2(active_task_created(task_id, index as u32 + 1))
                 })
-                .expect("store writable after migration race");
-            assert_eq!(
-                record.envelope.outbox_position(),
-                number.to_string(),
-                "round {round}"
+                .expect("writable after race");
+            assert!(
+                record
+                    .envelope
+                    .outbox_position()
+                    .parse::<i64>()
+                    .expect("pos")
+                    > 0
             );
         }
-
-        let events = stores[0]
-            .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
-            .expect("read after race");
-        assert_eq!(events.len(), 3, "round {round}");
-        assert_eq!(
-            events
-                .iter()
-                .map(|record| record.envelope.sequence())
-                .collect::<Vec<_>>(),
-            vec![0, 1, 2],
-            "round {round}"
-        );
     }
 }
 
-fn legacy_event(number: u32, aggregate_id: &str) -> PendingLegacyEventV1 {
-    let instant = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, number).unwrap();
-    PendingLegacyEventV1 {
-        event_id: format!("{number:08x}-0000-4000-8000-{number:012x}"),
-        event_type: kernel_contracts::EventEnvelopeType::TaskCreated,
-        aggregate_type: "task".to_owned(),
-        aggregate_id: aggregate_id.to_owned(),
-        occurred_at: instant,
-        causation_ref: kernel_contracts::CausationRef {
-            kind: kernel_contracts::CausationRefKind::CommandRequest,
+fn active_task_created(task_id: Uuid, number: u32) -> PendingActiveEventV2 {
+    PendingActiveEventV2 {
+        event_id: Uuid::from_u128(0x3000_0000_0000_4000_8000_0000_0000_0000 + number as u128),
+        aggregate_id: EventAggregateId::Task(task_id),
+        occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, number).unwrap(),
+        causation_ref: CausationRefV2::CommandRequest {
             id: "11111111-1111-4111-8111-111111111111".to_owned(),
         },
         correlation_id: format!("correlation-{number}"),
         dedup_key: format!("dedup-{number}"),
-        payload: json!({
-            "schema_version": 1,
-            "task_id": aggregate_id,
-            "status": "candidate",
-            "proposer": "user",
-            "goal": "migration test goal",
-            "task_revision": 1,
-            "created_at": instant.to_rfc3339(),
-        }),
-    }
-}
-
-#[allow(dead_code)]
-fn active_task_created_payload(task_id: Uuid) -> EventEnvelopeV2Payload {
-    EventEnvelopeV2Payload::TaskCreated(Box::new(TaskCreatedPayload {
-        created_at: "2026-01-01T00:00:00+00:00".to_owned(),
-        goal: "active task".to_owned(),
-        proposer: TaskCreatedPayloadProposer::User,
-        schema_version: TaskCreatedPayloadSchemaVersion,
-        status: TaskStatus::Candidate,
-        task_id: task_id.to_string(),
-        task_revision: 1,
-    }))
-}
-
-#[allow(dead_code)]
-fn active_causation() -> CausationRefV2 {
-    CausationRefV2::CommandRequest {
-        id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        payload: EventEnvelopeV2Payload::TaskCreated(Box::new(TaskCreatedPayload {
+            created_at: Utc
+                .with_ymd_and_hms(2026, 1, 1, 0, 0, number)
+                .unwrap()
+                .to_rfc3339(),
+            goal: "migration test goal".to_owned(),
+            proposer: TaskCreatedPayloadProposer::User,
+            schema_version: TaskCreatedPayloadSchemaVersion,
+            status: TaskStatus::Candidate,
+            task_id: task_id.to_string(),
+            task_revision: 1,
+        })),
     }
 }
