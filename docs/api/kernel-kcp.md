@@ -9,7 +9,7 @@
 - `system.ping`、`task.create` v2、`task.get` typed handlers；
 - `SqliteTaskBackend` → `create_root_task_v2`。
 
-它不接受 bytes 或 transport frame，不提供 UTF-8/JSON parser、frame codec、Socket、Named Pipe、server 或 `agentd`。其余五个 Catalog 方法没有 handler，仍阻塞 server 启动。§13.7 未闭合：legacy `kernel-sqlite` `create_task` 写路径与 `append_legacy_event_v1` 仍在仓库内，但 **不再** 由本 crate 的 production adapter/handler 触达。
+它不接受 bytes 或 transport frame，不提供 UTF-8/JSON parser、frame codec、Socket、Named Pipe、server 或 `agentd`。其余五个 Catalog 方法没有 handler，仍阻塞 server 启动。§13.7 未闭合：child/Action/PD/Approval 与其余 active producers 仍缺；legacy `kernel-sqlite` v1 write 路径已在切片3c删除，本 crate 仅触达 `create_root_task_v2` / v2 Outbox。
 
 ## Active 合同状态（切片3b）
 
@@ -46,7 +46,7 @@ handler/dispatcher 复用：
 
 - `KernelClock`：返回已解析的 `DateTime<Utc>`；公开 `SystemKernelClock` 使用 OS 系统时钟，并以显式 epoch 前借位、整数溢出和 chrono 可表示范围检查把异常映射为 `ClockError`，不走隐式 panic 转换；
 - `KernelIdGenerator`：active root v2 按 purpose 分配 **七个** UUID（`Task` / `TaskScope` / `ContentOrigin` / `KernelReceipt` / `CreationProvenance` / `AuditRecord` / `Event`）与两个 opaque ID（`Correlation` / `EventDedup`）。公开 `RandomKernelIdGenerator` 使用可失败的 OS 随机源；UUID v4 只是实现细节，不形成协议版本承诺；
-- `TaskApplicationBackend`：只暴露 create/get 与闭集 `BackendError`（active create 无 `ParentTaskNotFound`；adapter 将残留 store code 折为 `Internal`）。
+- `TaskApplicationBackend`：只暴露 create/get 与闭集 `BackendError`（active create 无 parent-task 错误；`StoreErrorCode::ParentTaskNotFound` 已从 kernel-sqlite 删除）。
 
 `TypedDispatcher` 借用这三个端口，并按 variant 只把所需能力传给对应 public handler。它不创建平行接口、不重复 deadline 或 Schema 检查，也不改写 `HandlerResult`。
 

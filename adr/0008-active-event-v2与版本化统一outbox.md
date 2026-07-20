@@ -4,7 +4,7 @@
 - 日期：2026-07-19
 - 实现状态徽章：**partial** — 唯一进度源：[`docs/IMPLEMENTATION_MATRIX.md`](../docs/IMPLEMENTATION_MATRIX.md) · [`docs/PROGRESS.md`](../docs/PROGRESS.md)
 - 合同开放问题：0；本ADR所列Event v2/Outbox docs决策已全部拍板，剩余项都是实现工作而非合同待定项
-- **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：§7 migration 0003 mixed transform 的“兼容既有 v1 Outbox 生产库”目的，以及 §8 `PendingLegacyEventV1` / `append_legacy_event_v1` / `StoredEventEnvelope::LegacyV1` 作为 production store 长期 API 与 cutover write gate 叙事的生产效力作废；Event v2 八 Schema、Catalog 权威、active Outbox 写入语义、poll v1 不得返回 v2 仍有效。
+- **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：§7 migration 0003 mixed transform 的“兼容既有 v1 Outbox 生产库”目的，以及 §8 `PendingLegacyEventV1` / `append_legacy_event_v1` / `StoredEventEnvelope::LegacyV1` 作为 production store 长期 API 与 cutover write gate 叙事的生产效力作废。**切片3c 代码事实**：上述 legacy production API 已从 `kernel-sqlite` 删除；Outbox 为 v2-only；旧库 open reinitialize-required；0003 transform 不迁移非空 v1 Outbox。Event v2 八 Schema、Catalog 权威、active Outbox 写入语义、poll v1 不得返回 v2 仍有效。
 
 ## 背景
 

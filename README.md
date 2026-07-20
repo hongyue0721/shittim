@@ -28,7 +28,7 @@
 - [`docs/PROGRESS.md`](docs/PROGRESS.md)：中文实现进度与当前阻塞。
 - [`docs/REPOSITORY_MAINTENANCE.md`](docs/REPOSITORY_MAINTENANCE.md)：主仓与纯文档镜像的持续更新、发布顺序、失败门禁，以及已实现的 `scripts/sync-docs-repository.mjs`（`pnpm run check:docs-repository` / `sync:docs-repository` / `test:docs-repository`）。
 - [`docs/IMPLEMENTATION_MATRIX.md`](docs/IMPLEMENTATION_MATRIX.md)：规范、Schema、实现和测试状态矩阵。
-- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现legacy TaskCreate v1 create/get、ADR-0006首批Schema/pure library/fixtures、ADR-0008 Event v2 Schema/catalog/typed decode和migration 0003/mixed Outbox API，以及ADR-0009切片1a四个root持久对象Schema/generated/conformance；active TaskCreate v2 repository/handler、child Action materializer、active Event/Audit producer、Publisher、Approval v2、`agentd`与可连接server尚未实现。
+- [`docs/api/README.md`](docs/api/README.md)：KCP、事件与错误文档入口；当前Rust已实现ADR-0006首批Schema/pure library/fixtures、ADR-0008 Event v2 Schema/catalog/typed decode与版本化 Outbox（切片3c 起 v2-only）、ADR-0009切片1a–3c（含 root TaskCreate v2 repository、method-aware kcp create v2、v1 write 删除与旧库 reinitialize-required）；child Action materializer、Action/PD/Approval repositories、其余 active Event producers、Publisher、`agentd`与可连接server尚未实现。
 - [`docs/sdk/extension-sdk.md`](docs/sdk/extension-sdk.md)：Extension SDK Base 文档入口；Base 是基础产品必做，当前无可发布 SDK。
 - [`adr/README.md`](adr/README.md)：已接受架构决策索引。
 

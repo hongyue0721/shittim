@@ -1,6 +1,6 @@
 # Kernel Control Protocol
 
-> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；Envelope V2 / TaskCreate v2 Schema、generated root types、**production MethodVersionBindings（切片3a）** 与 **kernel-kcp method-aware runtime（切片3b）** 已落地。`V2InitialBuildActive` 完整谓词与可连接 server 仍未完成（五方法无 handler；legacy sqlite write 待删）。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
+> 状态：active KCP合同要求method-aware payload version，`task.create` active版本为v2 root-only；Envelope V2 / TaskCreate v2 Schema、generated root types、**production MethodVersionBindings（切片3a）** 与 **kernel-kcp method-aware runtime（切片3b）** 已落地。`V2InitialBuildActive` 完整谓词与可连接 server 仍未完成（五方法无 handler；Publisher/poll 未实现）。字段与行为的唯一事实源是 [`IMPLEMENTATION_CONTRACTS.md` 第5节](../../specs/IMPLEMENTATION_CONTRACTS.md#5-kernel-control-protocol)。
 
 ## 定位
 
@@ -30,7 +30,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 | 方法 | 类型 | 状态/副作用 | 幂等说明 |
 |---|---|---|---|
 | `system.ping` | Query | 只读 | 不适用 |
-| `task.create` | Command | active v2只创建root Task | v2精确projection；kcp production 入口仅 v2；v1 → `unsupported_schema_version`；legacy sqlite create write 待切片6删除 |
+| `task.create` | Command | active v2只创建root Task | v2精确projection；kcp production 入口仅 v2；v1 → `unsupported_schema_version`；legacy sqlite create write 已删（切片3c） |
 | `task.get` | Query | 只读 | 不适用 |
 | `task.list` | Query | 只读 | 不适用 |
 | `event.subscribe` | Query | 创建连接级临时订阅句柄，无领域副作用 | 不适用 |
@@ -38,7 +38,7 @@ active结构合同使用`KcpCommandEnvelopeV2`=`https://schemas.shittim.local/kc
 | `stop.activate` | Command | 激活 Kernel Stop Fence，并执行 Emergency Stop 的 Kernel 副作用集 | 当前全局 generation |
 | `stop.status` | Query | 只读 | 不适用 |
 
-完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task只通过父Task Action原子materialization。当前`kernel-sqlite`已实现统一Outbox shape与mixed API（legacy append待删除）及 root `create_root_task_v2`；`kernel-kcp` runtime 已接 method-aware preflight 与 root create v2 / get / ping。child Action materializer、其余 active producer、Publisher 与 versioned poll 未实现。
+完整请求/响应payload、排序、cursor与方法专属错误见权威规范。新Child Task只通过父Task Action原子materialization。当前`kernel-sqlite`已实现统一 **v2-only** Outbox（legacy append 已删）及 root `create_root_task_v2`；`kernel-kcp` runtime 已接 method-aware preflight 与 active root create v2 / get / ping。child Action materializer、其余 active producer、Publisher 与 versioned poll 未实现。
 
 ## Value preflight 与 registration 合同
 

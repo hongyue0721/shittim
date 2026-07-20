@@ -1,10 +1,10 @@
 # AuditRecord版本合同
 
-> 状态：AuditRecord v2、AuditAllocationV2与TaskCreationProvenanceV1的source/manifest/generated Rust/conformance已实现；v1 Schema/Rust/SQLite Store与legacy task.create producer仍是待删除代码事实。v2 repository/producer仍未实现。完整wire与producer矩阵唯一事实源为IC §6.16。
+> 状态：AuditRecord v2、AuditAllocationV2与TaskCreationProvenanceV1的source/manifest/generated Rust/conformance已实现；root `task.create` v2 已写入 `AuditRecordV2`（切片2/3b）。v1 Schema/fixture 仅历史验证；v1 SQLite Store 与 legacy task.create producer 已在切片3c删除（0005 drop 死表，旧库 reinitialize-required）。其它 active producer 的 v2 Audit 仍未实现。完整wire与producer矩阵唯一事实源为IC §6.16。
 
 ## v1
 
-v1仅保留Schema/fixture历史验证资产，无production read/write/migration。全部字段required，无关联事实用null/空数组；`approval_record_ref`与CausationRef v1只属于legacy shape。v1 `audit_type`闭集仅七类：`task.creation_recorded`、`command.accepted`、`permission.evaluated`、`kernel.invariant_blocked`、`event.published`、`recovery.recorded`、`config.changed`。现有SQLite证明canonical immutable Store和legacy task.create同事务producer，不证明v2。
+v1仅保留Schema/fixture历史验证资产，无production read/write/migration。全部字段required，无关联事实用null/空数组；`approval_record_ref`与CausationRef v1只属于legacy shape。v1 `audit_type`闭集仅七类：`task.creation_recorded`、`command.accepted`、`permission.evaluated`、`kernel.invariant_blocked`、`event.published`、`recovery.recorded`、`config.changed`。切片3c 起 SQLite 不再持有 v1 Audit Store 或 legacy task.create 同事务 producer；root create 的生产证明路径仅为 AuditRecordV2。
 
 ## v2完整wire
 

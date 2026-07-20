@@ -9,7 +9,7 @@
 
 现有 `TaskCreateRequestV1` 同时允许 `parent_task_id = null` 与非 null，因此同一个公开 KCP Command 既能创建根 Task，也能直接创建子 Task。与此同时，旧规范又写过“Child Task创建本身是一个Action”。这造成两个生产入口、两个因果模型和无法闭合的权限事实：直接 KCP 创建子 Task 时，没有一个父 Task 所拥有的 Action 可以承载 Policy、Lease、Stop Fence、Verification、重放与恢复。
 
-仓库当前已实现 active root `task.create` v2 kcp handler/preflight（切片3b）与 SQLite `create_root_task_v2` repository（切片2）；legacy v1 sqlite create write 仍待切片6删除。该实现尚未发布为可连接 server，因此不为保持未发布实现而固化双入口。历史或测试数据库中已经存在的 v1 direct-child 记录仍是合法事实，但不能通过迁移伪造过去并不存在的 Action、Approval 或认证证据。
+仓库当前已实现 active root `task.create` v2 kcp handler/preflight（切片3b）与 SQLite `create_root_task_v2` repository（切片2）；legacy v1 sqlite create write 已在切片3c删除。该实现尚未发布为可连接 server。历史开发库中若存在 v1 direct-child 或其它 v1 业务事实，open 拒绝（reinitialize-required），不执行数据迁移，也不伪造过去并不存在的 Action、Approval 或认证证据。
 
 ## 决策
 
