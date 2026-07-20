@@ -296,7 +296,6 @@ dependencies = [
  "kernel-contracts",
  "proptest",
  "serde",
- "serde_json",
  "thiserror",
 ]
 
