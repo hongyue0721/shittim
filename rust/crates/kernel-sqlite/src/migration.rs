@@ -12,6 +12,11 @@ const MIGRATION_0003_ASSET_PATH: &str =
 const MIGRATION_0003_ALGORITHM_ID: &str = "shittim.kernel-sqlite.outbox-v1-to-versioned-v1";
 const MIGRATION_0003_IMPLEMENTATION_ID: &str =
     "kernel_sqlite::migration::outbox_v1_to_versioned_v1";
+const MIGRATION_0004_ASSET_PATH: &str =
+    "rust/crates/kernel-sqlite/migrations/0004_root_task_create_v2.sql";
+const MIGRATION_0004_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
+const MIGRATION_0004_IMPLEMENTATION_ID: &str =
+    "kernel_sqlite::migration::root_task_create_v2_ddl_only_v1";
 
 #[derive(Debug, Clone, Copy)]
 struct LegacySqlMigration {
@@ -21,12 +26,19 @@ struct LegacySqlMigration {
 }
 
 #[derive(Debug, Clone, Copy)]
+enum DescriptorPhaseSet {
+    OutboxV1ToVersionedV1,
+    SchemaOnly,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct DescriptorV1Migration {
     version: i64,
     name: &'static str,
     asset_path: &'static str,
     sql: &'static [u8],
     transform: TransformIdentity,
+    phases: DescriptorPhaseSet,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -79,6 +91,19 @@ const MIGRATIONS: &[MigrationDefinition] = &[
             version: 1,
             implementation_id: MIGRATION_0003_IMPLEMENTATION_ID,
         },
+        phases: DescriptorPhaseSet::OutboxV1ToVersionedV1,
+    }),
+    MigrationDefinition::DescriptorV1(DescriptorV1Migration {
+        version: 4,
+        name: "root_task_create_v2",
+        asset_path: MIGRATION_0004_ASSET_PATH,
+        sql: include_bytes!("../migrations/0004_root_task_create_v2.sql"),
+        transform: TransformIdentity {
+            algorithm_id: MIGRATION_0004_ALGORITHM_ID,
+            version: 1,
+            implementation_id: MIGRATION_0004_IMPLEMENTATION_ID,
+        },
+        phases: DescriptorPhaseSet::SchemaOnly,
     }),
 ];
 
@@ -247,15 +272,28 @@ fn verify_ledger_row(row: &LedgerRow, expected: MigrationDefinition) -> Result<(
 }
 
 fn validate_descriptor_migration(migration: DescriptorV1Migration) -> Result<(), StoreError> {
-    if migration.version != 3
-        || migration.name != "versioned_event_outbox"
-        || migration.asset_path != MIGRATION_0003_ASSET_PATH
-        || migration.transform.algorithm_id != MIGRATION_0003_ALGORITHM_ID
-        || migration.transform.version != 1
-        || migration.transform.implementation_id != MIGRATION_0003_IMPLEMENTATION_ID
-    {
+    let accepted = match migration.version {
+        3 => {
+            migration.name == "versioned_event_outbox"
+                && migration.asset_path == MIGRATION_0003_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0003_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0003_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::OutboxV1ToVersionedV1)
+        }
+        4 => {
+            migration.name == "root_task_create_v2"
+                && migration.asset_path == MIGRATION_0004_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0004_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0004_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
+        }
+        _ => false,
+    };
+    if !accepted {
         return Err(migration_drift(
-            "migration 0003 descriptor identity is not the accepted closed identity",
+            "descriptor migration identity is not an accepted closed identity",
         ));
     }
     validate_raw_asset(migration.sql)?;
@@ -380,12 +418,21 @@ fn apply_descriptor_v1(
     migration: DescriptorV1Migration,
 ) -> Result<(), StoreError> {
     validate_descriptor_migration(migration)?;
-    let phases = parse_migration_phases(migration.sql)?;
-    execute_phase(connection, &phases, "ledger_upgrade")?;
-    execute_phase(connection, &phases, "replacement_schema")?;
-    outbox_v1_to_versioned_v1(connection)?;
-    execute_phase(connection, &phases, "table_swap")?;
-    validate_versioned_outbox(connection)?;
+    let expected_phases = expected_phases(migration.phases);
+    let phases = parse_migration_phases(migration.sql, expected_phases)?;
+    match migration.phases {
+        DescriptorPhaseSet::OutboxV1ToVersionedV1 => {
+            execute_phase(connection, &phases, "ledger_upgrade")?;
+            execute_phase(connection, &phases, "replacement_schema")?;
+            outbox_v1_to_versioned_v1(connection)?;
+            execute_phase(connection, &phases, "table_swap")?;
+            validate_versioned_outbox(connection)?;
+        }
+        DescriptorPhaseSet::SchemaOnly => {
+            execute_phase(connection, &phases, "schema")?;
+            validate_root_task_create_v2_schema(connection)?;
+        }
+    }
     let hash = descriptor_hash(migration)?;
     connection
         .execute(
@@ -398,11 +445,22 @@ fn apply_descriptor_v1(
     Ok(())
 }
 
-fn parse_migration_phases(bytes: &[u8]) -> Result<BTreeMap<String, String>, StoreError> {
+const fn expected_phases(phases: DescriptorPhaseSet) -> &'static [&'static str] {
+    match phases {
+        DescriptorPhaseSet::OutboxV1ToVersionedV1 => {
+            &["ledger_upgrade", "replacement_schema", "table_swap"]
+        }
+        DescriptorPhaseSet::SchemaOnly => &["schema"],
+    }
+}
+
+fn parse_migration_phases(
+    bytes: &[u8],
+    expected: &[&str],
+) -> Result<BTreeMap<String, String>, StoreError> {
     let sql = std::str::from_utf8(bytes)
         .map_err(|_| migration_drift("migration phase asset is not UTF-8"))?;
     let marker = "-- kernel-sqlite migration phase: ";
-    let expected = ["ledger_upgrade", "replacement_schema", "table_swap"];
     let mut phases = BTreeMap::new();
     let mut encountered = Vec::new();
     let mut current: Option<String> = None;
@@ -438,15 +496,74 @@ fn parse_migration_phases(bytes: &[u8]) -> Result<BTreeMap<String, String>, Stor
     if phases.insert(last, body).is_some() {
         return Err(migration_drift("migration phase marker is duplicated"));
     }
-    if encountered != expected
+    if encountered.len() != expected.len()
         || phases.len() != expected.len()
-        || expected
-            .iter()
-            .any(|phase| !phases.contains_key(*phase) || phases[*phase].trim().is_empty())
+        || expected.iter().enumerate().any(|(index, phase)| {
+            encountered.get(index).map(String::as_str) != Some(*phase)
+                || !phases.contains_key(*phase)
+                || phases[*phase].trim().is_empty()
+        })
     {
         return Err(migration_drift("migration phase set is not exact"));
     }
     Ok(phases)
+}
+
+fn validate_root_task_create_v2_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in [
+        "content_origins_v2",
+        "content_origin_v2_parent_refs",
+        "task_creation_provenances",
+        "audit_records_v2",
+        "root_task_create_idempotency_v2",
+        "tasks",
+        "task_scopes",
+        "task_scope_source_refs",
+        "task_create_idempotency",
+    ] {
+        let exists: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .map_err(migration_error)?;
+        if exists != 1 {
+            return Err(migration_drift(
+                "migration 0004 did not materialize the required root task.create v2 tables",
+            ));
+        }
+    }
+    // 0002 deferred cycle must survive 0004 rebuild: tasks.task_scope_ref → task_scopes,
+    // and task_scopes.task_id → tasks.
+    if !table_has_foreign_key(connection, "tasks", "task_scope_ref", "task_scopes")?
+        || !table_has_foreign_key(connection, "task_scopes", "task_id", "tasks")?
+    {
+        return Err(migration_drift(
+            "migration 0004 did not restore the deferred tasks/task_scopes foreign-key cycle",
+        ));
+    }
+    Ok(())
+}
+
+fn table_has_foreign_key(
+    connection: &Connection,
+    table: &str,
+    from_column: &str,
+    to_table: &str,
+) -> Result<bool, StoreError> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA foreign_key_list({table})"))
+        .map_err(migration_error)?;
+    let mut rows = statement.query([]).map_err(migration_error)?;
+    while let Some(row) = rows.next().map_err(migration_error)? {
+        let referenced_table: String = row.get(2).map_err(migration_error)?;
+        let from: String = row.get(3).map_err(migration_error)?;
+        if referenced_table == to_table && from == from_column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn execute_phase(

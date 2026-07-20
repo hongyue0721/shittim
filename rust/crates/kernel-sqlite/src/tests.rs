@@ -75,7 +75,7 @@ fn migration_is_idempotent_and_connection_pragmas_are_verified() {
     assert_eq!(journal.to_ascii_lowercase(), "wal");
     assert_eq!(foreign_keys, 1);
     assert_eq!(busy_timeout, 2_000);
-    assert_eq!(migration_count, 3);
+    assert_eq!(migration_count, 4);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             row.get(0)
         })
         .expect("migration count");
-    assert_eq!(migration_count, 3);
+    assert_eq!(migration_count, 4);
     for table in [
         "aggregate_event_sequences",
         "outbox",
@@ -113,10 +113,15 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
         "policy_rate_limit_consumptions",
         "content_origins",
         "content_origin_parent_refs",
+        "content_origins_v2",
+        "content_origin_v2_parent_refs",
         "task_scopes",
         "task_scope_source_refs",
         "tasks",
         "task_create_idempotency",
+        "root_task_create_idempotency_v2",
+        "task_creation_provenances",
+        "audit_records_v2",
     ] {
         let count: i64 = connection
             .query_row(
@@ -163,14 +168,19 @@ fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
             .collect::<Result<_, _>>()
             .expect("versions")
     };
-    assert_eq!(versions, [1, 2, 3]);
+    assert_eq!(versions, [1, 2, 3, 4]);
     for table in [
         "content_origins",
         "content_origin_parent_refs",
+        "content_origins_v2",
+        "content_origin_v2_parent_refs",
         "task_scopes",
         "task_scope_source_refs",
         "tasks",
         "task_create_idempotency",
+        "root_task_create_idempotency_v2",
+        "task_creation_provenances",
+        "audit_records_v2",
     ] {
         let count: i64 = connection
             .query_row(
@@ -278,7 +288,7 @@ fn migration_checksum_drift_and_too_new_are_rejected() {
         .execute(
             "INSERT INTO schema_migrations(\
                 version, name, checksum, applied_at, descriptor_hash, descriptor_format_version\
-             ) VALUES (4, 'future', ?1, '2026-01-01T00:00:00Z', ?1, 1)",
+             ) VALUES (5, 'future', ?1, '2026-01-01T00:00:00Z', ?1, 1)",
             ["a".repeat(64)],
         )
         .expect("insert future migration");

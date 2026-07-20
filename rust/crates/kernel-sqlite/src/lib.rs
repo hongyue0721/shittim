@@ -1,9 +1,10 @@
 //! File-backed SQLite persistence base for the Kernel.
 //!
 //! This crate owns migrations, immutable AuditRecord JSON, atomic Event Outbox allocation,
-//! publisher storage operations, transaction-bound policy rate-limit consumption, and the Task
-//! create/get repository. It does not implement Task update/list, Action/PermissionDecision
-//! repositories, KCP, `agentd`, networking, or a Publisher loop.
+//! publisher storage operations, transaction-bound policy rate-limit consumption, the legacy Task
+//! create/get repository, and the active root TaskCreate v2 repository. It does not implement Task
+//! update/list, Action/PermissionDecision repositories, KCP, `agentd`, networking, or a Publisher
+//! loop.
 
 #![deny(missing_docs)]
 
@@ -13,6 +14,7 @@ mod error;
 mod migration;
 mod outbox;
 mod rate_limit;
+mod root_task_create_v2;
 mod task;
 
 pub use config::SqliteConfig;
@@ -22,12 +24,18 @@ pub use outbox::{
     PendingActiveEventV2, PendingLegacyEventV1, StoredEventEnvelope,
 };
 pub use rate_limit::TransactionRateLimitPort;
+pub use root_task_create_v2::{
+    CreateRootTaskV2Result, RootTaskCreateV2Command, RootTaskCreateV2EnvelopeFacts,
+};
 pub use task::{
     CreateTaskResult, TaskCreateAllocation, TaskCreateCommand, TaskCreateEnvelopeFacts,
 };
 
 use chrono::{DateTime, Utc};
-use kernel_contracts::{AuditRecord, ContentOrigin, TaskScope, TaskSpec};
+use kernel_contracts::{
+    AuditRecord, AuditRecordV2, ContentOrigin, ContentOriginV2, TaskCreationProvenanceV1,
+    TaskScope, TaskSpec,
+};
 use rusqlite::Connection;
 use std::cell::Cell;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
@@ -86,6 +94,8 @@ impl SqliteStore {
                 poisoned: Cell::new(false),
                 #[cfg(test)]
                 savepoint_failure: Cell::new(None),
+                #[cfg(test)]
+                force_root_v2_post_append_bundle_invalid: Cell::new(false),
             };
             let outcome = operation(&transaction);
             if transaction.poisoned.get() {
@@ -155,10 +165,31 @@ impl SqliteStore {
         task::get_task_scope(&connection, id)
     }
 
-    /// Reads a ContentOrigin and validates ordered parent mirrors and parent existence.
+    /// Reads a legacy ContentOrigin v1 and validates ordered parent mirrors and parent existence.
     pub fn get_content_origin(&self, id: &str) -> Result<Option<ContentOrigin>, StoreError> {
         let connection = self.lock_connection()?;
         task::get_content_origin(&connection, id)
+    }
+
+    /// Reads an active ContentOriginV2 and validates ordered parent mirrors and parent existence.
+    pub fn get_content_origin_v2(&self, id: &str) -> Result<Option<ContentOriginV2>, StoreError> {
+        let connection = self.lock_connection()?;
+        task::get_content_origin_v2(&connection, id)
+    }
+
+    /// Reads an immutable AuditRecordV2 and revalidates its stored JSON contract.
+    pub fn get_audit_v2(&self, id: &str) -> Result<Option<AuditRecordV2>, StoreError> {
+        let connection = self.lock_connection()?;
+        root_task_create_v2::get_audit_v2(&connection, id)
+    }
+
+    /// Reads a TaskCreationProvenanceV1 and revalidates its stored JSON contract.
+    pub fn get_task_creation_provenance(
+        &self,
+        id: &str,
+    ) -> Result<Option<TaskCreationProvenanceV1>, StoreError> {
+        let connection = self.lock_connection()?;
+        root_task_create_v2::get_provenance(&connection, id)
     }
 
     /// Reads all historical Outbox rows strictly after a cursor.
@@ -253,6 +284,10 @@ pub struct WriteTransaction<'connection> {
     poisoned: Cell<bool>,
     #[cfg(test)]
     savepoint_failure: Cell<Option<SavepointFailureForTest>>,
+    /// When set, root TaskCreate v2 forces stored_data_invalid after a successful event append
+    /// so tests can prove sequence/position roll back with the outer savepoint.
+    #[cfg(test)]
+    force_root_v2_post_append_bundle_invalid: Cell<bool>,
 }
 
 impl<'connection> WriteTransaction<'connection> {
@@ -356,6 +391,17 @@ impl<'connection> WriteTransaction<'connection> {
         self.savepoint_failure.set(Some(failure));
     }
 
+    /// Forces root TaskCreate v2 to fail closed after outbox append, before commit.
+    #[cfg(test)]
+    pub(crate) fn inject_root_v2_post_append_bundle_invalid_for_test(&self) {
+        self.force_root_v2_post_append_bundle_invalid.set(true);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn root_v2_post_append_bundle_invalid_for_test(&self) -> bool {
+        self.force_root_v2_post_append_bundle_invalid.get()
+    }
+
     #[cfg(test)]
     fn savepoint_cleanup_must_fail_for_test(&self) -> bool {
         self.savepoint_failure.get() == Some(SavepointFailureForTest::Cleanup)
@@ -385,6 +431,8 @@ fn unhealthy_store_error() -> StoreError {
 mod migration_tests;
 #[cfg(test)]
 mod outbox_tests;
+#[cfg(test)]
+mod root_task_create_v2_tests;
 #[cfg(test)]
 mod savepoint_tests;
 #[cfg(test)]

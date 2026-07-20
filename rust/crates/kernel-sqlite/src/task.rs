@@ -23,8 +23,8 @@ const LEGACY_V1_CREATE_TASK_SAVEPOINT: &str = "kernel_sqlite_create_task";
 const TASK_CREATE_SCHEMA: &str = "https://schemas.shittim.local/v1/kcp/task_create_request.json";
 const ACTOR_SCHEMA: &str = "https://schemas.shittim.local/v1/common/actor.json";
 const CONTENT_ORIGIN_SCHEMA: &str = "https://schemas.shittim.local/v1/common/content_origin.json";
-const TASK_SCOPE_SCHEMA: &str = "https://schemas.shittim.local/v1/task/task_scope.json";
-const TASK_SCHEMA: &str = "https://schemas.shittim.local/v1/task/task_spec.json";
+pub(crate) const TASK_SCOPE_SCHEMA: &str = "https://schemas.shittim.local/v1/task/task_scope.json";
+pub(crate) const TASK_SCHEMA: &str = "https://schemas.shittim.local/v1/task/task_spec.json";
 
 /// Command-envelope facts that affect task.create materialization or idempotency.
 #[derive(Debug, Clone, PartialEq)]
@@ -141,12 +141,24 @@ pub(crate) fn get_task(connection: &Connection, id: &str) -> Result<Option<TaskS
     let Some(task) = get_task_shallow(connection, id)? else {
         return Ok(None);
     };
-    let origin = get_content_origin(connection, &task.origin_ref)?.ok_or_else(stored_invalid)?;
+    // Prefer full v1 origin validation; otherwise require a fully validated ContentOriginV2.
+    if get_origin_shallow(connection, &task.origin_ref)?.is_some() {
+        let origin =
+            get_content_origin(connection, &task.origin_ref)?.ok_or_else(stored_invalid)?;
+        if origin.id != task.origin_ref {
+            return Err(stored_invalid());
+        }
+    } else {
+        let origin =
+            get_content_origin_v2(connection, &task.origin_ref)?.ok_or_else(stored_invalid)?;
+        if origin.id != task.origin_ref {
+            return Err(stored_invalid());
+        }
+    }
     let scope =
         get_task_scope_shallow(connection, &task.task_scope_ref)?.ok_or_else(stored_invalid)?;
     validate_scope_relations(connection, &scope)?;
-    if origin.id != task.origin_ref
-        || scope.id != task.task_scope_ref
+    if scope.id != task.task_scope_ref
         || scope.task_id != task.id
         || task.task_scope_ref != scope.id
     {
@@ -750,7 +762,7 @@ fn validate_legacy_v1_created_relations(
     Ok(())
 }
 
-fn encode_contract_document<T: Serialize>(
+pub(crate) fn encode_contract_document<T: Serialize>(
     schema: &str,
     document: &T,
 ) -> Result<String, StoreError> {
@@ -817,11 +829,59 @@ fn validate_scope_relations(connection: &Connection, scope: &TaskScope) -> Resul
         return Err(stored_invalid());
     }
     for origin_id in &relation_ids {
-        if get_content_origin(connection, origin_id)?.is_none() {
-            return Err(stored_invalid());
+        // Scope source_refs must resolve through the same strict origin readers as Task.origin_ref.
+        if get_origin_shallow(connection, origin_id)?.is_some() {
+            let _ = get_content_origin(connection, origin_id)?.ok_or_else(stored_invalid)?;
+        } else {
+            let _ = get_content_origin_v2(connection, origin_id)?.ok_or_else(stored_invalid)?;
         }
     }
     Ok(())
+}
+
+/// True when a ContentOrigin exists in either the legacy v1 or active v2 store.
+pub(crate) fn origin_exists(connection: &Connection, id: &str) -> Result<bool, StoreError> {
+    if get_origin_shallow(connection, id)?.is_some() {
+        return Ok(true);
+    }
+    Ok(get_origin_v2_shallow(connection, id)?.is_some())
+}
+
+/// Reads a ContentOriginV2 and validates ordered parent mirrors and parent existence.
+pub(crate) fn get_content_origin_v2(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<kernel_contracts::ContentOriginV2>, StoreError> {
+    let Some(origin) = get_origin_v2_shallow(connection, id)? else {
+        return Ok(None);
+    };
+    let relation_ids = relation_ids(
+        connection,
+        "SELECT ordinal, parent_origin_id FROM content_origin_v2_parent_refs \
+         WHERE origin_id = ?1 ORDER BY ordinal",
+        id,
+    )?;
+    if relation_ids != origin.parent_origin_refs {
+        return Err(stored_invalid());
+    }
+    for parent_id in &relation_ids {
+        if !origin_exists(connection, parent_id)? {
+            return Err(stored_invalid());
+        }
+    }
+    Ok(Some(origin))
+}
+
+fn get_origin_v2_shallow(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<kernel_contracts::ContentOriginV2>, StoreError> {
+    get_document(
+        connection,
+        "content_origins_v2",
+        "https://schemas.shittim.local/common/content_origin/v2",
+        id,
+    )
 }
 
 fn relation_ids(

@@ -2425,6 +2425,14 @@ official fixtures位于`schemas/fixtures/policy/`：`remote_signature_algorithm.
 
 component DAG保持`policy→[common]`无环；41 retained ownership/source bytes不变。
 
+### 13.6.7 V2InitialBuildActive切片2：fresh SQLite 基线 + root TaskCreate v2 repository（已落地）
+
+切片2不新增manifest Schema（仍为83项，production bindings仍空）。它在`kernel-sqlite`落地：
+
+1. **migration 0004**（descriptor v1，`SchemaOnly` phase set）：`content_origins_v2`（canonical `record_json` + 生成列投影 + `content_origin_v2_parent_refs` 序列表）、`task_creation_provenances`（`record_json` + kind 投影 + 显式 `task_id` 列，读回强制列值与对应 Task 一致）、`audit_records_v2`、`root_task_create_idempotency_v2`（scope 四元组唯一 + `request_hash` + `created_task_id`/`creation_provenance_id`）。为允许 Task/Scope 引用 ContentOriginV2，0004 重建 `tasks`/`task_scopes`/`task_scope_source_refs`/`task_create_idempotency`，去掉对 v1 `content_origins` 的硬 FK，但恢复 `tasks.task_scope_ref → task_scopes` deferred FK（与 `task_scopes.task_id → tasks` 成环，同批重建可行）；origin 存在性由 repository canonical readback 证明。0001–0003 asset bytes 不变。
+2. **root repository** `WriteTransaction::create_root_task_v2(RootTaskCreateV2Command)`：输入 `TaskCreateRequestV2` + `RootTaskCreateAllocationV2` + envelope facts + 调用方注入的唯一 `accepted_at`（repository 不读时钟）。流程固定为 `kernel-task-creation` normalize/receipt/idempotency/allocation validate → 统一 savepoint 内按顺序写 ContentOriginV2、TaskScope v1、TaskSpec v1（`parent_task_id=null`）、`TaskCreationProvenanceV1(root_command_v2)`、`AuditRecordV2(task.creation_recorded)` → 再写 idempotency → 最后 `append_active_event_v2(task.created)` → 与 Created 等价的全闭包 canonical readback（Task/Origin/Scope/Provenance↔task/Audit/Outbox Event/idempotency 交叉一致）。同 scope 四元组 + 同 hash 重放执行同一闭包读回并返回已存 Task（不产生新 Event）；异 hash → `idempotency_conflict`；mapping 存在但闭包不完整 → `stored_data_invalid`，不写新事实。失败整体回滚不占号。
+3. **明确不在本切片**：KCP preflight/handler/bindings（切片3）；v1 写路径删除与旧库 reinitialize-required（切片6）；child materializer（切片5）。
+
 ### 13.7 V2InitialBuildActive唯一谓词
 
 `V2InitialBuildActive`为当前v2从零构建里程碑的完成谓词（ADR-0009；**取代并作废**原`V2ProductionWriteCutover`）。当前存储格式就是v2 fresh baseline：不执行、也不支持v1业务数据迁移。仅当以下全部为真：

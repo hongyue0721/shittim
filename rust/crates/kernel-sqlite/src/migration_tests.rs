@@ -209,7 +209,7 @@ fn descriptor_half_shape_is_drift_but_too_new_has_priority() {
     connection
         .execute(
             "INSERT INTO schema_migrations(version, name, checksum, applied_at) \
-             VALUES (4, 'future', ?1, '2026-01-01T00:00:00Z')",
+             VALUES (5, 'future', ?1, '2026-01-01T00:00:00Z')",
             ["a".repeat(64)],
         )
         .expect("future row");
