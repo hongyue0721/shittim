@@ -1,6 +1,6 @@
 # Approval v2 与 PermissionDecision 授权合同
 
-> 状态徽章：**schema/library partial**（切片1c-i五个授权核心Schema、generated Rust、typed conformance、SubjectProjection pure API与official fixture已实现；Approval/PD repository、current-head CAS、identity/challenge/evidence/remote signature、producer仍未实现）
+> 状态徽章：**schema/library partial**（切片1c-i五个授权核心Schema + 切片1c-ii八个身份/挑战/证据/远程签名Schema、generated Rust、typed conformance、SubjectProjection pure API与official fixtures已实现；Approval/PD/Identity repository、current-head CAS、producer与真实验签仍未实现）
 
 ## 唯一事实源
 
@@ -26,7 +26,15 @@
 
 Official fixtures：`schemas/fixtures/policy/subject_projection.v1.json`三branch各含subject、raw typed facts JSON、normalized projection、JCS UTF-8 hex、SHA-256与逐字段tamper；`schemas/fixtures/policy/approval_event_allocation.v1.json`按allocation惯例只含valid allocation与Schema tamper，不保存JCS/hash preimage。本片只证明Schema/typed shape，不宣称repository互异/causation/replay验证已实现。
 
-身份/证据家族（Credential、Remote/System Challenge、Local/System Evidence、Remote Response/Signature Preimage）明确属于1c-ii。
+## 已实现的1c-ii表面
+
+- `RemoteSignatureAlgorithmV1`：仅`ed25519` tagged branch，unknown field/branch fail closed；
+- `CredentialRefV1`：credential revision + algorithm union + status 闭集；
+- `RemoteApprovalChallengeV1` / `SystemAuthenticationChallengeV1`：challenge wire、`allowed_decisions`精确有序array const、nonce≥32 bytes encoding、state 闭集；
+- `LocalPresenceEvidenceV1` / `SystemAuthenticationEvidenceV1`：本地/OS 证据 wire；local 不复制 subject_hash，system `result=verified`；
+- `RemoteApprovalResponseV1` / `RemoteApprovalSignaturePreimageV1`：响应与签名 preimage；response 禁止 expires_at/public_key 覆盖。
+
+Official fixtures：`schemas/fixtures/policy/{remote_signature_algorithm,credential_ref,remote_approval_challenge,system_authentication_challenge,local_presence_evidence,system_authentication_evidence,remote_approval_response,remote_approval_signature_preimage}.v1.json`。preimage 额外保存 JCS UTF-8 hex 与 SHA-256。本片只证明 Schema/typed shape 与 fixture 向量，不宣称 repository CAS、TTL 相对时间、nonce CSPRNG 或真实验签已实现。
 
 ## 范围
 

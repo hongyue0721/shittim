@@ -6,7 +6,7 @@
 ## 权威边界
 
 - 字段、枚举、错误与兼容规则：`specs/` 与 `schemas/source/**/*.json`（合同细节见 IC §5、§6、§13 与 [ADR-0002](../../adr/0002-schema生成与兼容策略.md)）。
-- 索引：`schemas/manifest.json`（production=75 entries；41 retained + 34 component-native；`method_version_bindings=[]`）。
+- 索引：`schemas/manifest.json`（production=83 entries；41 retained + 42 component-native；`method_version_bindings=[]`）。
 - Rust 生成物：`rust/crates/kernel-contracts/src/generated/`（禁止手改）。
 - CLI：`schema-tool`；运行时库：`kernel-contracts`。
 - 许可证：根目录 [`LICENSE`](../../LICENSE)（Apache-2.0）。
@@ -75,7 +75,22 @@ manifest=70（41 retained + 29 component-native）是切片1b完成时基线；D
 - `policy/subject_projection.v1.json`：subject_hash唯一preimage；
 - `policy/approval_event_allocation.v1.json`：Approval head mutation的正式Event allocation。
 
-manifest=75（41 retained + 34 component-native），bindings仍空，DAG保持`policy→common`无环。`kernel-authorization`新增`project_subject_projection` typed pure API。official fixtures为`schemas/fixtures/policy/subject_projection.v1.json`与Schema-only `schemas/fixtures/policy/approval_event_allocation.v1.json`；Subject三branch共享`SubjectProjectionFixture` wrapper并由production-owner harness与CLI oracle双重验证，Allocation只验证shape/tamper且不保存JCS/hash preimage。身份/证据家族留1c-ii；repository/CAS/producer不在本切片。
+manifest=75（41 retained + 34 component-native）是切片1c-i完成时基线；bindings仍空，DAG保持`policy→common`无环。`kernel-authorization`新增`project_subject_projection` typed pure API。official fixtures为`schemas/fixtures/policy/subject_projection.v1.json`与Schema-only `schemas/fixtures/policy/approval_event_allocation.v1.json`；Subject三branch共享`SubjectProjectionFixture` wrapper并由production-owner harness与CLI oracle双重验证，Allocation只验证shape/tamper且不保存JCS/hash preimage。身份/证据家族由1c-ii闭合；repository/CAS/producer不在本切片。
+
+## V2InitialBuildActive切片1c-ii
+
+切片1c-ii新增八个policy component-native source root：
+
+- `policy/remote_signature_algorithm.v1.json`：仅`ed25519` tagged branch；
+- `policy/credential_ref.v1.json`：credential revision快照 + algorithm union；
+- `policy/remote_approval_challenge.v1.json`：remote challenge wire，`allowed_decisions`精确`["approved","denied"]`；
+- `policy/system_authentication_challenge.v1.json`：system challenge wire，`allowed_decisions`精确`["approved"]`；
+- `policy/local_presence_evidence.v1.json`：本地presence证据，不复制subject_hash；
+- `policy/system_authentication_evidence.v1.json`：OS认证成功证据，`result`固定`verified`；
+- `policy/remote_approval_response.v1.json`：远程签名响应，禁止expires_at/public_key覆盖；
+- `policy/remote_approval_signature_preimage.v1.json`：签名preimage，JCS UTF-8即签名bytes。
+
+manifest=83（41 retained + 42 component-native），bindings仍空，DAG保持`policy→common`无环。schema-tool restricted profile新增string-array `const`与`maxLength` assertion，以保真`allowed_decisions`顺序闭集与Ed25519 key/signature固定长度。official fixtures八份均在`schemas/fixtures/policy/`；preimage另存`jcs_utf8_hex`/`sha256`。conformance harness为`kernel-contracts` `identity_challenge_evidence_v1_schema_conformance`。repository/CAS/producer/真实验签不在本切片。
 
 ## 门禁与流水线概述
 

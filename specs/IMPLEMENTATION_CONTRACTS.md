@@ -2404,6 +2404,27 @@ component DAG不变：`policy→[common]`、`task→[common,policy]`均覆盖本
 
 component DAG保持`policy→[common]`无环；41 retained ownership/source bytes不变。
 
+### 13.6.6 V2InitialBuildActive切片1c-ii：身份/挑战/证据与远程签名八Schema（Schema/compiler/generated已落地）
+
+切片1c-ii在75项基线上新增八个policy component-native root，production manifest现为83项（41 retained + 42 component-native），`method_version_bindings`继续为空；repository、CAS、producer与真实验签路径不在本切片：
+
+| title | component | kind | compatibility | exact ID | exact source | direct refs |
+|---|---|---|---|---|---|---|
+| `RemoteSignatureAlgorithmV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/remote_signature_algorithm/v1` | `schemas/source/policy/remote_signature_algorithm.v1.json` | none |
+| `CredentialRefV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/credential_ref/v1` | `schemas/source/policy/credential_ref.v1.json` | `RemoteSignatureAlgorithmV1` |
+| `RemoteApprovalChallengeV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/remote_approval_challenge/v1` | `schemas/source/policy/remote_approval_challenge.v1.json` | `CredentialRefV1` |
+| `SystemAuthenticationChallengeV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/system_authentication_challenge/v1` | `schemas/source/policy/system_authentication_challenge.v1.json` | none |
+| `LocalPresenceEvidenceV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/local_presence_evidence/v1` | `schemas/source/policy/local_presence_evidence.v1.json` | retained `Actor`/`EntryPoint` |
+| `SystemAuthenticationEvidenceV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/system_authentication_evidence/v1` | `schemas/source/policy/system_authentication_evidence.v1.json` | none |
+| `RemoteApprovalResponseV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/remote_approval_response/v1` | `schemas/source/policy/remote_approval_response.v1.json` | `CredentialRefV1`、retained `Actor` |
+| `RemoteApprovalSignaturePreimageV1` | policy | object | new-contract | `https://schemas.shittim.local/policy/remote_approval_signature_preimage/v1` | `schemas/source/policy/remote_approval_signature_preimage.v1.json` | none |
+
+wire字段严格翻译§6.10.2–§6.10.4：`RemoteSignatureAlgorithmV1`只允许`ed25519` tagged branch；`allowed_decisions`是精确有序array const（remote=`["approved","denied"]`，system=`["approved"]`）；nonce为`base64url_no_pad`且编码长度≥43（解码≥32 bytes）；Ed25519 public key/signature编码长度固定43/86。状态机`issued→consumed|expired|revoked`与TTL≤5分钟是repository/CAS义务，Schema只编码闭集state与时间字段shape，不得伪称相对时间算术。schema-tool restricted profile为此批次原生支持string-array `const`与`maxLength` assertion；既有75项生成字节经drift gate保持稳定。
+
+official fixtures位于`schemas/fixtures/policy/`：`remote_signature_algorithm.v1.json`、`credential_ref.v1.json`、`remote_approval_challenge.v1.json`、`system_authentication_challenge.v1.json`、`local_presence_evidence.v1.json`、`system_authentication_evidence.v1.json`、`remote_approval_response.v1.json`、`remote_approval_signature_preimage.v1.json`。每份含`valid_object`与逐字段/闭集/顺序/长度tamper；preimage fixture额外保存JCS UTF-8 hex与SHA-256。conformance harness为`kernel-contracts` tests `identity_challenge_evidence_v1_schema_conformance`。
+
+component DAG保持`policy→[common]`无环；41 retained ownership/source bytes不变。
+
 ### 13.7 V2InitialBuildActive唯一谓词
 
 `V2InitialBuildActive`为当前v2从零构建里程碑的完成谓词（ADR-0009；**取代并作废**原`V2ProductionWriteCutover`）。当前存储格式就是v2 fresh baseline：不执行、也不支持v1业务数据迁移。仅当以下全部为真：
