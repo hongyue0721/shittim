@@ -222,26 +222,26 @@ fn task_create_success_exposes_complete_audit_and_event_then_replays() {
     assert_eq!(events.len(), 1);
     let event = &events[0];
     assert_eq!(event.delivered_at, None);
-    assert_eq!(event.envelope.event_id, command.allocation.event_id);
-    assert_eq!(event.envelope.type_, "task.created");
-    assert_eq!(event.envelope.aggregate_type, "task");
-    assert_eq!(event.envelope.aggregate_id, task.id);
-    assert_eq!(event.envelope.sequence, 0);
-    assert_eq!(event.envelope.outbox_position, "1");
-    assert_eq!(event.envelope.occurred_at, timestamp);
+    let StoredEventEnvelope::LegacyV1(envelope) = &event.envelope else {
+        panic!("legacy task.created envelope expected");
+    };
+    assert_eq!(envelope.event_id, command.allocation.event_id);
+    assert_eq!(envelope.type_, "task.created");
+    assert_eq!(envelope.aggregate_type, "task");
+    assert_eq!(envelope.aggregate_id, task.id);
+    assert_eq!(envelope.sequence, 0);
+    assert_eq!(envelope.outbox_position, "1");
+    assert_eq!(envelope.occurred_at, timestamp);
     assert_eq!(
-        event.envelope.causation_ref,
+        envelope.causation_ref,
         CausationRef {
             kind: CausationRefKind::CommandRequest,
             id: command.envelope.request_id.clone(),
         }
     );
-    assert_eq!(
-        event.envelope.correlation_id,
-        command.allocation.correlation_id
-    );
-    assert_eq!(event.envelope.dedup_key, command.allocation.dedup_key);
-    let EventPayload::TaskCreated(payload) = &event.envelope.payload else {
+    assert_eq!(envelope.correlation_id, command.allocation.correlation_id);
+    assert_eq!(envelope.dedup_key, command.allocation.dedup_key);
+    let EventPayload::TaskCreated(payload) = &envelope.payload else {
         panic!("task.created payload expected");
     };
     assert_eq!(payload.schema_version, TaskCreatedPayloadSchemaVersion);
@@ -302,8 +302,8 @@ fn task_create_outer_panic_rolls_back_every_fact_and_retry_reuses_zero_allocatio
         .expect("outbox")
         .pop()
         .expect("event");
-    assert_eq!(event.envelope.sequence, 0);
-    assert_eq!(event.envelope.outbox_position, "1");
+    assert_eq!(event.envelope.sequence(), 0);
+    assert_eq!(event.envelope.outbox_position(), "1");
 }
 
 #[test]

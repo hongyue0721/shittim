@@ -1,30 +1,62 @@
-//! Atomic Event Outbox storage and cursor types.
+//! Atomic versioned Event Outbox storage and cursor types.
 
 use crate::{StoreError, StoreErrorCode, WriteTransaction};
 use chrono::{DateTime, Utc};
-use kernel_contracts::{validate_json, CausationRef, EventEnvelopeType, TypedEventEnvelope};
-use rusqlite::{params, Connection, OptionalExtension};
+use kernel_contracts::{
+    canonical_json_string, CausationRef, CausationRefV2, EventEnvelopeType, EventEnvelopeV2Payload,
+    TypedEventEnvelope, TypedEventEnvelopeV2, EVENT_ACTIVE_BINDINGS,
+};
+use rusqlite::{params, Connection};
+use serde::Serialize;
 use serde_json::{json, Value};
 use std::fmt;
 use std::str::FromStr;
+use uuid::Uuid;
 
-const EVENT_SCHEMA: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
-const APPEND_EVENT_SAVEPOINT: &str = "kernel_sqlite_append_event";
+const LEGACY_EVENT_SCHEMA: &str = "https://schemas.shittim.local/v1/event/event_envelope.json";
+const ACTIVE_EVENT_SCHEMA: &str = "https://schemas.shittim.local/event/event_envelope/v2";
 
-/// Complete caller-owned event facts before sequence and global position allocation.
+/// A strictly decoded stored EventEnvelope in its exact persisted version.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PendingEvent {
+pub enum StoredEventEnvelope {
+    /// Retained EventEnvelope v1.
+    LegacyV1(TypedEventEnvelope),
+    /// Active EventEnvelope v2.
+    ActiveV2(TypedEventEnvelopeV2),
+}
+
+impl StoredEventEnvelope {
+    /// Returns the globally allocated Outbox position string.
+    pub fn outbox_position(&self) -> &str {
+        match self {
+            Self::LegacyV1(envelope) => &envelope.outbox_position,
+            Self::ActiveV2(envelope) => &envelope.outbox_position,
+        }
+    }
+
+    /// Returns the aggregate sequence.
+    pub fn sequence(&self) -> i64 {
+        match self {
+            Self::LegacyV1(envelope) => envelope.sequence,
+            Self::ActiveV2(envelope) => envelope.sequence,
+        }
+    }
+}
+
+/// Complete caller-owned retained v1 facts before sequence and position allocation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingLegacyEventV1 {
     /// Caller-allocated UUID event ID.
     pub event_id: String,
-    /// Generated closed EventEnvelope type.
+    /// Generated retained EventEnvelope type.
     pub event_type: EventEnvelopeType,
-    /// Aggregate type. Conditional schema validation enforces event/type pairing.
+    /// Aggregate type validated against the retained envelope mapping.
     pub aggregate_type: String,
     /// Aggregate root ID.
     pub aggregate_id: String,
     /// Kernel-supplied occurrence instant.
     pub occurred_at: DateTime<Utc>,
-    /// Direct command/event cause.
+    /// Direct retained command/event cause.
     pub causation_ref: CausationRef,
     /// Non-empty correlation ID.
     pub correlation_id: String,
@@ -32,6 +64,38 @@ pub struct PendingEvent {
     pub dedup_key: String,
     /// Type-specific payload including its own schema_version.
     pub payload: Value,
+}
+
+/// Closed aggregate identity accepted by the active Event v2 append API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventAggregateId {
+    /// Task aggregate UUID.
+    Task(Uuid),
+    /// Action aggregate UUID.
+    Action(Uuid),
+    /// Approval chain aggregate UUID.
+    ApprovalChain(Uuid),
+    /// Singleton global Stop Fence aggregate.
+    StopFenceGlobal,
+}
+
+/// Complete caller-owned active v2 facts before derived mapping and allocation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingActiveEventV2 {
+    /// Caller-allocated event UUID.
+    pub event_id: Uuid,
+    /// Closed aggregate identity, checked against the payload variant and payload ID.
+    pub aggregate_id: EventAggregateId,
+    /// Kernel-supplied occurrence instant.
+    pub occurred_at: DateTime<Utc>,
+    /// Active v2 direct cause.
+    pub causation_ref: CausationRefV2,
+    /// Non-empty correlation ID.
+    pub correlation_id: String,
+    /// Non-empty consumer idempotency key.
+    pub dedup_key: String,
+    /// Generated closed active payload variant.
+    pub payload: EventEnvelopeV2Payload,
 }
 
 /// Positive, globally allocated Outbox row position.
@@ -42,10 +106,7 @@ impl OutboxPosition {
     /// Creates a positive position.
     pub fn new(value: i64) -> Result<Self, StoreError> {
         if value <= 0 {
-            return Err(StoreError::new(
-                StoreErrorCode::InvalidCursor,
-                "outbox position must be positive",
-            ));
+            return Err(invalid_cursor());
         }
         Ok(Self(value))
     }
@@ -122,8 +183,8 @@ impl PageLimit {
 /// Validated event reconstructed from normalized Outbox columns.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OutboxRecord {
-    /// Typed generated envelope and payload.
-    pub envelope: TypedEventEnvelope,
+    /// Exact typed envelope version.
+    pub envelope: StoredEventEnvelope,
     /// Publisher completion time; not a subscriber acknowledgement.
     pub delivered_at: Option<DateTime<Utc>>,
 }
@@ -139,103 +200,201 @@ pub enum MarkDeliveredResult {
     NotFound,
 }
 
-pub(crate) fn append_event(
-    transaction: &WriteTransaction<'_>,
-    event: PendingEvent,
-) -> Result<OutboxRecord, StoreError> {
-    let connection = transaction.connection();
-    prevalidate_event(&event)?;
-    connection
-        .execute_batch(&format!("SAVEPOINT {APPEND_EVENT_SAVEPOINT}"))
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
+#[derive(Debug)]
+struct VersionedAppend {
+    schema_version: i64,
+    event_id: String,
+    event_type: &'static str,
+    aggregate_type: &'static str,
+    aggregate_id: String,
+    occurred_at: DateTime<Utc>,
+    causation: Value,
+    correlation_id: String,
+    dedup_key: String,
+    payload: Value,
+}
 
-    match append_event_inside_savepoint(connection, event) {
-        Ok(record) => {
-            match connection.execute_batch(&format!("RELEASE SAVEPOINT {APPEND_EVENT_SAVEPOINT}")) {
-                Ok(()) => Ok(record),
-                Err(release_error) => {
-                    let original =
-                        StoreError::sqlite(release_error, StoreErrorCode::InternalStoreError);
-                    if connection
-                        .execute_batch(&format!(
-                            "ROLLBACK TO SAVEPOINT {APPEND_EVENT_SAVEPOINT}; \
-                         RELEASE SAVEPOINT {APPEND_EVENT_SAVEPOINT}"
-                        ))
-                        .is_err()
-                    {
-                        return Err(StoreError::new(
-                            StoreErrorCode::InternalStoreError,
-                            "append_event savepoint release and rollback both failed",
-                        ));
-                    }
-                    Err(original)
-                }
-            }
-        }
-        Err(error) => {
-            let rollback = connection.execute_batch(&format!(
-                "ROLLBACK TO SAVEPOINT {APPEND_EVENT_SAVEPOINT}; \
-                 RELEASE SAVEPOINT {APPEND_EVENT_SAVEPOINT}"
-            ));
-            if rollback.is_err() {
-                return Err(StoreError::new(
-                    StoreErrorCode::InternalStoreError,
-                    format!(
-                        "append_event failed with {} and savepoint rollback also failed",
-                        error.code.as_str()
-                    ),
-                ));
-            }
-            Err(error)
-        }
+pub(crate) fn append_legacy_event_v1(
+    transaction: &WriteTransaction<'_>,
+    event: PendingLegacyEventV1,
+) -> Result<OutboxRecord, StoreError> {
+    let input = legacy_input(event)?;
+    append_versioned_event(transaction, input)
+}
+
+pub(crate) fn append_active_event_v2(
+    transaction: &WriteTransaction<'_>,
+    event: PendingActiveEventV2,
+) -> Result<OutboxRecord, StoreError> {
+    let input = active_input(event)?;
+    append_versioned_event(transaction, input)
+}
+
+fn legacy_input(event: PendingLegacyEventV1) -> Result<VersionedAppend, StoreError> {
+    let causation =
+        serde_json::to_value(&event.causation_ref).map_err(|_| caller_serialization())?;
+    let input = VersionedAppend {
+        schema_version: 1,
+        event_id: event.event_id,
+        event_type: event.event_type.as_str(),
+        aggregate_type: leak_legacy_aggregate_type(event.aggregate_type)?,
+        aggregate_id: event.aggregate_id,
+        occurred_at: event.occurred_at,
+        causation,
+        correlation_id: event.correlation_id,
+        dedup_key: event.dedup_key,
+        payload: event.payload,
+    };
+    prevalidate(&input)?;
+    Ok(input)
+}
+
+fn leak_legacy_aggregate_type(value: String) -> Result<&'static str, StoreError> {
+    match value.as_str() {
+        "task" => Ok("task"),
+        "stop_fence" => Ok("stop_fence"),
+        _ => Err(caller_contract()),
     }
 }
 
-fn prevalidate_event(event: &PendingEvent) -> Result<(), StoreError> {
-    let placeholder_position = OutboxPosition::new(1).map_err(|_| {
-        StoreError::new(
-            StoreErrorCode::InternalStoreError,
-            "invalid internal Outbox placeholder position",
-        )
-    })?;
-    decode_envelope(envelope_value(
-        placeholder_position,
-        0,
-        event.event_id.clone(),
-        event.event_type.as_str(),
-        event.aggregate_type.clone(),
-        event.aggregate_id.clone(),
-        event.occurred_at.to_rfc3339(),
-        event.causation_ref.kind.as_str(),
-        event.causation_ref.id.clone(),
-        event.correlation_id.clone(),
-        event.dedup_key.clone(),
-        event.payload.clone(),
-    ))?;
+fn active_input(event: PendingActiveEventV2) -> Result<VersionedAppend, StoreError> {
+    if event.correlation_id.is_empty() || event.dedup_key.is_empty() {
+        return Err(caller_contract());
+    }
+    let (binding_index, payload_id) = active_payload_identity(&event.payload)?;
+    let binding = EVENT_ACTIVE_BINDINGS
+        .get(binding_index)
+        .ok_or_else(caller_contract)?;
+    let aggregate_id = match (binding_index, event.aggregate_id) {
+        (0 | 1, EventAggregateId::Task(id)) if id == payload_id => id.to_string(),
+        (2, EventAggregateId::Action(id)) if id == payload_id => id.to_string(),
+        (3, EventAggregateId::ApprovalChain(id)) if id == payload_id => id.to_string(),
+        (4, EventAggregateId::StopFenceGlobal) => "global".to_owned(),
+        _ => return Err(caller_contract()),
+    };
+    let payload = serialize_active_payload(&event.payload)?;
+    let causation =
+        serde_json::to_value(&event.causation_ref).map_err(|_| caller_serialization())?;
+    let input = VersionedAppend {
+        schema_version: 2,
+        event_id: event.event_id.to_string(),
+        event_type: binding.event_type,
+        aggregate_type: binding.aggregate_type,
+        aggregate_id,
+        occurred_at: event.occurred_at,
+        causation,
+        correlation_id: event.correlation_id,
+        dedup_key: event.dedup_key,
+        payload,
+    };
+    prevalidate(&input)?;
+    Ok(input)
+}
+
+fn active_payload_identity(payload: &EventEnvelopeV2Payload) -> Result<(usize, Uuid), StoreError> {
+    let (index, id) = match payload {
+        EventEnvelopeV2Payload::TaskCreated(payload) => (0, payload.task_id.as_str()),
+        EventEnvelopeV2Payload::TaskStateChanged(payload) => (1, payload.task_id.as_str()),
+        EventEnvelopeV2Payload::ActionStateChanged(payload) => (2, payload.action_id.as_str()),
+        EventEnvelopeV2Payload::ApprovalStateChanged(payload) => {
+            (3, payload.approval_chain_id.as_str())
+        }
+        EventEnvelopeV2Payload::StopFenceActivated(_) => {
+            return Ok((4, Uuid::nil()));
+        }
+    };
+    Uuid::parse_str(id)
+        .map(|id| (index, id))
+        .map_err(|_| caller_contract())
+}
+
+fn serialize_active_payload(payload: &EventEnvelopeV2Payload) -> Result<Value, StoreError> {
+    match payload {
+        EventEnvelopeV2Payload::TaskCreated(value) => to_value(value.as_ref()),
+        EventEnvelopeV2Payload::TaskStateChanged(value) => to_value(value.as_ref()),
+        EventEnvelopeV2Payload::ActionStateChanged(value) => to_value(value.as_ref()),
+        EventEnvelopeV2Payload::ApprovalStateChanged(value) => to_value(value.as_ref()),
+        EventEnvelopeV2Payload::StopFenceActivated(value) => to_value(value.as_ref()),
+    }
+}
+
+fn to_value(value: &impl Serialize) -> Result<Value, StoreError> {
+    serde_json::to_value(value).map_err(|_| caller_serialization())
+}
+
+fn prevalidate(input: &VersionedAppend) -> Result<(), StoreError> {
+    if input.correlation_id.is_empty() || input.dedup_key.is_empty() {
+        return Err(caller_contract());
+    }
+    decode_envelope(
+        envelope_value(input, OutboxPosition::new(1)?, 0),
+        DecodeContext::Caller,
+    )?;
     Ok(())
 }
 
-fn append_event_inside_savepoint(
-    connection: &Connection,
-    event: PendingEvent,
+fn append_versioned_event(
+    transaction: &WriteTransaction<'_>,
+    input: VersionedAppend,
 ) -> Result<OutboxRecord, StoreError> {
+    transaction.with_savepoint("append_versioned_event", |connection| {
+        let sequence: i64 = connection
+            .query_row(
+                "INSERT INTO aggregate_event_sequences(aggregate_type, aggregate_id, last_sequence) \
+                 VALUES (?1, ?2, 0) \
+                 ON CONFLICT(aggregate_type, aggregate_id) DO UPDATE \
+                 SET last_sequence = last_sequence + 1 RETURNING last_sequence",
+                params![input.aggregate_type, input.aggregate_id],
+                |row| row.get(0),
+            )
+            .map_err(write_error)?;
+        let payload_json = canonical_json_string(&input.payload).map_err(|_| caller_serialization())?;
+        let causation_json = canonical_json_string(&input.causation).map_err(|_| caller_serialization())?;
+        connection
+            .execute(
+                "INSERT INTO outbox(\
+                    event_id, event_type, schema_version, aggregate_type, aggregate_id, sequence, \
+                    occurred_at, causation_json, correlation_id, dedup_key, payload_json\
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    input.event_id,
+                    input.event_type,
+                    input.schema_version,
+                    input.aggregate_type,
+                    input.aggregate_id,
+                    sequence,
+                    input.occurred_at.to_rfc3339(),
+                    causation_json,
+                    input.correlation_id,
+                    input.dedup_key,
+                    payload_json,
+                ],
+            )
+            .map_err(write_error)?;
+        let position = connection.last_insert_rowid();
+        decode_versioned_row_at(connection, "outbox", position)?.ok_or_else(stored_invalid)
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn append_legacy_v1_storage_for_test(
+    connection: &Connection,
+    event: PendingLegacyEventV1,
+) -> Result<OutboxRecord, StoreError> {
+    let input = legacy_input(event)?;
     let sequence: i64 = connection
         .query_row(
             "INSERT INTO aggregate_event_sequences(aggregate_type, aggregate_id, last_sequence) \
              VALUES (?1, ?2, 0) \
              ON CONFLICT(aggregate_type, aggregate_id) DO UPDATE \
-             SET last_sequence = last_sequence + 1 \
-             RETURNING last_sequence",
-            params![event.aggregate_type, event.aggregate_id],
+             SET last_sequence = last_sequence + 1 RETURNING last_sequence",
+            params![input.aggregate_type, input.aggregate_id],
             |row| row.get(0),
         )
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-    let payload_json = kernel_contracts::canonical_json_string(&event.payload).map_err(|_| {
-        StoreError::new(
-            StoreErrorCode::SerializationFailed,
-            "event payload canonicalization failed",
-        )
-    })?;
+        .map_err(write_error)?;
+    let payload_json = canonical_json_string(&input.payload).map_err(|_| caller_serialization())?;
+    let causation: CausationRef =
+        serde_json::from_value(input.causation.clone()).map_err(|_| caller_contract())?;
     connection
         .execute(
             "INSERT INTO outbox(\
@@ -243,40 +402,36 @@ fn append_event_inside_savepoint(
                 occurred_at, causation_kind, causation_id, correlation_id, dedup_key, payload_json\
              ) VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
-                event.event_id,
-                event.event_type.as_str(),
-                event.aggregate_type,
-                event.aggregate_id,
+                input.event_id,
+                input.event_type,
+                input.aggregate_type,
+                input.aggregate_id,
                 sequence,
-                event.occurred_at.to_rfc3339(),
-                event.causation_ref.kind.as_str(),
-                event.causation_ref.id,
-                event.correlation_id,
-                event.dedup_key,
+                input.occurred_at.to_rfc3339(),
+                causation.kind.as_str(),
+                causation.id,
+                input.correlation_id,
+                input.dedup_key,
                 payload_json,
             ],
         )
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-    let position = OutboxPosition::new(connection.last_insert_rowid())?;
-    let envelope_value = envelope_value(
-        position,
+        .map_err(write_error)?;
+    decode_legacy_storage_parts(
+        connection.last_insert_rowid(),
+        &input.event_id,
+        input.event_type,
+        1,
+        input.aggregate_type,
+        &input.aggregate_id,
         sequence,
-        event.event_id,
-        event.event_type.as_str(),
-        event.aggregate_type,
-        event.aggregate_id,
-        event.occurred_at.to_rfc3339(),
-        event.causation_ref.kind.as_str(),
-        event.causation_ref.id,
-        event.correlation_id,
-        event.dedup_key,
-        event.payload,
-    );
-    let envelope = decode_envelope(envelope_value)?;
-    Ok(OutboxRecord {
-        envelope,
-        delivered_at: None,
-    })
+        &input.occurred_at.to_rfc3339(),
+        causation.kind.as_str(),
+        &causation.id,
+        &input.correlation_id,
+        &input.dedup_key,
+        &payload_json,
+        None,
+    )
 }
 
 pub(crate) fn read_after(
@@ -286,10 +441,9 @@ pub(crate) fn read_after(
 ) -> Result<Vec<OutboxRecord>, StoreError> {
     read_records(
         connection,
-        "SELECT outbox_position, event_id, event_type, aggregate_type, aggregate_id, sequence, \
-                occurred_at, causation_kind, causation_id, correlation_id, dedup_key, payload_json, \
-                delivered_at FROM outbox WHERE outbox_position > ?1 \
-         ORDER BY outbox_position ASC LIMIT ?2",
+        "SELECT outbox_position, event_id, event_type, schema_version, aggregate_type, aggregate_id, \
+                sequence, occurred_at, causation_json, correlation_id, dedup_key, payload_json, delivered_at \
+         FROM outbox WHERE outbox_position > ?1 ORDER BY outbox_position ASC LIMIT ?2",
         cursor.get(),
         limit,
     )
@@ -302,9 +456,9 @@ pub(crate) fn read_undelivered(
 ) -> Result<Vec<OutboxRecord>, StoreError> {
     read_records(
         connection,
-        "SELECT outbox_position, event_id, event_type, aggregate_type, aggregate_id, sequence, \
-                occurred_at, causation_kind, causation_id, correlation_id, dedup_key, payload_json, \
-                delivered_at FROM outbox WHERE delivered_at IS NULL AND outbox_position > ?1 \
+        "SELECT outbox_position, event_id, event_type, schema_version, aggregate_type, aggregate_id, \
+                sequence, occurred_at, causation_json, correlation_id, dedup_key, payload_json, delivered_at \
+         FROM outbox WHERE delivered_at IS NULL AND outbox_position > ?1 \
          ORDER BY outbox_position ASC LIMIT ?2",
         cursor.get(),
         limit,
@@ -318,44 +472,33 @@ pub(crate) fn latest_position(
         .query_row("SELECT MAX(outbox_position) FROM outbox", [], |row| {
             row.get(0)
         })
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
+        .map_err(read_error)?;
     value.map(OutboxPosition::new).transpose()
 }
 
-/// Conditional first-delivery mark; must run inside an active `WriteTransaction`.
-///
-/// SQL keeps a conditional `UPDATE ... delivered_at IS NULL` plus a same-transaction
-/// existence `SELECT`. Callers only observe `Marked` / `AlreadyMarked` / `NotFound` after the
-/// surrounding store transaction has successfully committed.
 pub(crate) fn mark_delivered(
     transaction: &WriteTransaction<'_>,
     position: OutboxPosition,
     delivered_at: DateTime<Utc>,
 ) -> Result<MarkDeliveredResult, StoreError> {
     let connection = transaction.connection();
+    let Some(record) = decode_versioned_row_at(connection, "outbox", position.get())? else {
+        return Ok(MarkDeliveredResult::NotFound);
+    };
+    if record.delivered_at.is_some() {
+        return Ok(MarkDeliveredResult::AlreadyMarked);
+    }
     let changed = connection
         .execute(
             "UPDATE outbox SET delivered_at = ?1 \
              WHERE outbox_position = ?2 AND delivered_at IS NULL",
             params![delivered_at.to_rfc3339(), position.get()],
         )
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-    if changed == 1 {
-        return Ok(MarkDeliveredResult::Marked);
-    }
-    let exists = connection
-        .query_row(
-            "SELECT 1 FROM outbox WHERE outbox_position = ?1",
-            [position.get()],
-            |_| Ok(()),
-        )
-        .optional()
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?
-        .is_some();
-    Ok(if exists {
-        MarkDeliveredResult::AlreadyMarked
+        .map_err(write_error)?;
+    Ok(if changed == 1 {
+        MarkDeliveredResult::Marked
     } else {
-        MarkDeliveredResult::NotFound
+        MarkDeliveredResult::AlreadyMarked
     })
 }
 
@@ -365,49 +508,100 @@ fn read_records(
     after: i64,
     limit: PageLimit,
 ) -> Result<Vec<OutboxRecord>, StoreError> {
-    let mut statement = connection
-        .prepare(sql)
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
+    let mut statement = connection.prepare(sql).map_err(read_error)?;
     let mut rows = statement
         .query(params![after, limit.as_i64()])
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
+        .map_err(read_error)?;
     let mut records = Vec::new();
-    while let Some(row) = rows
-        .next()
-        .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?
-    {
-        records.push(decode_row(row)?);
+    while let Some(row) = rows.next().map_err(read_error)? {
+        records.push(decode_versioned_row(row).map_err(read_error)?);
     }
     Ok(records)
 }
 
-fn decode_row(row: &rusqlite::Row<'_>) -> Result<OutboxRecord, StoreError> {
-    let position = OutboxPosition::new(row.get(0).map_err(row_error)?)?;
-    let payload_json: String = row.get(11).map_err(row_error)?;
-    let payload: Value = serde_json::from_str(&payload_json).map_err(|_| {
-        StoreError::new(
-            StoreErrorCode::SerializationFailed,
-            "stored event payload cannot be parsed",
-        )
-    })?;
-    let occurred_at: String = row.get(6).map_err(row_error)?;
-    let envelope = decode_envelope(envelope_value(
-        position,
-        row.get(5).map_err(row_error)?,
-        row.get(1).map_err(row_error)?,
-        &row.get::<_, String>(2).map_err(row_error)?,
-        row.get(3).map_err(row_error)?,
-        row.get(4).map_err(row_error)?,
-        occurred_at,
-        &row.get::<_, String>(7).map_err(row_error)?,
-        row.get(8).map_err(row_error)?,
-        row.get(9).map_err(row_error)?,
-        row.get(10).map_err(row_error)?,
+pub(crate) fn decode_versioned_row_at(
+    connection: &Connection,
+    table: &str,
+    position: i64,
+) -> Result<Option<OutboxRecord>, StoreError> {
+    let sql = format!(
+        "SELECT outbox_position, event_id, event_type, schema_version, aggregate_type, aggregate_id, \
+                sequence, occurred_at, causation_json, correlation_id, dedup_key, payload_json, delivered_at \
+         FROM {table} WHERE outbox_position = ?1"
+    );
+    let mut statement = connection.prepare(&sql).map_err(read_error)?;
+    let outcome = statement.query_row([position], decode_versioned_row);
+    match outcome {
+        Ok(record) => Ok(Some(record)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(rusqlite::Error::FromSqlConversionFailure(_, _, source))
+            if source.downcast_ref::<StoreError>().is_some() =>
+        {
+            Err(stored_invalid())
+        }
+        Err(error) => Err(read_error(error)),
+    }
+}
+
+fn decode_versioned_row(row: &rusqlite::Row<'_>) -> Result<OutboxRecord, rusqlite::Error> {
+    decode_versioned_parts(
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+        row.get(9)?,
+        row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+    )
+    .map_err(to_sqlite_decode_error)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn decode_versioned_parts(
+    position: i64,
+    event_id: String,
+    event_type: String,
+    schema_version: i64,
+    aggregate_type: String,
+    aggregate_id: String,
+    sequence: i64,
+    occurred_at: String,
+    causation_json: String,
+    correlation_id: String,
+    dedup_key: String,
+    payload_json: String,
+    delivered_at: Option<String>,
+) -> Result<OutboxRecord, StoreError> {
+    let causation = parse_canonical_object(&causation_json)?;
+    let payload = parse_canonical_object(&payload_json)?;
+    let input = VersionedAppend {
+        schema_version,
+        event_id,
+        event_type: stored_event_type(&event_type, schema_version)?,
+        aggregate_type: stored_aggregate_type(&aggregate_type)?,
+        aggregate_id,
+        occurred_at: parse_datetime(&occurred_at)?,
+        causation,
+        correlation_id,
+        dedup_key,
         payload,
-    ))?;
-    let delivered_at: Option<String> = row.get(12).map_err(row_error)?;
+    };
+    let envelope = decode_envelope(
+        envelope_value(
+            &input,
+            OutboxPosition::new(position).map_err(|_| stored_invalid())?,
+            sequence,
+        ),
+        DecodeContext::Stored,
+    )?;
     let delivered_at = delivered_at
-        .map(|value| parse_datetime(&value, "stored delivered_at is invalid"))
+        .map(|value| parse_datetime(&value))
         .transpose()?;
     Ok(OutboxRecord {
         envelope,
@@ -416,59 +610,212 @@ fn decode_row(row: &rusqlite::Row<'_>) -> Result<OutboxRecord, StoreError> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn envelope_value(
-    position: OutboxPosition,
-    sequence: i64,
-    event_id: String,
+pub(crate) fn decode_legacy_storage_parts(
+    position: i64,
+    event_id: &str,
     event_type: &str,
-    aggregate_type: String,
-    aggregate_id: String,
-    occurred_at: String,
+    schema_version: i64,
+    aggregate_type: &str,
+    aggregate_id: &str,
+    sequence: i64,
+    occurred_at: &str,
     causation_kind: &str,
-    causation_id: String,
-    correlation_id: String,
-    dedup_key: String,
-    payload: Value,
-) -> Value {
+    causation_id: &str,
+    correlation_id: &str,
+    dedup_key: &str,
+    payload_json: &str,
+    delivered_at: Option<&str>,
+) -> Result<OutboxRecord, StoreError> {
+    let payload = parse_canonical_object(payload_json)?;
+    let causation = json!({"kind": causation_kind, "id": causation_id});
+    decode_versioned_parts(
+        position,
+        event_id.to_owned(),
+        event_type.to_owned(),
+        schema_version,
+        aggregate_type.to_owned(),
+        aggregate_id.to_owned(),
+        sequence,
+        occurred_at.to_owned(),
+        canonical_json_string(&causation).map_err(|_| stored_invalid())?,
+        correlation_id.to_owned(),
+        dedup_key.to_owned(),
+        canonical_json_string(&payload).map_err(|_| stored_invalid())?,
+        delivered_at.map(str::to_owned),
+    )
+}
+
+fn parse_canonical_object(stored: &str) -> Result<Value, StoreError> {
+    let value: Value = serde_json::from_str(stored).map_err(|_| stored_invalid())?;
+    if !value.is_object() || canonical_json_string(&value).map_err(|_| stored_invalid())? != stored
+    {
+        return Err(stored_invalid());
+    }
+    Ok(value)
+}
+
+fn stored_event_type(value: &str, version: i64) -> Result<&'static str, StoreError> {
+    let allowed = match version {
+        1 => &["task.created", "task.state_changed", "stop_fence.activated"][..],
+        2 => &[
+            "task.created",
+            "task.state_changed",
+            "action.state_changed",
+            "approval.state_changed",
+            "stop_fence.activated",
+        ][..],
+        _ => return Err(stored_invalid()),
+    };
+    allowed
+        .iter()
+        .copied()
+        .find(|candidate| *candidate == value)
+        .ok_or_else(stored_invalid)
+}
+
+fn stored_aggregate_type(value: &str) -> Result<&'static str, StoreError> {
+    match value {
+        "task" => Ok("task"),
+        "action" => Ok("action"),
+        "approval_chain" => Ok("approval_chain"),
+        "stop_fence" => Ok("stop_fence"),
+        _ => Err(stored_invalid()),
+    }
+}
+
+fn envelope_value(input: &VersionedAppend, position: OutboxPosition, sequence: i64) -> Value {
     json!({
-        "event_id": event_id,
-        "type": event_type,
-        "schema_version": 1,
-        "aggregate_type": aggregate_type,
-        "aggregate_id": aggregate_id,
+        "event_id": input.event_id,
+        "type": input.event_type,
+        "schema_version": input.schema_version,
+        "aggregate_type": input.aggregate_type,
+        "aggregate_id": input.aggregate_id,
         "sequence": sequence,
         "outbox_position": position.to_string(),
-        "occurred_at": occurred_at,
-        "causation_ref": { "kind": causation_kind, "id": causation_id },
-        "correlation_id": correlation_id,
-        "dedup_key": dedup_key,
-        "payload": payload,
+        "occurred_at": input.occurred_at.to_rfc3339(),
+        "causation_ref": input.causation,
+        "correlation_id": input.correlation_id,
+        "dedup_key": input.dedup_key,
+        "payload": input.payload,
     })
 }
 
-fn decode_envelope(value: Value) -> Result<TypedEventEnvelope, StoreError> {
-    validate_json(EVENT_SCHEMA, &value).map_err(|_| {
-        StoreError::new(
-            StoreErrorCode::ContractInvalid,
-            "EventEnvelope violates its JSON contract",
-        )
-    })?;
-    TypedEventEnvelope::decode(value).map_err(|_| {
-        StoreError::new(
-            StoreErrorCode::ContractInvalid,
-            "EventEnvelope typed decoding failed",
-        )
-    })
+#[derive(Debug, Clone, Copy)]
+enum DecodeContext {
+    Caller,
+    Stored,
 }
 
-fn parse_datetime(value: &str, message: &'static str) -> Result<DateTime<Utc>, StoreError> {
+fn decode_envelope(
+    value: Value,
+    context: DecodeContext,
+) -> Result<StoredEventEnvelope, StoreError> {
+    let version = value
+        .get("schema_version")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| decode_error(context))?;
+    match version {
+        1 => {
+            kernel_contracts::validate_json(LEGACY_EVENT_SCHEMA, &value)
+                .map_err(|_| decode_error(context))?;
+            let envelope = TypedEventEnvelope::decode_after_validation(value)
+                .map_err(|_| decode_error(context))?;
+            validate_legacy_relations(&envelope, context)?;
+            Ok(StoredEventEnvelope::LegacyV1(envelope))
+        }
+        2 => {
+            kernel_contracts::validate_json(ACTIVE_EVENT_SCHEMA, &value)
+                .map_err(|_| decode_error(context))?;
+            let envelope = TypedEventEnvelopeV2::decode_after_validation(value)
+                .map_err(|_| decode_error(context))?;
+            validate_active_relations(&envelope, context)?;
+            Ok(StoredEventEnvelope::ActiveV2(envelope))
+        }
+        _ => Err(decode_error(context)),
+    }
+}
+
+fn validate_legacy_relations(
+    envelope: &TypedEventEnvelope,
+    context: DecodeContext,
+) -> Result<(), StoreError> {
+    let payload_id = match &envelope.payload {
+        kernel_contracts::EventPayload::TaskCreated(payload) => payload.task_id.as_str(),
+        kernel_contracts::EventPayload::TaskStateChanged(payload) => payload.task_id.as_str(),
+        kernel_contracts::EventPayload::StopFenceActivated(_) => "global",
+    };
+    if envelope.aggregate_id != payload_id {
+        return Err(decode_error(context));
+    }
+    Ok(())
+}
+
+fn validate_active_relations(
+    envelope: &TypedEventEnvelopeV2,
+    context: DecodeContext,
+) -> Result<(), StoreError> {
+    let payload_id = match &envelope.payload {
+        EventEnvelopeV2Payload::TaskCreated(payload) => payload.task_id.as_str(),
+        EventEnvelopeV2Payload::TaskStateChanged(payload) => payload.task_id.as_str(),
+        EventEnvelopeV2Payload::ActionStateChanged(payload) => payload.action_id.as_str(),
+        EventEnvelopeV2Payload::ApprovalStateChanged(payload) => payload.approval_chain_id.as_str(),
+        EventEnvelopeV2Payload::StopFenceActivated(_) => "global",
+    };
+    if envelope.aggregate_id != payload_id {
+        return Err(decode_error(context));
+    }
+    Ok(())
+}
+
+fn decode_error(context: DecodeContext) -> StoreError {
+    match context {
+        DecodeContext::Caller => caller_contract(),
+        DecodeContext::Stored => stored_invalid(),
+    }
+}
+
+fn parse_datetime(value: &str) -> Result<DateTime<Utc>, StoreError> {
     DateTime::parse_from_rfc3339(value)
         .map(|instant| instant.with_timezone(&Utc))
-        .map_err(|_| StoreError::new(StoreErrorCode::SerializationFailed, message))
+        .map_err(|_| stored_invalid())
 }
 
-fn row_error(error: rusqlite::Error) -> StoreError {
+fn caller_contract() -> StoreError {
+    StoreError::new(
+        StoreErrorCode::ContractInvalid,
+        "pending event violates its exact generated contract",
+    )
+}
+
+fn caller_serialization() -> StoreError {
+    StoreError::new(
+        StoreErrorCode::SerializationFailed,
+        "pending event JSON serialization failed",
+    )
+}
+
+fn stored_invalid() -> StoreError {
+    StoreError::new(
+        StoreErrorCode::StoredDataInvalid,
+        "stored Outbox row failed exact integrity validation",
+    )
+}
+
+fn write_error(error: rusqlite::Error) -> StoreError {
     StoreError::sqlite(error, StoreErrorCode::InternalStoreError)
+}
+
+fn read_error(error: rusqlite::Error) -> StoreError {
+    if let rusqlite::Error::FromSqlConversionFailure(_, _, source) = &error {
+        if source.downcast_ref::<StoreError>().is_some() {
+            return stored_invalid();
+        }
+    }
+    StoreError::sqlite(error, StoreErrorCode::StoredDataInvalid)
+}
+
+fn to_sqlite_decode_error(error: StoreError) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 
 fn invalid_cursor() -> StoreError {

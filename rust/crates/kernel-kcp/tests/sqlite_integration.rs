@@ -10,7 +10,7 @@ use kernel_kcp::{
     HandlerResult, IdGenerationError, KernelClock, KernelIdGenerator, OpaqueIdPurpose,
     PostCommitNotificationIntent, UuidPurpose,
 };
-use kernel_sqlite::{OutboxCursor, PageLimit, SqliteConfig, SqliteStore};
+use kernel_sqlite::{OutboxCursor, PageLimit, SqliteConfig, SqliteStore, StoredEventEnvelope};
 use serde_json::json;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -77,7 +77,9 @@ fn sqlite_create_get_and_replay_bind_intent_event_audit_and_materialized_facts()
         .read_after(OutboxCursor::START, PageLimit::new(10).unwrap())
         .unwrap();
     assert_eq!(events.len(), 1);
-    let event = &events[0].envelope;
+    let StoredEventEnvelope::LegacyV1(event) = &events[0].envelope else {
+        panic!("legacy task.create producer envelope expected");
+    };
     assert_eq!(event.event_id, intent_event_id);
     assert_eq!(event.type_, "task.created");
     assert_eq!(event.aggregate_type, "task");

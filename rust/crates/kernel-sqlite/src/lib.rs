@@ -18,7 +18,8 @@ mod task;
 pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
 pub use outbox::{
-    MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit, PendingEvent,
+    EventAggregateId, MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit,
+    PendingActiveEventV2, PendingLegacyEventV1, StoredEventEnvelope,
 };
 pub use rate_limit::TransactionRateLimitPort;
 pub use task::{
@@ -28,6 +29,7 @@ pub use task::{
 use chrono::{DateTime, Utc};
 use kernel_contracts::{AuditRecord, ContentOrigin, TaskScope, TaskSpec};
 use rusqlite::Connection;
+use std::cell::Cell;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,6 +40,8 @@ use std::sync::{Mutex, MutexGuard};
 pub struct SqliteStore {
     connection: Mutex<Connection>,
     healthy: AtomicBool,
+    #[cfg(test)]
+    outer_rollback_failure: AtomicBool,
 }
 
 impl SqliteStore {
@@ -56,6 +60,8 @@ impl SqliteStore {
         Ok(Self {
             connection: Mutex::new(connection),
             healthy: AtomicBool::new(true),
+            #[cfg(test)]
+            outer_rollback_failure: AtomicBool::new(false),
         })
     }
 
@@ -77,8 +83,19 @@ impl SqliteStore {
         let result = catch_unwind(AssertUnwindSafe(|| {
             let transaction = WriteTransaction {
                 connection: &connection,
+                poisoned: Cell::new(false),
+                #[cfg(test)]
+                savepoint_failure: Cell::new(None),
             };
-            operation(&transaction)
+            let outcome = operation(&transaction);
+            if transaction.poisoned.get() {
+                Err(StoreError::new(
+                    StoreErrorCode::InternalStoreError,
+                    "transaction is poisoned after savepoint cleanup failure",
+                ))
+            } else {
+                outcome
+            }
         }));
 
         match result {
@@ -94,7 +111,9 @@ impl SqliteStore {
                 }
             },
             Ok(Err(error)) => {
-                if connection.execute_batch("ROLLBACK").is_err() {
+                let rollback_failed = connection.execute_batch("ROLLBACK").is_err()
+                    || self.consume_outer_rollback_failure_for_test();
+                if rollback_failed {
                     self.mark_unhealthy();
                     return Err(StoreError::new(
                         StoreErrorCode::InternalStoreError,
@@ -107,7 +126,9 @@ impl SqliteStore {
                 Err(error)
             }
             Err(payload) => {
-                if connection.execute_batch("ROLLBACK").is_err() {
+                let rollback_failed = connection.execute_batch("ROLLBACK").is_err()
+                    || self.consume_outer_rollback_failure_for_test();
+                if rollback_failed {
                     self.mark_unhealthy();
                 }
                 drop(connection);
@@ -203,6 +224,21 @@ impl SqliteStore {
         self.healthy.store(false, Ordering::Release);
     }
 
+    #[cfg(test)]
+    pub(crate) fn inject_outer_rollback_failure_for_test(&self) {
+        self.outer_rollback_failure.store(true, Ordering::Release);
+    }
+
+    #[cfg(test)]
+    fn consume_outer_rollback_failure_for_test(&self) -> bool {
+        self.outer_rollback_failure.swap(false, Ordering::AcqRel)
+    }
+
+    #[cfg(not(test))]
+    fn consume_outer_rollback_failure_for_test(&self) -> bool {
+        false
+    }
+
     /// Test-only fail-closed seam for unhealthy-store coverage; not a production API.
     #[cfg(test)]
     pub(crate) fn mark_unhealthy_for_test(&self) {
@@ -214,24 +250,31 @@ impl SqliteStore {
 #[derive(Debug)]
 pub struct WriteTransaction<'connection> {
     connection: &'connection Connection,
+    poisoned: Cell<bool>,
+    #[cfg(test)]
+    savepoint_failure: Cell<Option<SavepointFailureForTest>>,
 }
 
 impl<'connection> WriteTransaction<'connection> {
-    /// Test-only constructor for fixtures that deliberately exercise a transaction-bound helper.
-    /// Production code constructs this type only inside [`SqliteStore::with_write_transaction`].
-    #[cfg(test)]
-    pub(crate) const fn from_connection(connection: &'connection Connection) -> Self {
-        Self { connection }
-    }
-
     /// Validates, canonicalizes, and inserts an immutable AuditRecord.
     pub fn append_audit(&self, record: &AuditRecord) -> Result<(), StoreError> {
         audit::insert_audit(self.connection, record)
     }
 
-    /// Allocates aggregate sequence/global position and validates the full typed EventEnvelope.
-    pub fn append_event(&self, event: PendingEvent) -> Result<OutboxRecord, StoreError> {
-        outbox::append_event(self, event)
+    /// Allocates aggregate sequence/global position for a retained v1 event.
+    pub fn append_legacy_event_v1(
+        &self,
+        event: PendingLegacyEventV1,
+    ) -> Result<OutboxRecord, StoreError> {
+        outbox::append_legacy_event_v1(self, event)
+    }
+
+    /// Derives active type/aggregate facts and appends an EventEnvelope v2.
+    pub fn append_active_event_v2(
+        &self,
+        event: PendingActiveEventV2,
+    ) -> Result<OutboxRecord, StoreError> {
+        outbox::append_active_event_v2(self, event)
     }
 
     /// Borrows the production rate-limit authority bound to this transaction.
@@ -242,6 +285,93 @@ impl<'connection> WriteTransaction<'connection> {
     pub(crate) const fn connection(&self) -> &Connection {
         self.connection
     }
+
+    pub(crate) fn with_savepoint<T>(
+        &self,
+        name: &'static str,
+        operation: impl FnOnce(&Connection) -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        debug_assert!(name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte == b'_'));
+        self.connection
+            .execute_batch(&format!("SAVEPOINT {name}"))
+            .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
+        let result = operation(self.connection);
+        #[cfg(test)]
+        if self.savepoint_failure.get() == Some(SavepointFailureForTest::Release) {
+            let _ = self
+                .connection
+                .execute_batch(&format!("RELEASE SAVEPOINT {name}"));
+        }
+        match result {
+            Ok(value) => match self
+                .connection
+                .execute_batch(&format!("RELEASE SAVEPOINT {name}"))
+            {
+                Ok(()) => Ok(value),
+                Err(error) => {
+                    let original = StoreError::sqlite(error, StoreErrorCode::InternalStoreError);
+                    if self.savepoint_cleanup_must_fail_for_test()
+                        || self
+                            .connection
+                            .execute_batch(&format!(
+                                "ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}"
+                            ))
+                            .is_err()
+                    {
+                        self.poisoned.set(true);
+                        return Err(StoreError::new(
+                            StoreErrorCode::InternalStoreError,
+                            "savepoint release failed and cleanup poisoned the transaction",
+                        ));
+                    }
+                    Err(original)
+                }
+            },
+            Err(error) => {
+                if self.savepoint_cleanup_must_fail_for_test()
+                    || self
+                        .connection
+                        .execute_batch(&format!(
+                            "ROLLBACK TO SAVEPOINT {name}; RELEASE SAVEPOINT {name}"
+                        ))
+                        .is_err()
+                {
+                    self.poisoned.set(true);
+                    return Err(StoreError::new(
+                        StoreErrorCode::InternalStoreError,
+                        format!(
+                            "operation failed with {} and savepoint cleanup poisoned the transaction",
+                            error.code.as_str()
+                        ),
+                    ));
+                }
+                Err(error)
+            }
+        }
+    }
+    #[cfg(test)]
+    pub(crate) fn inject_savepoint_failure_for_test(&self, failure: SavepointFailureForTest) {
+        self.savepoint_failure.set(Some(failure));
+    }
+
+    #[cfg(test)]
+    fn savepoint_cleanup_must_fail_for_test(&self) -> bool {
+        self.savepoint_failure.get() == Some(SavepointFailureForTest::Cleanup)
+    }
+
+    #[cfg(not(test))]
+    fn savepoint_cleanup_must_fail_for_test(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SavepointFailureForTest {
+    Release,
+    Cleanup,
 }
 
 fn unhealthy_store_error() -> StoreError {
@@ -251,6 +381,12 @@ fn unhealthy_store_error() -> StoreError {
     )
 }
 
+#[cfg(test)]
+mod migration_tests;
+#[cfg(test)]
+mod outbox_tests;
+#[cfg(test)]
+mod savepoint_tests;
 #[cfg(test)]
 mod task_tests;
 #[cfg(test)]

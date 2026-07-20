@@ -1,6 +1,6 @@
 //! Transactional Task create repository and strict Task/TaskScope/ContentOrigin reads.
 
-use crate::{PendingEvent, StoreError, StoreErrorCode, WriteTransaction};
+use crate::{PendingLegacyEventV1, StoreError, StoreErrorCode, WriteTransaction};
 use chrono::{DateTime, Utc};
 use domain_policy::{normalize_uri, normalize_uri_pattern};
 use kernel_contracts::{
@@ -131,11 +131,9 @@ impl WriteTransaction<'_> {
     /// the caller's surrounding write transaction.
     pub fn create_task(&self, command: TaskCreateCommand) -> Result<CreateTaskResult, StoreError> {
         let prepared = prepare_legacy_v1_create(&command)?;
-        self.connection()
-            .execute_batch(&format!("SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"))
-            .map_err(|error| StoreError::sqlite(error, StoreErrorCode::InternalStoreError))?;
-        let result = create_legacy_v1_inside_savepoint(self, &command, &prepared);
-        finish_legacy_v1_savepoint(self.connection(), result)
+        self.with_savepoint(LEGACY_V1_CREATE_TASK_SAVEPOINT, |_| {
+            create_legacy_v1_inside_savepoint(self, &command, &prepared)
+        })
     }
 }
 
@@ -380,7 +378,7 @@ fn create_legacy_v1_inside_savepoint(
     verify_legacy_v1_creation_audit(&audit, command, &task, &origin, prepared)?;
     crate::audit::insert_audit(connection, &audit)?;
     let pending = build_legacy_v1_event(command, &task)?;
-    let appended = crate::outbox::append_event(transaction, pending.clone())?;
+    let appended = transaction.append_legacy_event_v1(pending.clone())?;
     verify_legacy_v1_created_event(&appended, &pending, &task, prepared)?;
     validate_legacy_v1_created_relations(connection, &task, &scope, &origin)?;
     Ok(CreateTaskResult::Created { task })
@@ -614,7 +612,7 @@ fn build_legacy_v1_audit(
 fn build_legacy_v1_event(
     command: &TaskCreateCommand,
     task: &TaskSpec,
-) -> Result<PendingEvent, StoreError> {
+) -> Result<PendingLegacyEventV1, StoreError> {
     let payload = TaskCreatedPayload {
         created_at: task.created_at.clone(),
         goal: task.goal.clone(),
@@ -624,7 +622,7 @@ fn build_legacy_v1_event(
         task_id: task.id.clone(),
         task_revision: task.revision,
     };
-    Ok(PendingEvent {
+    Ok(PendingLegacyEventV1 {
         event_id: command.allocation.event_id.clone(),
         event_type: EventEnvelopeType::TaskCreated,
         aggregate_type: "task".into(),
@@ -698,11 +696,13 @@ fn verify_legacy_v1_creation_audit(
 
 fn verify_legacy_v1_created_event(
     record: &crate::OutboxRecord,
-    pending: &PendingEvent,
+    pending: &PendingLegacyEventV1,
     task: &TaskSpec,
     prepared: &PreparedLegacyV1Create,
 ) -> Result<(), StoreError> {
-    let envelope = &record.envelope;
+    let crate::StoredEventEnvelope::LegacyV1(envelope) = &record.envelope else {
+        return Err(contract_error());
+    };
     let EventPayload::TaskCreated(payload) = &envelope.payload else {
         return Err(contract_error());
     };
@@ -748,50 +748,6 @@ fn validate_legacy_v1_created_relations(
         return Err(stored_invalid());
     }
     Ok(())
-}
-
-fn finish_legacy_v1_savepoint<T>(
-    connection: &Connection,
-    result: Result<T, StoreError>,
-) -> Result<T, StoreError> {
-    match result {
-        Ok(value) => {
-            match connection.execute_batch(&format!(
-                "RELEASE SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"
-            )) {
-                Ok(()) => Ok(value),
-                Err(error) => {
-                    let original = StoreError::sqlite(error, StoreErrorCode::InternalStoreError);
-                    rollback_legacy_v1_savepoint(connection, Some(&original))?;
-                    Err(original)
-                }
-            }
-        }
-        Err(error) => {
-            rollback_legacy_v1_savepoint(connection, Some(&error))?;
-            Err(error)
-        }
-    }
-}
-
-fn rollback_legacy_v1_savepoint(
-    connection: &Connection,
-    original: Option<&StoreError>,
-) -> Result<(), StoreError> {
-    connection
-        .execute_batch(&format!(
-            "ROLLBACK TO SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}; \
-             RELEASE SAVEPOINT {LEGACY_V1_CREATE_TASK_SAVEPOINT}"
-        ))
-        .map_err(|_| {
-            StoreError::new(
-                StoreErrorCode::InternalStoreError,
-                format!(
-                    "create_task failed with {} and savepoint rollback also failed",
-                    original.map_or("internal_store_error", |error| error.code.as_str())
-                ),
-            )
-        })
 }
 
 fn encode_contract_document<T: Serialize>(

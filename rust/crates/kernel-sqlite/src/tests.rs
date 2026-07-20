@@ -75,7 +75,7 @@ fn migration_is_idempotent_and_connection_pragmas_are_verified() {
     assert_eq!(journal.to_ascii_lowercase(), "wal");
     assert_eq!(foreign_keys, 1);
     assert_eq!(busy_timeout, 2_000);
-    assert_eq!(migration_count, 2);
+    assert_eq!(migration_count, 3);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             row.get(0)
         })
         .expect("migration count");
-    assert_eq!(migration_count, 2);
+    assert_eq!(migration_count, 3);
     for table in [
         "aggregate_event_sequences",
         "outbox",
@@ -138,8 +138,7 @@ fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
     crate::audit::insert_audit(&connection, &audit).expect("v1 audit");
     let event = task_created_event(50, "v1-task");
     let expected_event =
-        crate::outbox::append_event(&WriteTransaction::from_connection(&connection), event)
-            .expect("v1 event");
+        crate::outbox::append_legacy_v1_storage_for_test(&connection, event).expect("v1 event");
     drop(connection);
 
     let store = database.open();
@@ -164,7 +163,7 @@ fn migration_from_real_v1_preserves_audit_and_outbox_and_adds_task_tables() {
             .collect::<Result<_, _>>()
             .expect("versions")
     };
-    assert_eq!(versions, [1, 2]);
+    assert_eq!(versions, [1, 2, 3]);
     for table in [
         "content_origins",
         "content_origin_parent_refs",
@@ -277,8 +276,9 @@ fn migration_checksum_drift_and_too_new_are_rejected() {
     too_new
         .raw()
         .execute(
-            "INSERT INTO schema_migrations(version, name, checksum, applied_at) \
-             VALUES (3, 'future', ?1, '2026-01-01T00:00:00Z')",
+            "INSERT INTO schema_migrations(\
+                version, name, checksum, applied_at, descriptor_hash, descriptor_format_version\
+             ) VALUES (4, 'future', ?1, '2026-01-01T00:00:00Z', ?1, 1)",
             ["a".repeat(64)],
         )
         .expect("insert future migration");
@@ -398,7 +398,7 @@ fn transaction_panic_rolls_back_and_does_not_poison_store() {
     let panic = catch_unwind(AssertUnwindSafe(|| {
         let _ = store.with_write_transaction(|transaction| -> Result<(), StoreError> {
             transaction.append_audit(&audit)?;
-            transaction.append_event(task_created_event(50, "panic-task"))?;
+            transaction.append_legacy_event_v1(task_created_event(50, "panic-task"))?;
             assert_eq!(
                 transaction
                     .rate_limit_port()
@@ -429,7 +429,7 @@ fn transaction_panic_rolls_back_and_does_not_poison_store() {
                 RateLimitPreview::Available
             );
             transaction.append_audit(&audit)?;
-            transaction.append_event(task_created_event(51, "panic-task"))?;
+            transaction.append_legacy_event_v1(task_created_event(51, "panic-task"))?;
             Ok(())
         })
         .expect("store remains writable");
@@ -475,17 +475,17 @@ fn outbox_allocates_sequences_positions_and_multiple_aggregates() {
     let records = store
         .with_write_transaction(|transaction| {
             Ok(vec![
-                transaction.append_event(task_created_event_for(1, "task-a", 1, 1))?,
-                transaction.append_event(task_state_event(2, "task-a", 1))?,
-                transaction.append_event(task_created_event_for(3, "task-b", 3, 3))?,
+                transaction.append_legacy_event_v1(task_created_event_for(1, "task-a", 1, 1))?,
+                transaction.append_legacy_event_v1(task_state_event(2, "task-a", 1))?,
+                transaction.append_legacy_event_v1(task_created_event_for(3, "task-b", 3, 3))?,
             ])
         })
         .expect("append events");
-    assert_eq!(records[0].envelope.sequence, 0);
-    assert_eq!(records[1].envelope.sequence, 1);
-    assert_eq!(records[2].envelope.sequence, 0);
-    assert_eq!(records[0].envelope.outbox_position, "1");
-    assert_eq!(records[2].envelope.outbox_position, "3");
+    assert_eq!(records[0].envelope.sequence(), 0);
+    assert_eq!(records[1].envelope.sequence(), 1);
+    assert_eq!(records[2].envelope.sequence(), 0);
+    assert_eq!(records[0].envelope.outbox_position(), "1");
+    assert_eq!(records[2].envelope.outbox_position(), "3");
     assert_eq!(
         store
             .latest_position()
@@ -504,18 +504,18 @@ fn failed_event_rolls_back_sequence_and_position_without_gaps() {
     mismatch.event_type = EventEnvelopeType::TaskStateChanged;
     assert_eq!(
         store
-            .with_write_transaction(|transaction| transaction.append_event(mismatch))
+            .with_write_transaction(|transaction| transaction.append_legacy_event_v1(mismatch))
             .expect_err("payload mismatch")
             .code,
         StoreErrorCode::ContractInvalid
     );
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(2, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(2, "task-a"))
         })
         .expect("valid event");
-    assert_eq!(record.envelope.sequence, 0);
-    assert_eq!(record.envelope.outbox_position, "1");
+    assert_eq!(record.envelope.sequence(), 0);
+    assert_eq!(record.envelope.outbox_position(), "1");
 }
 
 #[test]
@@ -526,18 +526,18 @@ fn contract_invalid_event_rolls_back_allocations() {
     invalid.payload["goal"] = json!("");
     assert_eq!(
         store
-            .with_write_transaction(|transaction| transaction.append_event(invalid))
+            .with_write_transaction(|transaction| transaction.append_legacy_event_v1(invalid))
             .expect_err("invalid payload")
             .code,
         StoreErrorCode::ContractInvalid
     );
     let valid = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(2, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(2, "task-a"))
         })
         .expect("valid event");
-    assert_eq!(valid.envelope.sequence, 0);
-    assert_eq!(valid.envelope.outbox_position, "1");
+    assert_eq!(valid.envelope.sequence(), 0);
+    assert_eq!(valid.envelope.outbox_position(), "1");
 }
 
 #[test]
@@ -549,7 +549,7 @@ fn ignored_invalid_first_append_is_self_rolled_back() {
             let mut invalid = task_created_event(10, "task-a");
             invalid.payload["goal"] = json!("");
             let error = transaction
-                .append_event(invalid)
+                .append_legacy_event_v1(invalid)
                 .expect_err("invalid append");
             assert_eq!(error.code, StoreErrorCode::ContractInvalid);
             Ok(())
@@ -562,11 +562,11 @@ fn ignored_invalid_first_append_is_self_rolled_back() {
 
     let valid = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(11, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(11, "task-a"))
         })
         .expect("valid append");
-    assert_eq!(valid.envelope.sequence, 0);
-    assert_eq!(valid.envelope.outbox_position, "1");
+    assert_eq!(valid.envelope.sequence(), 0);
+    assert_eq!(valid.envelope.outbox_position(), "1");
 }
 
 #[test]
@@ -575,26 +575,26 @@ fn ignored_invalid_second_append_preserves_prior_event_without_gaps() {
     let store = database.open();
     let first = store
         .with_write_transaction(|transaction| {
-            let first = transaction.append_event(task_created_event(20, "task-a"))?;
+            let first = transaction.append_legacy_event_v1(task_created_event(20, "task-a"))?;
             let mut invalid = task_created_event(21, "task-a");
             invalid.payload["goal"] = json!("");
             let error = transaction
-                .append_event(invalid)
+                .append_legacy_event_v1(invalid)
                 .expect_err("invalid append");
             assert_eq!(error.code, StoreErrorCode::ContractInvalid);
             Ok(first)
         })
         .expect("commit first event");
-    assert_eq!(first.envelope.sequence, 0);
-    assert_eq!(first.envelope.outbox_position, "1");
+    assert_eq!(first.envelope.sequence(), 0);
+    assert_eq!(first.envelope.outbox_position(), "1");
 
     let next = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(22, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(22, "task-a"))
         })
         .expect("next append");
-    assert_eq!(next.envelope.sequence, 1);
-    assert_eq!(next.envelope.outbox_position, "2");
+    assert_eq!(next.envelope.sequence(), 1);
+    assert_eq!(next.envelope.outbox_position(), "2");
 }
 
 #[test]
@@ -626,7 +626,7 @@ fn cursor_parsing_ordering_and_limits_are_strict() {
     for number in 1..=3 {
         store
             .with_write_transaction(|transaction| {
-                transaction.append_event(task_created_event_for(
+                transaction.append_legacy_event_v1(task_created_event_for(
                     number,
                     &format!("task-{number}"),
                     number,
@@ -642,7 +642,7 @@ fn cursor_parsing_ordering_and_limits_are_strict() {
         )
         .expect("page");
     assert_eq!(page.len(), 1);
-    assert_eq!(page[0].envelope.outbox_position, "2");
+    assert_eq!(page[0].envelope.outbox_position(), "2");
 }
 
 #[test]
@@ -651,7 +651,7 @@ fn undelivered_reads_are_at_least_once_across_reopen() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
     let limit = PageLimit::new(10).expect("limit");
@@ -672,8 +672,9 @@ fn undelivered_reads_are_at_least_once_across_reopen() {
             .expect("delivery read after reopen"),
         vec![record.clone()]
     );
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 5).unwrap();
     assert_eq!(
         reopened
@@ -699,11 +700,12 @@ fn delivered_marking_retains_first_time_and_history() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let first = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
     let second = first + ChronoDuration::seconds(10);
     assert_eq!(
@@ -736,11 +738,12 @@ fn mark_delivered_helper_err_rolls_back_and_public_retry_marks() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 7).unwrap();
 
     let error = store
@@ -777,11 +780,12 @@ fn mark_delivered_helper_panic_rolls_back_and_store_remains_healthy() {
     let store = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 8).unwrap();
 
     let panicked = catch_unwind(AssertUnwindSafe(|| {
@@ -818,11 +822,12 @@ fn unhealthy_store_public_mark_fail_closed_and_peer_store_unchanged() {
     let peer = database.open();
     let record = store
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 9).unwrap();
 
     store.mark_unhealthy_for_test();
@@ -834,7 +839,7 @@ fn unhealthy_store_public_mark_fail_closed_and_peer_store_unchanged() {
         .read_undelivered(OutboxCursor::START, PageLimit::new(10).expect("limit"))
         .expect("peer undelivered")
         .iter()
-        .any(|row| row.envelope.outbox_position == record.envelope.outbox_position));
+        .any(|row| row.envelope.outbox_position() == record.envelope.outbox_position()));
     let history = peer
         .read_after(OutboxCursor::START, PageLimit::new(10).expect("limit"))
         .expect("peer history");
@@ -848,11 +853,12 @@ fn mark_delivered_writer_contention_maps_busy_and_retries_after_release() {
     let contender = database.open();
     let record = holder
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "task-a"))
+            transaction.append_legacy_event_v1(task_created_event(1, "task-a"))
         })
         .expect("event");
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let delivered_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 11).unwrap();
 
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -892,12 +898,13 @@ fn concurrent_mark_delivered_exact_one_marked_and_winner_timestamp() {
     let bootstrap = database.open();
     let record = bootstrap
         .with_write_transaction(|transaction| {
-            transaction.append_event(task_created_event(1, "shared-task"))
+            transaction.append_legacy_event_v1(task_created_event(1, "shared-task"))
         })
         .expect("event");
     drop(bootstrap);
-    let position = OutboxPosition::new(record.envelope.outbox_position.parse().expect("position"))
-        .expect("position type");
+    let position =
+        OutboxPosition::new(record.envelope.outbox_position().parse().expect("position"))
+            .expect("position type");
     let first = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 1).unwrap();
     let second = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 2).unwrap();
     let barrier = Arc::new(Barrier::new(3));
@@ -971,7 +978,7 @@ fn multiple_stores_serialize_sequence_and_position_allocation() {
             barrier.wait();
             store
                 .with_write_transaction(|transaction| {
-                    transaction.append_event(task_created_event_for(
+                    transaction.append_legacy_event_v1(task_created_event_for(
                         number,
                         "shared-task",
                         number,
@@ -986,12 +993,12 @@ fn multiple_stores_serialize_sequence_and_position_allocation() {
         .into_iter()
         .map(|handle| handle.join().expect("join"))
         .collect();
-    records.sort_by_key(|record| record.envelope.sequence);
-    assert_eq!(records[0].envelope.sequence, 0);
-    assert_eq!(records[1].envelope.sequence, 1);
+    records.sort_by_key(|record| record.envelope.sequence());
+    assert_eq!(records[0].envelope.sequence(), 0);
+    assert_eq!(records[1].envelope.sequence(), 1);
     assert_ne!(
-        records[0].envelope.outbox_position,
-        records[1].envelope.outbox_position
+        records[0].envelope.outbox_position(),
+        records[1].envelope.outbox_position()
     );
 }
 
@@ -1257,7 +1264,7 @@ fn actor() -> Actor {
     }
 }
 
-fn task_created_event(number: u32, aggregate_id: &str) -> PendingEvent {
+fn task_created_event(number: u32, aggregate_id: &str) -> PendingLegacyEventV1 {
     task_created_event_for(number, aggregate_id, number, number)
 }
 
@@ -1266,13 +1273,13 @@ fn task_created_event_for(
     aggregate_id: &str,
     task_number: u32,
     second: u32,
-) -> PendingEvent {
-    let task_id = format!("00000000-0000-4000-8000-{task_number:012}");
-    PendingEvent {
+) -> PendingLegacyEventV1 {
+    let task_id = test_aggregate_uuid(aggregate_id, task_number);
+    PendingLegacyEventV1 {
         event_id: format!("10000000-0000-4000-8000-{event_number:012}"),
         event_type: EventEnvelopeType::TaskCreated,
         aggregate_type: "task".into(),
-        aggregate_id: aggregate_id.into(),
+        aggregate_id: task_id.clone(),
         occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, second).unwrap(),
         causation_ref: CausationRef {
             id: format!("20000000-0000-4000-8000-{event_number:012}"),
@@ -1292,13 +1299,13 @@ fn task_created_event_for(
     }
 }
 
-fn task_state_event(number: u32, aggregate_id: &str, task_number: u32) -> PendingEvent {
-    let task_id = format!("00000000-0000-4000-8000-{task_number:012}");
-    PendingEvent {
+fn task_state_event(number: u32, aggregate_id: &str, task_number: u32) -> PendingLegacyEventV1 {
+    let task_id = test_aggregate_uuid(aggregate_id, task_number);
+    PendingLegacyEventV1 {
         event_id: format!("30000000-0000-4000-8000-{number:012}"),
         event_type: EventEnvelopeType::TaskStateChanged,
         aggregate_type: "task".into(),
-        aggregate_id: aggregate_id.into(),
+        aggregate_id: task_id.clone(),
         occurred_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 1, number).unwrap(),
         causation_ref: CausationRef {
             id: format!("40000000-0000-4000-8000-{number:012}"),
@@ -1316,6 +1323,21 @@ fn task_state_event(number: u32, aggregate_id: &str, task_number: u32) -> Pendin
             "changed_at": format!("2026-01-01T00:01:{number:02}Z")
         }),
     }
+}
+
+fn test_aggregate_uuid(aggregate_id: &str, _fallback_number: u32) -> String {
+    uuid::Uuid::parse_str(aggregate_id)
+        .map(|id| id.to_string())
+        .unwrap_or_else(|_| {
+            let mut hash = 0_u128;
+            for byte in aggregate_id.bytes() {
+                hash = hash.wrapping_mul(257).wrapping_add(u128::from(byte));
+            }
+            uuid::Uuid::from_u128(
+                0x1000_0000_0000_4000_8000_0000_0000_0000 | (hash & 0xffff_ffff_ffff),
+            )
+            .to_string()
+        })
 }
 
 fn rate_request<'a>(
