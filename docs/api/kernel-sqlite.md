@@ -1,6 +1,6 @@
 # kernel-sqlite 内部 Rust API
 
-`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0005、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径，以及 **active root TaskCreate v2** repository。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。ADR-0006/0007要求的Action/PermissionDecision/Approval repositories与child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll。
+`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0006、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径、**active root TaskCreate v2** repository，以及切片4a **Action current-snapshot / ActionTransitionIntent / `action.state_changed` producer**。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。PermissionDecision/Approval/Identity repositories与child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll。
 
 ## 打开与migration
 
@@ -16,6 +16,7 @@ let store = SqliteStore::open("/var/lib/shittim/kernel.sqlite3", config)?;
 - 0003 exact identity：version `3`、name `versioned_event_outbox`、唯一asset `rust/crates/kernel-sqlite/migrations/0003_versioned_event_outbox.sql`、transform三元组`shittim.kernel-sqlite.outbox-v1-to-versioned-v1` / `1` / `kernel_sqlite::migration::outbox_v1_to_versioned_v1`；phase set=`ledger_upgrade|replacement_schema|table_swap`。**transform 不迁移 v1 业务数据**：非空 pre-0003 Outbox 直接 `reinitialize-required`；空表仅做 shape 升级。
 - 0004 exact identity：version `4`、name `root_task_create_v2`、唯一asset `rust/crates/kernel-sqlite/migrations/0004_root_task_create_v2.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::root_task_create_v2_ddl_only_v1`；phase set=`schema`（纯DDL，无row transform）。
 - 0005 exact identity：version `5`、name `drop_v1_business_tables`、唯一asset `rust/crates/kernel-sqlite/migrations/0005_drop_v1_business_tables.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::drop_v1_business_tables_ddl_only_v1`；phase set=`schema`。在空表前提下 drop `content_origins`(+parent_refs)、`audit_records`、`task_create_idempotency`；非空拒绝。
+- 0006 exact identity：version `6`、name `action_and_transition`、唯一asset `rust/crates/kernel-sqlite/migrations/0006_action_and_transition.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::action_and_transition_ddl_only_v1`；phase set=`schema`。创建 `actions` 与 `action_transition_intents`（canonical `record_json` + 投影列 + 双唯一键 + `committed_event_id`）。
 - descriptor format v1是UTF-8、LF、无BOM、末尾单LF的JCS对象；asset SHA覆盖原始bytes，descriptor SHA同时写入`checksum`与`descriptor_hash`，`descriptor_format_version=1`。
 - ledger shape严格识别：descriptor两列必须同时存在或同时不存在；半shape、半填row、未知format/identity、hash drift均`migration_drift`。数据库version高于binary优先`database_schema_too_new`。
 - 每个pending migration先`BEGIN IMMEDIATE`，锁后重新验证ledger，再执行DDL/transform/ledger insert；任一步失败整体rollback。rollback失败不会被忽略。
@@ -127,6 +128,31 @@ pub enum CreateRootTaskV2Result {
 
 0004 表：`content_origins_v2`（+ parent_refs）、`task_creation_provenances`、`audit_records_v2`、`root_task_create_idempotency_v2`；canonical `record_json` 为事实源，生成列仅投影。Task/Scope 继续复用 retained v1 **shape** 表。0005 删除 dead v1 业务表 `content_origins` / `audit_records` / `task_create_idempotency`。公开只读：`get_task` / `get_task_scope` / `get_content_origin_v2` / `get_audit_v2` / `get_task_creation_provenance`。legacy `get_content_origin` 已从公开 API 移除（crate 私有只读，0005 后恒 `None`）。
 
+## Action current-snapshot + ActionTransitionIntent（切片4a）
+
+```rust
+// Action closed subset implemented in this slice (public):
+WriteTransaction::insert_pending_action(InsertPendingActionCommand) -> ActionRequestV2
+SqliteStore::get_action(id) -> Option<ActionRequestV2>
+// crate-private internal CAS helper only (no Outbox; not a dual status-event authority):
+// WriteTransaction::transition_with_expected_revision(TransitionActionCommand) -> ActionRequestV2
+
+// ActionTransitionIntent closed set (IC §6.14) — sole public authority for status events:
+WriteTransaction::insert_intent(ActionTransitionIntentV1) -> InsertIntentResult
+SqliteStore::get_intent(transition_id) -> Option<ActionTransitionIntentV1>
+SqliteStore::get_for_action_revision(...) -> Option<ActionTransitionIntentV1>
+WriteTransaction::mark_committed_with_event(MarkCommittedCommand) -> (ActionRequestV2, OutboxRecord)
+SqliteStore::reconcile_intent(transition_id) -> ReconcileIntentResult // prepared|committed|corrupt
+```
+
+- pending insert：`status=pending`、`revision=1`、`permission_decision_ref`/`approval_chain_id`/`result`/`lease` 为 null；owning Task 必须存在；canonical JCS readback。
+- `transition_with_expected_revision`：**crate-private** 内部 CAS helper；expected revision+status CAS；边合法性与 evidence 不变量委托 `domain-task`；**不写 Outbox**。会发状态事件的边必须以 `mark_committed_with_event` 为唯一权威，禁止双写路径。
+- **需 effects 的边当前 fail closed**：domain outcome 要求 lease/lock release（如 `leased → approved|cancelled|unknown_side_effect`）时，在 lease API 落地前明确拒绝，禁止静默半提交。
+- `insert_intent`：`transition_id` 与业务六元组双唯一键；同事实重放返回原 intent；非法边 fail closed。
+- `mark_committed_with_event`：同一 savepoint 内先经 `domain-task::apply_action_transition` 做完整 evidence 门（PD/verification/dispatch_certainty 等；intent 只作 anchor+唯一键），再 CAS Action + `append_active_event_v2(action.state_changed)`（payload 从 commit 后 Action+intent+`ActionEventIntent` 投影；causation 精确 `action_transition`）+ 回写 `committed_event_id`；失败不占 sequence/position。同 event id 重放幂等，只验 intent↔event 链路，不要求 Action head 仍停在该 revision。
+- `reconcile_intent`：只观察 stored 关系，返回 `prepared|committed|corrupt`，不补造 event 或更换 transition id。Committed 只对比 intent↔outbox event 快照字段；后续合法推进不得映射 Corrupt。
+- 本片**未实现** IC §6.10.6 Action 闭集中的 lease/policy-binding/child-completion/recovery-list 方法。
+
 ## Transaction-bound rate limit
 
 `WriteTransaction::rate_limit_port()`保持原合同：preview只读，winner-only consume在同一transaction重新计数并写入；Store本身不实现可独立commit的RateLimitPort。
@@ -137,4 +163,4 @@ pub enum CreateRootTaskV2Result {
 
 ## 明确未实现
 
-root TaskCreate v2 repository + kcp method-aware runtime（切片3a/3b）+ v1 write 删除与旧库拒绝（切片3c）已落地。Child Action materialization、Action/PermissionDecision/Approval repositories、其它 active Event business producer、Publisher、versioned KCP poll、server/agentd、retention/claim lease仍未实现。Publisher/poll不在`V2InitialBuildActive`。§13.7 完整闭合仍需切片4–5（Action/PD/Approval + child materializer）。
+root TaskCreate v2 repository + kcp method-aware runtime（切片3a/3b）+ v1 write 删除与旧库拒绝（切片3c）+ Action/transition/`action.state_changed`（切片4a）已落地。Child Action materialization、PermissionDecision/Approval/Identity repositories、Action lease/policy-binding/child-completion 写方法、approval/child active Event business producer、Publisher、versioned KCP poll、server/agentd、retention/claim lease仍未实现。Publisher/poll不在`V2InitialBuildActive`。§13.7 完整闭合仍需切片4b–5（PD/Approval/Identity + child materializer）。

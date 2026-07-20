@@ -18,6 +18,8 @@
 
 `ActionRequest.permission_decision_ref`初建pending可空，首次评估后指向current PermissionDecision v2。Policy confirm时持久层还必须关联Approval v2 chain/current request；当前Rust API中的单一`approval_record_ref`只是legacy字段适配，不能表达request/resolution/invalidation head，后续实现必须升级。
 
+切片4a：`kernel-sqlite` Action transition 与 intent 边合法性**消费**本 crate 的 `is_action_transition_allowed` / `apply_action_transition` 语义，不在 sqlite 内复制状态图。`mark_committed_with_event` 在 CAS 前调用 `apply_action_transition` 做完整 evidence 门，并消费 outcome 中的 `ActionEventIntent` 投影 `action.state_changed` payload 的 from/to/revision 字段（`reason_code` 仍以 immutable intent 为准）。domain outcome 若要求 lease/lock release effects，在 lease API 落地前由 repository **fail closed**。持久化 CAS、Outbox 与 intent 唯一键由 repository 拥有；本 crate 仍不写存储。
+
 `PolicyEvaluationOutcome`及其`approval_record_ref`是legacy Rust v1适配对象；active v2 API必须以`approval_chain_id`和可消费`approval_resolution_ref`表达，禁止继续创建deferred ApprovalRecord。下面示例仅用于当前crate回归，不是active wire/domain shape。
 
 ### Task
