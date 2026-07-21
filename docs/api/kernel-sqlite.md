@@ -1,6 +1,6 @@
 # kernel-sqlite 内部 Rust API
 
-`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0006、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径、**active root TaskCreate v2** repository，以及切片4a **Action current-snapshot / ActionTransitionIntent / `action.state_changed` producer**。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。PermissionDecision/Approval/Identity repositories与child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll。
+`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0007、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径、**active root TaskCreate v2** repository、切片4a **Action current-snapshot / ActionTransitionIntent / `action.state_changed` producer**，以及切片4b **PolicyRuleV2 / PermissionDecisionV2 repositories + `evaluate_action_permission` 评估编排**。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。Approval/Identity repositories与child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll。
 
 ## 打开与migration
 
@@ -17,6 +17,7 @@ let store = SqliteStore::open("/var/lib/shittim/kernel.sqlite3", config)?;
 - 0004 exact identity：version `4`、name `root_task_create_v2`、唯一asset `rust/crates/kernel-sqlite/migrations/0004_root_task_create_v2.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::root_task_create_v2_ddl_only_v1`；phase set=`schema`（纯DDL，无row transform）。
 - 0005 exact identity：version `5`、name `drop_v1_business_tables`、唯一asset `rust/crates/kernel-sqlite/migrations/0005_drop_v1_business_tables.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::drop_v1_business_tables_ddl_only_v1`；phase set=`schema`。在空表前提下 drop `content_origins`(+parent_refs)、`audit_records`、`task_create_idempotency`；非空拒绝。
 - 0006 exact identity：version `6`、name `action_and_transition`、唯一asset `rust/crates/kernel-sqlite/migrations/0006_action_and_transition.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::action_and_transition_ddl_only_v1`；phase set=`schema`。创建 `actions` 与 `action_transition_intents`（canonical `record_json` + 投影列 + 双唯一键 + `committed_event_id`）。
+- 0007 exact identity：version `7`、name `policy_and_permission_decision`、唯一asset `rust/crates/kernel-sqlite/migrations/0007_policy_and_permission_decision.sql`、transform三元组`shittim.kernel-sqlite.ddl-only-v1` / `1` / `kernel_sqlite::migration::policy_and_permission_decision_ddl_only_v1`；phase set=`schema`。创建 `policy_set_metadata`（bootstrap revision 0）、`policy_rules`、`permission_decisions`。
 - descriptor format v1是UTF-8、LF、无BOM、末尾单LF的JCS对象；asset SHA覆盖原始bytes，descriptor SHA同时写入`checksum`与`descriptor_hash`，`descriptor_format_version=1`。
 - ledger shape严格识别：descriptor两列必须同时存在或同时不存在；半shape、半填row、未知format/identity、hash drift均`migration_drift`。数据库version高于binary优先`database_schema_too_new`。
 - 每个pending migration先`BEGIN IMMEDIATE`，锁后重新验证ledger，再执行DDL/transform/ledger insert；任一步失败整体rollback。rollback失败不会被忽略。
@@ -153,9 +154,39 @@ SqliteStore::reconcile_intent(transition_id) -> ReconcileIntentResult // prepare
 - `reconcile_intent`：只观察 stored 关系，返回 `prepared|committed|corrupt`，不补造 event 或更换 transition id。Committed 只对比 intent↔outbox event 快照字段；后续合法推进不得映射 Corrupt。
 - 本片**未实现** IC §6.10.6 Action 闭集中的 lease/policy-binding/child-completion/recovery-list 方法。
 
+## PolicyRuleV2 + PermissionDecisionV2 + 评估编排（切片4b）
+
+```rust
+// PolicyRule closed write/read
+WriteTransaction::append_policy_rule_revision(PolicyRuleV2) -> PolicyRuleMutationResult
+SqliteStore::get_policy_rule_revision(rule_id, revision) -> Option<PolicyRuleV2>
+SqliteStore::get_current_policy_rule(rule_id) -> Option<PolicyRuleV2>
+SqliteStore::list_current_policy_rules() -> Vec<PolicyRuleV2>
+SqliteStore::get_policy_set_revision() -> i64 // bootstrap 0 = empty set
+
+// PermissionDecision closed set (IC §6.10.6 subset; no update/delete)
+WriteTransaction::append_permission_decision(PermissionDecisionV2) -> PermissionDecisionV2
+// decision_revision: 0 placeholder or exact next; repository allocates max(action)+1
+SqliteStore::get_permission_decision(id) -> Option<PermissionDecisionV2>
+SqliteStore::get_current_permission_decision_for_action(action_id) -> Option<PermissionDecisionV2>
+SqliteStore::list_permission_decisions_for_action(action_id) -> Vec<PermissionDecisionV2>
+SqliteStore::validate_current_permission_decision_for_action(action_id)
+    -> Option<PermissionDecisionV2> // Action.permission_decision_ref ↔ PD current
+
+// Evaluation orchestration (single savepoint; no Approval creation)
+WriteTransaction::evaluate_action_permission(EvaluateActionPermissionCommand)
+    -> EvaluateActionPermissionResult // PD + Action CAS + permission.evaluated Audit
+```
+
+- **PolicySet**：空初始 revision=0 是权威空状态；每次成功 rule mutation 同事务 +1。
+- **PolicyRule**：append-only revision 历史；current head = MAX(revision) per id；disable 写新 revision `enabled=false`；物理 delete 禁止。
+- **PermissionDecision**：immutable append；`decision_revision` 连续；canonical JCS readback；断号/id 冲突 fail closed。
+- **评估编排不变量**：pending Action + expected revision CAS；可选 TaskScope containment；enabled v2 heads → domain-policy matcher（`remote_signature` 规则不进 v1 matcher，fail closed 不生效直到 matcher 升级 v2）；`TransactionRateLimitPort` winner-only 消费；`kernel-authorization` 真实重算 material/observation 指纹（禁用 evaluation_context_hash；material preimage 的 policy_set_revision 与 PD 存储值一致，空 set 为 0，共享 `material_policy_set_revision_for_projection`）；append PD + Audit `permission.evaluated`（policy_context 与 PD 字段一致）；allow/deny 状态边经 intent + `mark_committed_with_event` 发 `action.state_changed`（唯一权威，reason_code=policy_allow|policy_deny），confirm 为 metadata CAS 不发事件；confirm deferral 绑定真实 PD，无 approval 伪造（`approval_chain_id` null，Approval 属 4c）；失败整体回滚。
+- 本片**未实现** Approval/Identity repositories、Approval 创建、Action lease/policy-binding 闭集其余方法。
+
 ## Transaction-bound rate limit
 
-`WriteTransaction::rate_limit_port()`保持原合同：preview只读，winner-only consume在同一transaction重新计数并写入；Store本身不实现可独立commit的RateLimitPort。
+`WriteTransaction::rate_limit_port()`保持原合同：preview只读，winner-only consume在同一transaction重新计数并写入；Store本身不实现可独立commit的RateLimitPort。评估编排在同一事务内注入该 port。
 
 ## 错误
 
@@ -163,4 +194,4 @@ SqliteStore::reconcile_intent(transition_id) -> ReconcileIntentResult // prepare
 
 ## 明确未实现
 
-root TaskCreate v2 repository + kcp method-aware runtime（切片3a/3b）+ v1 write 删除与旧库拒绝（切片3c）+ Action/transition/`action.state_changed`（切片4a）已落地。Child Action materialization、PermissionDecision/Approval/Identity repositories、Action lease/policy-binding/child-completion 写方法、approval/child active Event business producer、Publisher、versioned KCP poll、server/agentd、retention/claim lease仍未实现。Publisher/poll不在`V2InitialBuildActive`。§13.7 完整闭合仍需切片4b–5（PD/Approval/Identity + child materializer）。
+root TaskCreate v2 repository + kcp method-aware runtime（切片3a/3b）+ v1 write 删除与旧库拒绝（切片3c）+ Action/transition/`action.state_changed`（切片4a）+ PolicyRule/PD/评估编排（切片4b）已落地。Child Action materialization、Approval/Identity repositories、Action lease/policy-binding/child-completion 写方法、approval/child active Event business producer、Publisher、versioned KCP poll、server/agentd、retention/claim lease仍未实现。Publisher/poll不在`V2InitialBuildActive`。§13.7 完整闭合仍需切片4c–5（Approval/Identity + child materializer）。

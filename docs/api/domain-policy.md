@@ -142,7 +142,9 @@ fn check(
 - observation evidence fingerprint；
 - Approval v2 chain/resolution binding。
 
-crate使用`kernel-contracts::sha256_canonical`计算structured arguments的`key_params_hash`并规范化resource refs。未来agentd必须基于完整v2 Schema加入parent/child delta、Delegation authority、material/observation分层与policy-set revision后分别hash；不得把当前`CanonicalEvaluationInput`或旧`evaluation_context_hash`冒充v2 PermissionDecision。
+crate使用`kernel-contracts::sha256_canonical`计算structured arguments的`key_params_hash`并规范化resource refs。**不得**把当前`CanonicalEvaluationInput`或旧`evaluation_context_hash`冒充v2 PermissionDecision。
+
+切片4b：`kernel-sqlite` 评估编排消费本 crate 的 `evaluate_policy` / `RateLimitPort` / `resource_refs_within_task_scope`，并把结果落成完整 `PermissionDecisionV2`（ID/revision/time/policy_set_revision + `kernel-authorization` material/observation 双指纹）。matcher 仍不持久化；PolicyRule 存储使用 `PolicyRuleV2`，评估前由 sqlite 转换为 matcher 的 v1 `PolicyRule` 表面（`remote_signature` 不进 v1 matcher，fail closed 不生效直到 matcher 升级 v2）。
 
 ## 内部匹配 outcome（非公开 API）
 

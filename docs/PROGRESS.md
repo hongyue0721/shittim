@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-21（`V2InitialBuildActive`切片4a完成：migration 0006 + Action current-snapshot repository + ActionTransitionIntent 五方法 + `action.state_changed` producer。§13.7 未闭合——PD/Approval/Identity/child 与五方法 handler 仍缺。）
+> 状态日期：2026-07-21（`V2InitialBuildActive`切片4b完成：migration 0007 + PolicyRuleV2 / PermissionDecisionV2 repositories + Action 评估编排。§13.7 未闭合——Approval/Identity/child 与五方法 handler 仍缺。）
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 
@@ -38,7 +38,8 @@
 | 3b | method-aware KCP v2 preflight/dispatcher/handler 消费 bindings | **已完成** |
 | 3c | 删除 v1 runtime 写路径 + Outbox v2-only + 旧库 reinitialize-required + migration 0005 | **已完成** |
 | 4a | Action 持久化 + ActionTransitionIntent + `action.state_changed` producer | **已完成** |
-| 4b | PermissionDecision / Approval / Identity repository | 未开始 |
+| 4b | PolicyRule + PermissionDecision repositories + Action 评估编排（Approval 属 4c） | **已完成** |
+| 4c | Approval / Identity repository | 未开始 |
 | 5 | child Action materializer | 未开始 |
 | 6 | §13.7 谓词闭合（依赖 4–5 + 其余 active producers） | 未开始 |
 
@@ -47,7 +48,7 @@
 - 规范与工程基线：Freedom-first / Kernel Owns Reality 合同、Apache-2.0、双仓同步 library/CLI、Node/pnpm 零依赖根基座（exact Node 24.18.0 / pnpm 11.3.0）、统一门 `scripts/check-schema.sh`。
 - Schema/Rust 契约：Rust workspace、Draft 2020-12 + manifest v2（production=83 entries，41 retained + 42 component-native）、`schema-tool` 单 root transaction / target-scoped IR / TaggedUnion / string enum `ALL` / string-array const / RFC 8785；production `METHOD_VERSION_BINDINGS` 为 IC §13.5 八方法集（切片3a）。
 - 纯领域：`domain-task`（Task/Action 状态图、revision/plan_version）、`domain-policy`（URI/glob/Default Allow/rate-limit draft，Stop Fence/Recovery 独立 Blocked）。
-- 持久化：`kernel-sqlite` migration 0001–0006；AuditRecord **v2**；strict Task/TaskScope/ContentOrigin(v2) 读；版本化 **v2-only** Outbox + 严格 stored decoder + savepoint poison；**active root TaskCreate v2 repository**（`create_root_task_v2`）；**Action current-snapshot + ActionTransitionIntent + `action.state_changed` producer**（切片4a）；legacy TaskCreate/Audit/Outbox v1 write 已删；旧库 open `reinitialize-required`。
+- 持久化：`kernel-sqlite` migration 0001–0007；AuditRecord **v2**；strict Task/TaskScope/ContentOrigin(v2) 读；版本化 **v2-only** Outbox + 严格 stored decoder + savepoint poison；**active root TaskCreate v2 repository**（`create_root_task_v2`）；**Action current-snapshot + ActionTransitionIntent + `action.state_changed` producer**（切片4a）；**PolicyRuleV2 + PermissionDecisionV2 + `evaluate_action_permission`**（切片4b）；legacy TaskCreate/Audit/Outbox v1 write 已删；旧库 open `reinitialize-required`。
 - KCP 库级：`kernel-kcp` method-aware Value preflight、三方法 registration/dispatcher/handler（`system.ping` / **active root `task.create` v2** / `task.get`）与 SQLite adapter→`create_root_task_v2`；不可连接，无 bytes/frame/server。
 - ADR-0006 首批：12 business-v2 Schema + `kernel-task-creation` pure library + official fixtures/harness + schema-tool strict pointer CLI。
 - ADR-0008 前两段：Event v2 八 Schema、`EventTypeBinding`/active·legacy catalog、typed EventEnvelope v1/v2、migration 0003 descriptor v1 与统一 Outbox shape（切片3c 起 production v2-only）。
@@ -57,10 +58,11 @@
 - V2InitialBuildActive切片3b：kernel-kcp preflight 按 (family, method, payload.schema_version) 调 `select_request_version`；V2 Envelope 结构验证 + active payload Schema；`task.create` v2 Accepted/Registered，v1 → `unsupported_schema_version`；handler 七 UUID（含 CreationProvenance）+ root-only 检查 + `TaskCreateResponseV2`；adapter 映射 `create_root_task_v2`；删除 kcp 侧 v1 create handler/adapter/ports 路径。
 - V2InitialBuildActive切片3c：删除 `create_task`/`TaskCreateCommand`/`prepare_legacy_v1_create`、AuditRecord v1 write、`append_legacy_event_v1`/`PendingLegacyEventV1`/`StoredEventEnvelope::LegacyV1`；Outbox decoder 对 schema_version=1 → `stored_data_invalid`；`SqliteStore::open` 后 `reject_legacy_v1_business_data`；migration 0003 transform 对非空 legacy Outbox 直接 reinitialize-required；migration 0005 在空表前提下 drop dead v1 表。
 - V2InitialBuildActive切片4a：migration 0006（`actions` + `action_transition_intents`）；`insert_pending_action` / `get_action`（公开）；intent 五方法 + `mark_committed_with_event` 同事务 CAS+`action.state_changed`（causation=`action_transition`）+ reconcile 三态；状态事件唯一权威为 mark，crate-private CAS transition 不写 Outbox；需 lease effects 的边 fail closed；domain-task 边合法性与 evidence 门；sequence/position 失败不占号。
+- V2InitialBuildActive切片4b：migration 0007（`policy_set_metadata` bootstrap revision 0、`policy_rules`、`permission_decisions`）；PolicyRule append-only revision + global set counter；PD immutable append（连续 decision_revision）+ Action ref 双向校验；`evaluate_action_permission` 单事务 matcher→指纹→PD→`permission.evaluated` Audit→Action CAS（allow/deny/require_* deferred，无 Approval 创建）；rate-limit 同事务消费与回滚；material/observation 双指纹真实重算。
 
 **未实现（不得宣称完成）**
 
-- child Action materializer；PermissionDecision/Approval/Identity repositories；Action 闭集其余写方法（lease/policy binding/child completion/recovery list）。
+- child Action materializer；Approval/Identity repositories；Action 闭集其余写方法（lease/policy binding/child completion/recovery list）。
 - 其它 active business **producer**（child/approval）；**Publisher** 与 versioned KCP **poll** 明确不在本里程碑。
 - 其余 Command 幂等/乐观锁；**五方法**正式 handler；Unix Domain Socket / Windows Named Pipe KCP **server/client**；**agentd**。
 - `ts/*` 包、SDK client、Pi `agent-runtime`；统一 **Extension SDK Base**；optional Computer Use Profile；Tauri 桌面客户端；Provider/Memory/Initiative/Broker。
@@ -78,7 +80,8 @@
 - [x] 切片 3b：method-aware KCP v2 preflight/dispatcher/handler
 - [x] 切片 3c：删除 v1 写路径 + Outbox v2-only + 旧库拒绝 + migration 0005
 - [x] 切片 4a：Action 持久化 + ActionTransitionIntent + `action.state_changed` producer
-- [ ] 切片 4b：PD/Approval/Identity repository
+- [x] 切片 4b：PolicyRule + PermissionDecision repositories + Action 评估编排
+- [ ] 切片 4c：Approval/Identity repository
 - [ ] 切片 5：child materializer
 - [ ] 切片 6：§13.7 谓词闭合（child/Action/PD/Approval + 其余 producers）
 - [ ] active Event business producers（child/approval；root 已在切片 2 接入；action 已在切片 4a 接入）
@@ -91,24 +94,24 @@
 
 ## 当前阻塞
 
-- kcp runtime 与 sqlite repository 已切到 active create v2 / Outbox v2-only；Action/`action.state_changed` 已落地（4a）；五方法无 handler，禁止启动 server。§13.7 仍缺 PD/Approval/Identity/child 闭环。
+- kcp runtime 与 sqlite repository 已切到 active create v2 / Outbox v2-only；Action/`action.state_changed`（4a）与 PD/PolicyRule/评估编排（4b）已落地；五方法无 handler，禁止启动 server。§13.7 仍缺 Approval/Identity/child 闭环。
 - legacy v1 repository 的 Delegation 正向路径未实现（非 null 固定 not found）；active v2 repository 同样在 Delegation authority 未落地前 fail-closed 返回 `delegation_not_found`。
 - Task list cursor 编码须先 ADR/API 拍板。
-- Audit 仍缺跨对象 PermissionDecision/policy context 相等、rollback 权威投影、Provider/ModelCall 一致性与其它业务 producer。
+- Audit：`permission.evaluated` 已在评估编排同事务校验 policy_context 与 PD 字段相等；仍缺 rollback 权威投影、Provider/ModelCall 一致性与其它业务 producer。
 - Extension SDK Base / Computer Use 仍为 `contract-only`；不得把规范或根 Node 工作区冒充 SDK 实现。
 - 真实 Provider/Channel/Privilege Broker 需要后续真实环境；当前无伪造支持。
 - 默认 PATH 可能不是 Node 24.18.0；须显式 `~/.local/share/pnpm`。
 
 ## 下一步
 
-1. 切片 4b–5：PD/Approval/Identity repositories 与 child materializer；接入 approval/child active Event producers。
-2. 切片 6：在 4b–5 完成后闭合 §13.7 全部谓词。
+1. 切片 4c–5：Approval/Identity repositories 与 child materializer；接入 approval/child active Event producers。
+2. 切片 6：在 4c–5 完成后闭合 §13.7 全部谓词。
 3. **之后**再做 Publisher 与 versioned KCP poll；再实现剩余五个 Catalog handler 与可连接 server。
 4. 随后实现 Extension SDK Base 与 TypeScript/client。
 
 ## 最近验证
 
-本切片（V2InitialBuildActive 4a）验证命令：
+本切片（V2InitialBuildActive 4b）验证命令：
 
 ```text
 export PATH="$HOME/.local/share/pnpm:$PATH"
