@@ -1,6 +1,8 @@
 # Shittim 实现进度
 
 > 状态日期：2026-07-21（`V2InitialBuildActive`切片4c完成：migration 0008 + Approval v2 current-head CAS 三方法与 approval.state_changed producer + Identity credential/challenge/evidence repositories。§13.7 未闭合——child materializer 与五方法 handler 仍缺。）
+>
+> **新设备接力开发请先读 [`DEVELOPMENT_HANDOVER.md`](DEVELOPMENT_HANDOVER.md)**（环境准备、标准流程、切片 5/6 精确任务、验收债务与已知问题）。
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 

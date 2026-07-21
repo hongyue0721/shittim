@@ -3,7 +3,7 @@
 > 非规范元数据。列出 Git source set 中的 Markdown（tracked `git ls-files '*.md'` + 标准 ignore 下 untracked source）；不含 ignored build 产物（如 target/、node_modules/）。行数以 UTF-8 文本 `wc -l` 等价结果为准。由 `scripts/update-file-manifest.mjs` 生成，禁止手改。
 
 - `AGENT.md` — 53 lines
-- `FILE_MANIFEST.md` — 44 lines
+- `FILE_MANIFEST.md` — 45 lines
 - `PROJECT_OVERVIEW.md` — 202 lines
 - `README.md` — 41 lines
 - `adr/0001-shittim工作区与工具链.md` — 45 lines
@@ -16,8 +16,9 @@
 - `adr/0008-active-event-v2与版本化统一outbox.md` — 250 lines
 - `adr/0009-v2从零构建并取消v1数据迁移.md` — 122 lines
 - `adr/README.md` — 28 lines
+- `docs/DEVELOPMENT_HANDOVER.md` — 154 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 128 lines
+- `docs/PROGRESS.md` — 130 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 158 lines
 - `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 48 lines
