@@ -1,6 +1,6 @@
 # kernel-sqlite 内部 Rust API
 
-`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0007、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径、**active root TaskCreate v2** repository、切片4a **Action current-snapshot / ActionTransitionIntent / `action.state_changed` producer**，以及切片4b **PolicyRuleV2 / PermissionDecisionV2 repositories + `evaluate_action_permission` 评估编排**。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。Approval/Identity repositories与child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll。
+`rust/crates/kernel-sqlite`是文件型SQLite持久化crate，不是KCP或外部SDK API。当前实现 migration 0001–0008、AuditRecord **v2**、版本化 **v2-only** Event Outbox、transaction-bound rate limit、strict Task/TaskScope/ContentOrigin(v2) 读路径、**active root TaskCreate v2** repository、切片4a **Action current-snapshot / ActionTransitionIntent / `action.state_changed` producer**、切片4b **PolicyRuleV2 / PermissionDecisionV2 repositories + `evaluate_action_permission` 评估编排**，以及切片4c **Approval current-head CAS 三方法 + `approval.state_changed` producer + Identity credential/challenge/evidence repositories**。Legacy TaskCreate v1 write、AuditRecord v1 write、`append_legacy_event_v1` / `PendingLegacyEventV1` / `StoredEventEnvelope::LegacyV1` 已按 ADR-0009（切片3c）删除。child materializer仍不存在；不包含KCP handler、Publisher或versioned KCP poll；真实远程验签属 Provider 边界未实现。
 
 ## 打开与migration
 

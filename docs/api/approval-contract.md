@@ -1,6 +1,6 @@
 # Approval v2 与 PermissionDecision 授权合同
 
-> 状态徽章：**schema/library partial**（切片1c-i五个授权核心Schema + 切片1c-ii八个身份/挑战/证据/远程签名Schema、generated Rust、typed conformance、SubjectProjection pure API与official fixtures已实现；Approval/PD/Identity repository、current-head CAS、producer与真实验签仍未实现）
+> 状态徽章：**partial**（Schema、Approval current-head CAS 三方法与 approval.state_changed producer、Identity credential/challenge/evidence repositories 已实现；真实远程验签属 Provider 边界未实现；唯一事实源为 [`IMPLEMENTATION_CONTRACTS.md`](../../specs/IMPLEMENTATION_CONTRACTS.md) §6.10 与 [ADR-0007](../../adr/0007-approval-v2不可变联合身份与失效.md)）
 
 ## 唯一事实源
 

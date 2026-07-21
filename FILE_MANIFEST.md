@@ -17,7 +17,7 @@
 - `adr/0009-v2从零构建并取消v1数据迁移.md` — 122 lines
 - `adr/README.md` — 28 lines
 - `docs/IMPLEMENTATION_MATRIX.md` — 58 lines
-- `docs/PROGRESS.md` — 127 lines
+- `docs/PROGRESS.md` — 128 lines
 - `docs/REPOSITORY_MAINTENANCE.md` — 158 lines
 - `docs/api/README.md` — 41 lines
 - `docs/api/approval-contract.md` — 48 lines
@@ -38,7 +38,7 @@
 - `specs/CORE_ARCHITECTURE.md` — 856 lines
 - `specs/EXTENSION_SDK.md` — 682 lines
 - `specs/IDENTITY_MEMORY_INITIATIVE.md` — 550 lines
-- `specs/IMPLEMENTATION_CONTRACTS.md` — 2584 lines
+- `specs/IMPLEMENTATION_CONTRACTS.md` — 2595 lines
 - `specs/MODEL_RUNTIME.md` — 355 lines
 - `specs/REFERENCES.md` — 254 lines
 - `specs/SECURITY_PRIVILEGE.md` — 432 lines

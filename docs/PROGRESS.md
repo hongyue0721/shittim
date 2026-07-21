@@ -1,6 +1,6 @@
 # Shittim 实现进度
 
-> 状态日期：2026-07-21（`V2InitialBuildActive`切片4b完成：migration 0007 + PolicyRuleV2 / PermissionDecisionV2 repositories + Action 评估编排。§13.7 未闭合——Approval/Identity/child 与五方法 handler 仍缺。）
+> 状态日期：2026-07-21（`V2InitialBuildActive`切片4c完成：migration 0008 + Approval v2 current-head CAS 三方法与 approval.state_changed producer + Identity credential/challenge/evidence repositories。§13.7 未闭合——child materializer 与五方法 handler 仍缺。）
 
 域状态表唯一来源：[`IMPLEMENTATION_MATRIX.md`](IMPLEMENTATION_MATRIX.md)。本文只保留当前切片事实、未完成 backlog 与下一步；逐切片编年史由 git log 与 ADR 承载。
 
@@ -39,7 +39,7 @@
 | 3c | 删除 v1 runtime 写路径 + Outbox v2-only + 旧库 reinitialize-required + migration 0005 | **已完成** |
 | 4a | Action 持久化 + ActionTransitionIntent + `action.state_changed` producer | **已完成** |
 | 4b | PolicyRule + PermissionDecision repositories + Action 评估编排（Approval 属 4c） | **已完成** |
-| 4c | Approval / Identity repository | 未开始 |
+| 4c | Approval / Identity repository | **已完成** |
 | 5 | child Action materializer | 未开始 |
 | 6 | §13.7 谓词闭合（依赖 4–5 + 其余 active producers） | 未开始 |
 
@@ -59,6 +59,7 @@
 - V2InitialBuildActive切片3c：删除 `create_task`/`TaskCreateCommand`/`prepare_legacy_v1_create`、AuditRecord v1 write、`append_legacy_event_v1`/`PendingLegacyEventV1`/`StoredEventEnvelope::LegacyV1`；Outbox decoder 对 schema_version=1 → `stored_data_invalid`；`SqliteStore::open` 后 `reject_legacy_v1_business_data`；migration 0003 transform 对非空 legacy Outbox 直接 reinitialize-required；migration 0005 在空表前提下 drop dead v1 表。
 - V2InitialBuildActive切片4a：migration 0006（`actions` + `action_transition_intents`）；`insert_pending_action` / `get_action`（公开）；intent 五方法 + `mark_committed_with_event` 同事务 CAS+`action.state_changed`（causation=`action_transition`）+ reconcile 三态；状态事件唯一权威为 mark，crate-private CAS transition 不写 Outbox；需 lease effects 的边 fail closed；domain-task 边合法性与 evidence 门；sequence/position 失败不占号。
 - V2InitialBuildActive切片4b：migration 0007（`policy_set_metadata` bootstrap revision 0、`policy_rules`、`permission_decisions`）；PolicyRule append-only revision + global set counter；PD immutable append（连续 decision_revision）+ Action ref 双向校验；`evaluate_action_permission` 单事务 matcher→指纹→PD→`permission.evaluated` Audit→Action CAS（allow/deny/require_* deferred，无 Approval 创建）；rate-limit 同事务消费与回滚；material/observation 双指纹真实重算。
+- V2InitialBuildActive切片4c：migration 0008（`approval_records`、`approval_chain_heads`、`identity_credentials`、`identity_challenges`、`identity_evidence`）；Approval 三复合 CAS 方法 `append_request`/`resolve`/`invalidate_and_optionally_replace`（expected head CAS、canonical subject 相等、replacement 原子推进、change_kind 真值表投影）；每成功 head 变化恰好一条 `approval.state_changed` + 对应 `approval.requested|resolved|invalidated` Audit；CAS 冲突/replay 不产 Event；Identity credential register/rotate/revoke、challenge issue/consume/expire（终态不可逆、expire 只写 `identity.challenge_expired` Audit 不发 Approval event）、local/system evidence immutable。
 
 **未实现（不得宣称完成）**
 

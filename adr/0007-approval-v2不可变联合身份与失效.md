@@ -2,7 +2,7 @@
 
 - 状态：accepted
 - 日期：2026-07-18
-- 实现状态：partial；切片1c-i已落地ApprovalRecordV2、PermissionDecisionV2、PolicyRuleV2、SubjectProjectionV1、ApprovalEventAllocationV1；切片1c-ii已落地Credential/Challenge/Evidence/Remote signature八Schema source/manifest/generated/conformance与official fixtures；repository/CAS/producer与真实验签仍未实现
+- 实现状态：partial；切片1c-i已落地ApprovalRecordV2、PermissionDecisionV2、PolicyRuleV2、SubjectProjectionV1、ApprovalEventAllocationV1；切片1c-ii已落地Credential/Challenge/Evidence/Remote signature八Schema source/manifest/generated/conformance与official fixtures；切片4c已落地Approval current-head CAS三方法、approval.state_changed producer与Identity credential/challenge/evidence repositories；真实远程验签（Provider 边界）与child materializer仍未实现
 - **部分被 [ADR-0009](0009-v2从零构建并取消v1数据迁移.md) superseded**：文中 v1→v2 migration 生产要求、repository `legacy v1 read projection` 作为迁移配套生产义务的效力作废；Approval v2 不可变联合 / current-head CAS / fingerprint / 身份证据决策仍有效。
 
 ## 背景
