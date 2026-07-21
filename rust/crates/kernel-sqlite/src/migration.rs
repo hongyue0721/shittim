@@ -31,6 +31,11 @@ const MIGRATION_0007_ASSET_PATH: &str =
 const MIGRATION_0007_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
 const MIGRATION_0007_IMPLEMENTATION_ID: &str =
     "kernel_sqlite::migration::policy_and_permission_decision_ddl_only_v1";
+const MIGRATION_0008_ASSET_PATH: &str =
+    "rust/crates/kernel-sqlite/migrations/0008_approval_and_identity.sql";
+const MIGRATION_0008_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
+const MIGRATION_0008_IMPLEMENTATION_ID: &str =
+    "kernel_sqlite::migration::approval_and_identity_ddl_only_v1";
 
 #[derive(Debug, Clone, Copy)]
 struct LegacySqlMigration {
@@ -152,6 +157,18 @@ const MIGRATIONS: &[MigrationDefinition] = &[
             algorithm_id: MIGRATION_0007_ALGORITHM_ID,
             version: 1,
             implementation_id: MIGRATION_0007_IMPLEMENTATION_ID,
+        },
+        phases: DescriptorPhaseSet::SchemaOnly,
+    }),
+    MigrationDefinition::DescriptorV1(DescriptorV1Migration {
+        version: 8,
+        name: "approval_and_identity",
+        asset_path: MIGRATION_0008_ASSET_PATH,
+        sql: include_bytes!("../migrations/0008_approval_and_identity.sql"),
+        transform: TransformIdentity {
+            algorithm_id: MIGRATION_0008_ALGORITHM_ID,
+            version: 1,
+            implementation_id: MIGRATION_0008_IMPLEMENTATION_ID,
         },
         phases: DescriptorPhaseSet::SchemaOnly,
     }),
@@ -404,6 +421,14 @@ fn validate_descriptor_migration(migration: DescriptorV1Migration) -> Result<(),
                 && migration.transform.implementation_id == MIGRATION_0007_IMPLEMENTATION_ID
                 && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
         }
+        8 => {
+            migration.name == "approval_and_identity"
+                && migration.asset_path == MIGRATION_0008_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0008_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0008_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
+        }
         _ => false,
     };
     if !accepted {
@@ -553,6 +578,10 @@ fn apply_descriptor_v1(
             7 => {
                 execute_phase(connection, &phases, "schema")?;
                 validate_policy_and_permission_decision_schema(connection)?;
+            }
+            8 => {
+                execute_phase(connection, &phases, "schema")?;
+                validate_approval_and_identity_schema(connection)?;
             }
             _ => {
                 return Err(migration_drift(
@@ -790,6 +819,23 @@ fn validate_policy_and_permission_decision_schema(
         return Err(migration_drift(
             "migration 0007 permission_decisions.action_id foreign key is missing",
         ));
+    }
+    Ok(())
+}
+
+fn validate_approval_and_identity_schema(connection: &Connection) -> Result<(), StoreError> {
+    for table in [
+        "approval_records",
+        "approval_chain_heads",
+        "identity_credentials",
+        "identity_challenges",
+        "identity_evidence",
+    ] {
+        if !table_exists(connection, table)? {
+            return Err(migration_drift(
+                "migration 0008 did not create approval/identity tables",
+            ));
+        }
     }
     Ok(())
 }

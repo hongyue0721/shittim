@@ -131,7 +131,7 @@ fn migration_0003_refuses_nonempty_legacy_outbox_with_reinitialize_required() {
 }
 
 #[test]
-fn migration_0003_empty_outbox_upgrades_and_fresh_baseline_reaches_0007() {
+fn migration_0003_empty_outbox_upgrades_and_fresh_baseline_reaches_0008() {
     let database = MigrationDatabase::new();
     let connection = database.raw();
     migration::create_v2_database_for_test(&connection).expect("v2 database");
@@ -149,7 +149,7 @@ fn migration_0003_empty_outbox_upgrades_and_fresh_baseline_reaches_0007() {
             .collect::<Result<_, _>>()
             .expect("collect")
     };
-    assert_eq!(versions, [1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(versions, [1, 2, 3, 4, 5, 6, 7, 8]);
     for table in [
         "content_origins",
         "content_origin_parent_refs",
@@ -427,7 +427,7 @@ fn assert_open_refuses_recreated_legacy_table(
 ) {
     let database = MigrationDatabase::new();
     SqliteStore::open(&database.path, database.config).expect("fresh baseline");
-    assert_eq!(applied_versions(&database), [1, 2, 3, 4, 5, 6, 7]);
+    assert_eq!(applied_versions(&database), [1, 2, 3, 4, 5, 6, 7, 8]);
     assert!(
         !table_exists_raw(&database, table),
         "{table} must be dropped on fresh baseline"
@@ -457,7 +457,7 @@ fn assert_open_refuses_recreated_legacy_table(
     );
     assert_eq!(
         applied_versions(&database),
-        [1, 2, 3, 4, 5, 6, 7],
+        [1, 2, 3, 4, 5, 6, 7, 8],
         "open refuse must not advance ledger"
     );
 }
@@ -565,7 +565,7 @@ fn raw_sql_constraints_reject_invalid_version_mapping_and_duplicate_dedup() {
 }
 
 #[test]
-fn concurrent_first_open_of_empty_file_reaches_0007_once() {
+fn concurrent_first_open_of_empty_file_reaches_0008_once() {
     for round in 0..5 {
         let database = MigrationDatabase::new();
         let barrier = Arc::new(Barrier::new(3));
@@ -591,7 +591,7 @@ fn concurrent_first_open_of_empty_file_reaches_0007_once() {
                 row.get(0)
             })
             .expect("count");
-        assert_eq!(migration_rows, 7, "round {round}");
+        assert_eq!(migration_rows, 8, "round {round}");
         drop(connection);
 
         for (index, store) in stores.iter().enumerate() {

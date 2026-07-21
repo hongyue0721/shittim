@@ -13,9 +13,11 @@
 
 mod action;
 mod action_transition;
+mod approval;
 mod config;
 mod error;
 mod evaluation;
+mod identity;
 mod migration;
 mod outbox;
 mod permission_decision;
@@ -26,12 +28,17 @@ mod task;
 
 pub use action::{ActionRequestV2VerificationPolicyInput, InsertPendingActionCommand};
 pub use action_transition::{InsertIntentResult, MarkCommittedCommand, ReconcileIntentResult};
+pub use approval::{
+    AppendApprovalRequestCommand, ApprovalChainHead, ApprovalMutationResult,
+    InvalidateApprovalCommand, ResolutionEvidence, ResolveApprovalCommand,
+};
 pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
 pub use evaluation::{
     EvaluateActionPermissionCommand, EvaluateActionPermissionResult,
     EvaluateActionStateTransitionAllocation,
 };
+pub use identity::{ChallengeExpiredResult, StoredChallenge};
 pub use outbox::{
     EventAggregateId, MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit,
     PendingActiveEventV2, StoredEventEnvelope,
@@ -416,6 +423,8 @@ fn unhealthy_store_error() -> StoreError {
 
 #[cfg(test)]
 mod action_tests;
+#[cfg(test)]
+mod approval_tests;
 #[cfg(test)]
 mod evaluation_tests;
 #[cfg(test)]

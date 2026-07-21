@@ -56,7 +56,7 @@ fn migration_0006_creates_action_tables() {
             row.get(0)
         })
         .expect("version");
-    assert_eq!(version, 7);
+    assert_eq!(version, 8);
     for table in ["actions", "action_transition_intents"] {
         let count: i64 = connection
             .query_row(
