@@ -163,11 +163,8 @@ fn rejects_zero_positive_counters() {
 
     let mut facts = material_facts();
     facts.policy_set_revision = 0;
-    assert_invalid_fact_reason(
-        project_material_authorization(facts),
-        "policy_set_revision",
-        "must be positive",
-    );
+    project_material_authorization(facts)
+        .expect("policy_set_revision=0 is the authoritative bootstrap empty PolicySet");
 }
 
 #[test]

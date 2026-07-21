@@ -171,13 +171,10 @@
     {
       "case_id": "zero_policy_set_revision",
       "expected": {
-        "domain_error": {
-          "field": "policy_set_revision",
-          "reason": "must be positive"
-        },
-        "hash_relation": "not_computed",
-        "result": "domain_rejected",
-        "schema_valid": false
+        "domain_error": null,
+        "hash_relation": "different",
+        "result": "hash_computed",
+        "schema_valid": true
       },
       "operation": "replace",
       "pointer": "/policy_set_revision",

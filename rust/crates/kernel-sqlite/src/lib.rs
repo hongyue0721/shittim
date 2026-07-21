@@ -2,11 +2,12 @@
 //!
 //! This crate owns migrations, atomic Event Outbox allocation (v2-only), publisher storage
 //! operations, transaction-bound policy rate-limit consumption, strict Task/TaskScope/
-//! ContentOrigin(v2) reads, the active root TaskCreate v2 repository, and slice-4a Action /
-//! ActionTransitionIntent repositories with the `action.state_changed` producer. Legacy v1
-//! TaskCreate write, AuditRecord v1 write, and Outbox v1 append were deleted under ADR-0009.
-//! It does not implement Task update/list, PermissionDecision/Approval repositories, KCP,
-//! `agentd`, networking, or a Publisher loop.
+//! ContentOrigin(v2) reads, the active root TaskCreate v2 repository, slice-4a Action /
+//! ActionTransitionIntent repositories with the `action.state_changed` producer, and slice-4b
+//! PolicyRuleV2 / PermissionDecisionV2 repositories with Action permission evaluation
+//! orchestration. Legacy v1 TaskCreate write, AuditRecord v1 write, and Outbox v1 append were
+//! deleted under ADR-0009. It does not implement Task update/list, Approval/Identity
+//! repositories, KCP, `agentd`, networking, or a Publisher loop.
 
 #![deny(missing_docs)]
 
@@ -14,8 +15,11 @@ mod action;
 mod action_transition;
 mod config;
 mod error;
+mod evaluation;
 mod migration;
 mod outbox;
+mod permission_decision;
+mod policy_rule;
 mod rate_limit;
 mod root_task_create_v2;
 mod task;
@@ -24,10 +28,15 @@ pub use action::{ActionRequestV2VerificationPolicyInput, InsertPendingActionComm
 pub use action_transition::{InsertIntentResult, MarkCommittedCommand, ReconcileIntentResult};
 pub use config::SqliteConfig;
 pub use error::{StoreError, StoreErrorCode};
+pub use evaluation::{
+    EvaluateActionPermissionCommand, EvaluateActionPermissionResult,
+    EvaluateActionStateTransitionAllocation,
+};
 pub use outbox::{
     EventAggregateId, MarkDeliveredResult, OutboxCursor, OutboxPosition, OutboxRecord, PageLimit,
     PendingActiveEventV2, StoredEventEnvelope,
 };
+pub use policy_rule::PolicyRuleMutationResult;
 pub use rate_limit::TransactionRateLimitPort;
 pub use root_task_create_v2::{
     CreateRootTaskV2Result, RootTaskCreateV2Command, RootTaskCreateV2EnvelopeFacts,
@@ -408,9 +417,15 @@ fn unhealthy_store_error() -> StoreError {
 #[cfg(test)]
 mod action_tests;
 #[cfg(test)]
+mod evaluation_tests;
+#[cfg(test)]
 mod migration_tests;
 #[cfg(test)]
 mod outbox_tests;
+#[cfg(test)]
+mod permission_decision_tests;
+#[cfg(test)]
+mod policy_rule_tests;
 #[cfg(test)]
 mod root_task_create_v2_tests;
 #[cfg(test)]

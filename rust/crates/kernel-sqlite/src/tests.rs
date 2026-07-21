@@ -76,7 +76,7 @@ fn migration_is_idempotent_and_connection_pragmas_are_verified() {
     assert_eq!(journal.to_ascii_lowercase(), "wal");
     assert_eq!(foreign_keys, 1);
     assert_eq!(busy_timeout, 2_000);
-    assert_eq!(migration_count, 6);
+    assert_eq!(migration_count, 7);
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn concurrent_first_open_migrates_one_new_file_atomically() {
             row.get(0)
         })
         .expect("migration count");
-    assert_eq!(migration_count, 6);
+    assert_eq!(migration_count, 7);
     for table in [
         "aggregate_event_sequences",
         "outbox",

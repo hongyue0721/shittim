@@ -802,6 +802,7 @@ dependencies = [
  "chrono",
  "domain-policy",
  "domain-task",
+ "kernel-authorization",
  "kernel-contracts",
  "kernel-task-creation",
  "rusqlite",

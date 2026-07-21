@@ -55,7 +55,7 @@ pub struct MaterialAuthorizationFactsV1 {
     pub delegation_authority_ref: Option<String>,
     /// Current Delegation revision for a non-null Delegation.
     pub delegation_revision: Option<u64>,
-    /// Current positive Policy set revision.
+    /// Authoritative Policy set revision snapshot (0 = bootstrap empty PolicySet).
     pub policy_set_revision: u64,
     /// Target semantic kind.
     pub target_kind: String,
@@ -101,13 +101,32 @@ pub struct ProtectedSurfaceLabelFactsV1 {
     pub source_ref: String,
 }
 
+/// Shared re-projection helper: PolicySet revision used in material preimage must equal the
+/// value stored on PermissionDecision / PolicySet metadata (including bootstrap `0`).
+///
+/// Callers that re-verify a PD must pass `pd.policy_set_revision` through this helper rather
+/// than inventing a parallel rewrite (e.g. empty-set `0 → 1`).
+pub fn material_policy_set_revision_for_projection(
+    policy_set_revision: i64,
+) -> Result<u64, AuthorizationProjectionError> {
+    if policy_set_revision < 0 {
+        return Err(AuthorizationProjectionError::invalid(
+            "policy_set_revision",
+            "must be >= 0",
+        ));
+    }
+    Ok(policy_set_revision as u64)
+}
+
 /// Constructs, validates, and hashes `MaterialAuthorizationProjectionV1`.
 pub fn project_material_authorization(
     facts: MaterialAuthorizationFactsV1,
 ) -> Result<CanonicalProjection<MaterialAuthorizationProjectionV1>, AuthorizationProjectionError> {
     require_positive(facts.task_revision, "task_revision")?;
     require_positive(facts.action_revision, "action_revision")?;
-    require_positive(facts.policy_set_revision, "policy_set_revision")?;
+    // policy_set_revision is authoritative PolicySet metadata: 0 is the bootstrap empty set
+    // (IC §6.6 / §6.7 / migration 0007). It must match PermissionDecision.policy_set_revision
+    // for re-projection; do not rewrite 0→1 in callers.
     require_nonempty(&facts.capability_id, "capability_id")?;
     require_nonempty(&facts.operation, "operation")?;
     require_nonempty(&facts.target_kind, "target_kind")?;

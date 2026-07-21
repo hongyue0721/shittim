@@ -10,6 +10,7 @@ description = "File-backed SQLite migrations, immutable audit store, atomic even
 chrono.workspace = true
 domain-policy = { path = "../domain-policy" }
 domain-task = { path = "../domain-task" }
+kernel-authorization = { path = "../kernel-authorization" }
 kernel-contracts = { path = "../kernel-contracts" }
 kernel-task-creation = { path = "../kernel-task-creation" }
 rusqlite.workspace = true

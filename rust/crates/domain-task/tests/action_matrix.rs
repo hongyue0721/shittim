@@ -266,17 +266,6 @@ fn confirm_is_metadata_update_not_graph_edge() {
         approval_record_ref: None,
         reason: "needs user confirm".into(),
     };
-    let err =
-        apply_policy_evaluation_outcome("act-1", None, ActionStatus::Pending, 1, None, &outcome)
-            .unwrap_err();
-    assert_eq!(err.code, DomainTaskErrorCode::MissingEvidence);
-
-    let outcome = PolicyEvaluationOutcome {
-        effect: PolicyEvaluationEffect::Confirm,
-        permission_decision_ref: "pd-1".into(),
-        approval_record_ref: Some("ar-1".into()),
-        reason: "needs user confirm".into(),
-    };
     let out =
         apply_policy_evaluation_outcome("act-1", None, ActionStatus::Pending, 1, None, &outcome)
             .unwrap();
@@ -285,6 +274,17 @@ fn confirm_is_metadata_update_not_graph_edge() {
     assert!(out.effects.requires_approval_record_ref);
     assert_eq!(out.new_revision, 2);
     assert!(out.event_intents.is_empty());
+
+    let outcome = PolicyEvaluationOutcome {
+        effect: PolicyEvaluationEffect::Confirm,
+        permission_decision_ref: String::new(),
+        approval_record_ref: None,
+        reason: "needs user confirm".into(),
+    };
+    let err =
+        apply_policy_evaluation_outcome("act-1", None, ActionStatus::Pending, 1, None, &outcome)
+            .unwrap_err();
+    assert_eq!(err.code, DomainTaskErrorCode::MissingEvidence);
 }
 
 #[test]

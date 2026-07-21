@@ -26,6 +26,11 @@ const MIGRATION_0006_ASSET_PATH: &str =
 const MIGRATION_0006_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
 const MIGRATION_0006_IMPLEMENTATION_ID: &str =
     "kernel_sqlite::migration::action_and_transition_ddl_only_v1";
+const MIGRATION_0007_ASSET_PATH: &str =
+    "rust/crates/kernel-sqlite/migrations/0007_policy_and_permission_decision.sql";
+const MIGRATION_0007_ALGORITHM_ID: &str = "shittim.kernel-sqlite.ddl-only-v1";
+const MIGRATION_0007_IMPLEMENTATION_ID: &str =
+    "kernel_sqlite::migration::policy_and_permission_decision_ddl_only_v1";
 
 #[derive(Debug, Clone, Copy)]
 struct LegacySqlMigration {
@@ -135,6 +140,18 @@ const MIGRATIONS: &[MigrationDefinition] = &[
             algorithm_id: MIGRATION_0006_ALGORITHM_ID,
             version: 1,
             implementation_id: MIGRATION_0006_IMPLEMENTATION_ID,
+        },
+        phases: DescriptorPhaseSet::SchemaOnly,
+    }),
+    MigrationDefinition::DescriptorV1(DescriptorV1Migration {
+        version: 7,
+        name: "policy_and_permission_decision",
+        asset_path: MIGRATION_0007_ASSET_PATH,
+        sql: include_bytes!("../migrations/0007_policy_and_permission_decision.sql"),
+        transform: TransformIdentity {
+            algorithm_id: MIGRATION_0007_ALGORITHM_ID,
+            version: 1,
+            implementation_id: MIGRATION_0007_IMPLEMENTATION_ID,
         },
         phases: DescriptorPhaseSet::SchemaOnly,
     }),
@@ -379,6 +396,14 @@ fn validate_descriptor_migration(migration: DescriptorV1Migration) -> Result<(),
                 && migration.transform.implementation_id == MIGRATION_0006_IMPLEMENTATION_ID
                 && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
         }
+        7 => {
+            migration.name == "policy_and_permission_decision"
+                && migration.asset_path == MIGRATION_0007_ASSET_PATH
+                && migration.transform.algorithm_id == MIGRATION_0007_ALGORITHM_ID
+                && migration.transform.version == 1
+                && migration.transform.implementation_id == MIGRATION_0007_IMPLEMENTATION_ID
+                && matches!(migration.phases, DescriptorPhaseSet::SchemaOnly)
+        }
         _ => false,
     };
     if !accepted {
@@ -524,6 +549,10 @@ fn apply_descriptor_v1(
             6 => {
                 execute_phase(connection, &phases, "schema")?;
                 validate_action_and_transition_schema(connection)?;
+            }
+            7 => {
+                execute_phase(connection, &phases, "schema")?;
+                validate_policy_and_permission_decision_schema(connection)?;
             }
             _ => {
                 return Err(migration_drift(
@@ -726,6 +755,40 @@ fn validate_action_and_transition_schema(connection: &Connection) -> Result<(), 
     )? {
         return Err(migration_drift(
             "migration 0006 action_transition_intents.action_id foreign key is missing",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_policy_and_permission_decision_schema(
+    connection: &Connection,
+) -> Result<(), StoreError> {
+    for table in [
+        "policy_set_metadata",
+        "policy_rules",
+        "permission_decisions",
+    ] {
+        if !table_exists(connection, table)? {
+            return Err(migration_drift(
+                "migration 0007 did not create policy/permission decision tables",
+            ));
+        }
+    }
+    let bootstrap: (i64, i64) = connection
+        .query_row(
+            "SELECT id, revision FROM policy_set_metadata WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(migration_error)?;
+    if bootstrap != (1, 0) {
+        return Err(migration_drift(
+            "migration 0007 policy_set_metadata bootstrap must be id=1 revision=0",
+        ));
+    }
+    if !table_has_foreign_key(connection, "permission_decisions", "action_id", "actions")? {
+        return Err(migration_drift(
+            "migration 0007 permission_decisions.action_id foreign key is missing",
         ));
     }
     Ok(())

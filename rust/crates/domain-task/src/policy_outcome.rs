@@ -43,7 +43,7 @@ pub struct PolicyEvaluationOutcome {
 ///
 /// - `allow` → `pending -> approved` (requires permission_decision_ref)
 /// - `deny` → `pending -> cancelled`
-/// - `confirm` → **metadata update**, stay `pending`, requires approval_record_ref
+/// - `confirm` → **metadata update**, stay `pending`, bound to the PermissionDecision
 ///
 /// Confirm is **not** an approved status edge and is **not** reported by
 /// [`crate::is_action_transition_allowed`]. Revision still advances so persistence
@@ -108,16 +108,9 @@ pub fn apply_policy_evaluation_outcome(
             apply_action_transition(&cmd)
         }
         PolicyEvaluationEffect::Confirm => {
-            let approval = outcome.approval_record_ref.as_ref().ok_or_else(|| {
-                DomainTaskError::missing_evidence(
-                    "Policy confirm requires approval_record_ref (deferred ApprovalRecord)",
-                )
-            })?;
-            if approval.trim().is_empty() {
-                return Err(DomainTaskError::missing_evidence(
-                    "Policy confirm approval_record_ref must be non-empty",
-                ));
-            }
+            // v2: confirm deferral is bound to the real PermissionDecision; an Approval
+            // chain is only created later (slice 4c), so no approval reference exists yet
+            // and none may be fabricated. permission_decision_ref is enforced downstream.
             let cmd = ActionTransitionCommand {
                 action_id,
                 parent_action_id,
@@ -128,7 +121,7 @@ pub fn apply_policy_evaluation_outcome(
                 reason: outcome.reason.clone(),
                 evidence: ActionEvidence {
                     permission_decision_ref: Some(outcome.permission_decision_ref.clone()),
-                    approval_record_ref: Some(approval.clone()),
+                    approval_record_ref: outcome.approval_record_ref.clone(),
                     ..ActionEvidence::default()
                 },
             };

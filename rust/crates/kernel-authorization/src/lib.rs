@@ -19,8 +19,8 @@ pub use child_delta::{
 };
 pub use error::AuthorizationProjectionError;
 pub use material::{
-    project_material_authorization, DestinationFactsV1, MaterialAuthorizationFactsV1,
-    ProtectedSurfaceLabelFactsV1,
+    material_policy_set_revision_for_projection, project_material_authorization,
+    DestinationFactsV1, MaterialAuthorizationFactsV1, ProtectedSurfaceLabelFactsV1,
 };
 pub use observation::{
     project_observation_evidence, ObservationEvidenceFactsV1, ObservedEvidenceFactsV1,

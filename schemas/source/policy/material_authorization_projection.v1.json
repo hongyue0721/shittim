@@ -108,7 +108,8 @@
     },
     "policy_set_revision": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 0,
+      "description": "Authoritative PolicySet revision snapshot. Bootstrap empty PolicySet is 0; each successful rule mutation increments by 1. Must equal PermissionDecision.policy_set_revision for re-projection."
     },
     "target_kind": {
       "type": "string",

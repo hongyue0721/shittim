@@ -302,16 +302,8 @@ fn enforce_confirm_metadata(
     cmd: &ActionTransitionCommand,
     effects: &mut ActionEffects,
 ) -> Result<(), DomainTaskError> {
-    let approval = cmd.evidence.approval_record_ref.as_ref().ok_or_else(|| {
-        DomainTaskError::missing_evidence(
-            "confirm requires approval_record_ref (deferred ApprovalRecord)",
-        )
-    })?;
-    if approval.trim().is_empty() {
-        return Err(DomainTaskError::missing_evidence(
-            "confirm approval_record_ref must be non-empty",
-        ));
-    }
+    // v2: confirm deferral is bound to the PermissionDecision; no Approval reference
+    // exists or may be fabricated before the Approval chain exists (slice 4c).
     let permission = cmd
         .evidence
         .permission_decision_ref
